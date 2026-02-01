@@ -52,7 +52,25 @@ See TOOLS.md for full docs.
 
 ## RALPH Loops - How to Run
 
-### Quick Start
+### Canonical Ralph docs (source of truth)
+- Repo: https://github.com/snarktank/ralph
+- The upstream README’s **Workflow / Run Ralph** section is the canonical contract.
+
+Key upstream expectations:
+- Default `max_iterations` is **10**.
+- Script lives at `./scripts/ralph/ralph.sh` (if you copied it into a project).
+- Run forms:
+  - Amp: `./scripts/ralph/ralph.sh [max_iterations]`
+  - Claude Code: `./scripts/ralph/ralph.sh --tool claude [max_iterations]`
+- Critical concepts:
+  - Each iteration = fresh context; only memory is git history + `progress.txt` + `prd.json`.
+  - Tasks must be right-sized.
+  - AGENTS.md updates are critical; feedback loops required.
+
+### Horizon (InsideOut) local runner notes
+Our repo uses `tasks/ralph.sh` (not `scripts/ralph/ralph.sh`), and its arg parsing differs from upstream.
+
+### Quick Start (InsideOut)
 ```bash
 # IMPORTANT:
 # - tasks/ralph.sh expects the *first positional arg* to be the iteration count.
