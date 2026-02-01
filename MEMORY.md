@@ -54,14 +54,16 @@ See TOOLS.md for full docs.
 
 ### Quick Start
 ```bash
-# Run with Claude Code (default 10 iterations)
-./tasks/ralph.sh --tool claude
+# IMPORTANT:
+# - tasks/ralph.sh expects the *first positional arg* to be the iteration count.
+# - The script stops after N iterations even if stories remain.
+#   Set iterations >= remaining stories if you want it to run to completion.
 
-# Run with specific iteration count
-./tasks/ralph.sh --tool claude 20
+# Example: ~25 story workstream
+./tasks/ralph.sh 25 --tool claude
 
-# Run with Amp instead
-./tasks/ralph.sh --tool amp 15
+# Example: intentionally run a short batch
+./tasks/ralph.sh 5 --tool claude
 ```
 
 ### What It Does (Each Iteration)
