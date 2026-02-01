@@ -10,6 +10,10 @@
 - Use **Claude Code via `claude` CLI** (AJ’s Claude Max account) for Ralph-style autonomous iterations.
 - Run with `claude --dangerously-skip-permissions` for unattended edits.
 - Use a TTY when launching Claude Code; non-interactive auth/status commands can hang.
+- Claude Code is conversational: you can literally say:
+  - “Load the prd skill and create a PRD for …”
+  - then “Load the ralph skill and convert tasks/prd-… .md to prd.json”
+  - Ensure you reference the **exact PRD filename Claude created** under `tasks/`.
 
 ### Ralph Workstreams: Don’t Clobber `tasks/prd.json`
 - Ralph uses `tasks/prd.json` as the active story list and updates `passes: false → true`.
