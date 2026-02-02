@@ -97,6 +97,20 @@ Our repo uses `tasks/ralph.sh` (not `scripts/ralph/ralph.sh`), and its arg parsi
 6. Appends learnings to `progress.txt`
 7. Repeat until all done or max iterations
 
+### Manual Ralph Mode (When Loops Get SIGKILL’d)
+If the Ralph loop (or Claude Code) gets **SIGKILL (signal 9)**, it can commit code but fail to flip `passes:true` in `tasks/prd.json`.
+
+Switch to **Manual Ralph** (story-by-story, checkpointed):
+1. Pick the next `passes:false` story (in dependency order).
+2. Implement (keep runs short; Claude Code can be used as a tool).
+3. Run `npx tsc --noEmit`.
+4. Commit the feature.
+5. Immediately update + commit bookkeeping:
+   - `tasks/prd.json` → set `passes:true`
+   - `tasks/progress.txt` → append notes
+
+This prevents rework from “committed but not marked complete” drift.
+
 ### Key Files
 - `prd.json` — task list with pass/fail status
 - `progress.txt` — append-only learnings (memory between iterations)
