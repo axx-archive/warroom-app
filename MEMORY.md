@@ -7,6 +7,12 @@
 ## Workflows & Habits
 
 ### Claude Code + Ralph Loops (Preferred Pattern)
+**Division of labor (new default):**
+- **Axx sets it up** (PRD → `tasks/prd.json`, archives, sanity checks).
+- **AJ initiates the run in Claude Code** (handles any auth/UI focus prompts).
+- **After the run**, Axx does a **sloppiness/tech-debt review** and proposes cleanup PRs/tasks.
+
+Notes:
 - Use **Claude Code via `claude` CLI** (AJ’s Claude Max account) for Ralph-style autonomous iterations.
 - Run with `claude --dangerously-skip-permissions` for unattended edits.
 - Use a TTY when launching Claude Code; non-interactive auth/status commands can hang.
