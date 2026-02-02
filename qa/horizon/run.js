@@ -3,9 +3,23 @@ const path = require('path');
 const { chromium } = require('playwright');
 const { execFileSync } = require('child_process');
 
-function getCredsFrom1Password() {
-  // Prefer env vars. Fall back to 1Password CLI if available.
+function getCreds() {
+  // Prefer env vars. Fall back to macOS Keychain (preferred for unattended cron), then 1Password CLI.
   if (EMAIL && PASSWORD) return;
+
+  // Keychain: service name defaults to horizon-qa
+  const svc = process.env.HORIZON_KEYCHAIN_SERVICE || 'horizon-qa';
+  try {
+    const password = execFileSync('security', ['find-generic-password', '-s', svc, '-w'], { encoding: 'utf8' }).trim();
+    // account is optional; we can also store/read separately, but easiest is env var for email.
+    if (password) {
+      PASSWORD = password;
+      if (!EMAIL) EMAIL = process.env.HORIZON_KEYCHAIN_EMAIL || '';
+      if (EMAIL) return;
+    }
+  } catch {}
+
+  // 1Password fallback
   try {
     const email = execFileSync('op', ['item', 'get', 'Horizon (QA Bot)', '--fields', 'label=username'], { encoding: 'utf8' }).trim() ||
                   execFileSync('op', ['item', 'get', 'Horizon (QA Bot)', '--fields', 'label=email'], { encoding: 'utf8' }).trim();
@@ -13,10 +27,10 @@ function getCredsFrom1Password() {
     if (!email || !password) throw new Error('Missing username/password fields');
     EMAIL = email;
     PASSWORD = password;
-  } catch (e) {
-    // Don't leak secrets; provide only minimal error.
-    throw new Error('Missing credentials: set HORIZON_EMAIL/HORIZON_PASSWORD or ensure `op` can read item "Horizon (QA Bot)"');
-  }
+    return;
+  } catch {}
+
+  throw new Error('Missing credentials: set HORIZON_EMAIL/HORIZON_PASSWORD, or store Keychain service "horizon-qa", or ensure `op` can read item "Horizon (QA Bot)"');
 }
 
 const APP_URL = process.env.HORIZON_URL || 'https://horizon-vc.vercel.app';
@@ -79,7 +93,7 @@ async function main() {
       const shell = page.getByRole('link', { name: 'Command' });
       if (await shell.count()) return;
 
-      getCredsFrom1Password();
+      getCreds();
 
       // Try common login form patterns.
       const emailInput = page.locator('input[type="email"], input[name*="email" i]').first();

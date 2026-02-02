@@ -19,10 +19,13 @@ function tmux_run() {
   tmux -S "$SOCKET" kill-session -t "$SESSION" >/dev/null 2>&1 || true
 }
 
-# Try whoami; if not signed in, sign in (will prompt/require desktop integration approval if needed).
-if ! op whoami >/dev/null 2>&1; then
-  tmux_run "op signin --account team-shareability.1password.com >/dev/null"
+# 1Password is optional now (Keychain is preferred). Only sign in if available and needed.
+if command -v op >/dev/null 2>&1; then
+  if ! op whoami >/dev/null 2>&1; then
+    tmux_run "op signin --account team-shareability.1password.com >/dev/null"
+  fi
 fi
 
 cd "$ROOT_DIR"
-node run.js
+# Provide email via env to pair with keychain password.
+HORIZON_KEYCHAIN_EMAIL="${HORIZON_KEYCHAIN_EMAIL:-ajh-inbox@proton.me}" node run.js
