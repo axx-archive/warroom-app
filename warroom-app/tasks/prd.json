@@ -220,8 +220,8 @@
         "Typecheck passes"
       ],
       "priority": 15,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-03: FOUNDATION_KEYWORDS array detects scaffolding goals, lane-1 gets foundation:true flag, all other lanes depend on lane-1"
     },
     {
       "id": "WR-041",

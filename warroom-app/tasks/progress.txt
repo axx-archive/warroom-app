@@ -285,3 +285,21 @@
   - Toggle switch UI uses `role="switch"` and `aria-checked` for accessibility
   - Amber color (#f59e0b) used for warning-level toggles like skip-permissions
 ---
+
+## 2026-02-03 - WR-040
+- What was implemented: Foundation lane enforcement in plan generation
+- Files changed:
+  - src/lib/plan-schema.ts - Added optional `foundation` boolean field to Lane interface
+  - src/lib/plan-generator.ts - Added FOUNDATION_KEYWORDS array, needsFoundationLane() function, updated createLane and generatePlan to enforce foundation dependencies
+- All acceptance criteria verified:
+  - Plan generator detects if goal involves scaffolding/foundation changes ✓
+  - If scaffolding needed, lane-1 is marked as foundation lane ✓
+  - Non-foundation lanes include dependency on foundation lane ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - FOUNDATION_KEYWORDS includes: scaffold, foundation, setup, init, create app/project, bootstrap, from scratch, greenfield, migration, restructure
+  - When hasFoundation is true, ALL lanes except lane-1 get "lane-1" added to their dependsOn array
+  - Lane.foundation is optional boolean - only set to true when it's a foundation lane
+  - The foundation detection is keyword-based for MVP; future: AI-powered detection
+---
