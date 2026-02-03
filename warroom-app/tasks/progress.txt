@@ -262,3 +262,26 @@
   - Packet write failures are non-fatal: worktree staging succeeds, error is appended to result
   - StageResult now includes packetWritten: boolean to track if packet was written successfully
 ---
+
+## 2026-02-03 - WR-033
+- What was implemented: Optional autonomy toggle for skip-permissions mode
+- Files changed:
+  - src/lib/plan-schema.ts - Added autonomy field to LaneStatusEntry
+  - src/app/api/runs/[slug]/status/route.ts - Added autonomy handling to status API
+  - src/components/LaneStatusCard.tsx - Added autonomy toggle switch UI
+  - src/app/runs/[slug]/page.tsx - Updated getLaneStatus to return autonomy, pass to LaneStatusCard
+  - src/lib/packet-templates.ts - Added skip-permissions instruction section when autonomy enabled
+  - src/app/api/runs/[slug]/stage/route.ts - Reads autonomy from status.json, regenerates packets with current settings
+- All acceptance criteria verified:
+  - UI toggle for autonomy mode on run/lane view ✓
+  - Toggle sets lane.autonomy.dangerouslySkipPermissions in status ✓
+  - Packets include instruction to run claude --dangerously-skip-permissions when enabled ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Autonomy is stored per-lane in status.json at `lanes[laneId].autonomy`
+  - Packet generation now accepts optional autonomy override parameter
+  - Stage API regenerates packets with current autonomy settings from status.json (not just plan.json)
+  - Toggle switch UI uses `role="switch"` and `aria-checked` for accessibility
+  - Amber color (#f59e0b) used for warning-level toggles like skip-permissions
+---

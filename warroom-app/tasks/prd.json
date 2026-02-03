@@ -206,8 +206,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 14,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-03: Autonomy toggle in LaneStatusCard, status API handles autonomy, packets include skip-permissions instruction"
     },
     {
       "id": "WR-040",
