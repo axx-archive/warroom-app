@@ -56,6 +56,7 @@ export interface Lane {
   dependsOn: string[];
   autonomy: LaneAutonomy;
   verify: LaneVerify;
+  foundation?: boolean; // True if this lane handles scaffolding/foundation setup
 }
 
 export interface MergeConfig {
