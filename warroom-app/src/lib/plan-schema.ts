@@ -84,6 +84,7 @@ export type LaneStatus = "pending" | "in_progress" | "complete" | "failed";
 export interface LaneStatusEntry {
   staged: boolean;
   status: LaneStatus;
+  autonomy?: LaneAutonomy;
 }
 
 export interface StatusJson {

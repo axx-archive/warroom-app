@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Lane, LaneStatus } from "@/lib/plan-schema";
+import { Lane, LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
 
 interface LaneStatusCardProps {
   lane: Lane;
   slug: string;
   initialStatus: LaneStatus;
   initialStaged: boolean;
+  initialAutonomy: LaneAutonomy;
 }
 
 export function LaneStatusCard({
@@ -15,9 +16,11 @@ export function LaneStatusCard({
   slug,
   initialStatus,
   initialStaged,
+  initialAutonomy,
 }: LaneStatusCardProps) {
   const [status, setStatus] = useState<LaneStatus>(initialStatus);
   const [staged] = useState(initialStaged);
+  const [autonomy, setAutonomy] = useState<LaneAutonomy>(initialAutonomy);
   const [isPending, startTransition] = useTransition();
 
   const isComplete = status === "complete";
@@ -43,6 +46,33 @@ export function LaneStatusCard({
         }
       } catch (error) {
         console.error("Error updating lane status:", error);
+      }
+    });
+  };
+
+  const handleToggleAutonomy = () => {
+    const newAutonomy: LaneAutonomy = {
+      dangerouslySkipPermissions: !autonomy.dangerouslySkipPermissions,
+    };
+
+    startTransition(async () => {
+      try {
+        const response = await fetch(`/api/runs/${slug}/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            laneId: lane.laneId,
+            autonomy: newAutonomy,
+          }),
+        });
+
+        if (response.ok) {
+          setAutonomy(newAutonomy);
+        } else {
+          console.error("Failed to update lane autonomy");
+        }
+      } catch (error) {
+        console.error("Error updating lane autonomy:", error);
       }
     });
   };
@@ -117,6 +147,43 @@ export function LaneStatusCard({
           Depends on: {lane.dependsOn.join(", ")}
         </div>
       )}
+      {/* Autonomy Toggle */}
+      <div className="mt-3 ml-8 flex items-center gap-2">
+        <button
+          onClick={handleToggleAutonomy}
+          disabled={isPending}
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
+            isPending ? "opacity-50 cursor-not-allowed" : ""
+          } ${
+            autonomy.dangerouslySkipPermissions
+              ? "bg-amber-500"
+              : "bg-zinc-200 dark:bg-zinc-700"
+          }`}
+          role="switch"
+          aria-checked={autonomy.dangerouslySkipPermissions}
+          title={
+            autonomy.dangerouslySkipPermissions
+              ? "Disable skip permissions mode"
+              : "Enable skip permissions mode"
+          }
+        >
+          <span
+            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+              autonomy.dangerouslySkipPermissions
+                ? "translate-x-4"
+                : "translate-x-0"
+            }`}
+          />
+        </button>
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          Skip permissions
+          {autonomy.dangerouslySkipPermissions && (
+            <span className="ml-1 text-amber-600 dark:text-amber-400 font-medium">
+              (enabled)
+            </span>
+          )}
+        </span>
+      </div>
     </div>
   );
 }

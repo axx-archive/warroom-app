@@ -4,7 +4,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
 import { WarRoomPlan, StatusJson } from "@/lib/plan-schema";
-import type { LaneStatus } from "@/lib/plan-schema";
+import type { LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
 import { LaneStatusCard } from "@/components/LaneStatusCard";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +13,11 @@ export const dynamic = "force-dynamic";
 function getLaneStatus(
   laneId: string,
   status: StatusJson | null
-): { status: LaneStatus; staged: boolean } {
+): { status: LaneStatus; staged: boolean; autonomy: LaneAutonomy } {
+  const defaultAutonomy: LaneAutonomy = { dangerouslySkipPermissions: false };
+
   if (!status) {
-    return { status: "pending", staged: false };
+    return { status: "pending", staged: false, autonomy: defaultAutonomy };
   }
 
   // Format 1: lanes object with per-lane status
@@ -23,15 +25,16 @@ function getLaneStatus(
     return {
       status: status.lanes[laneId].status,
       staged: status.lanes[laneId].staged,
+      autonomy: status.lanes[laneId].autonomy ?? defaultAutonomy,
     };
   }
 
   // Format 2: lanesCompleted array
   if (status.lanesCompleted?.includes(laneId)) {
-    return { status: "complete", staged: true };
+    return { status: "complete", staged: true, autonomy: defaultAutonomy };
   }
 
-  return { status: "pending", staged: false };
+  return { status: "pending", staged: false, autonomy: defaultAutonomy };
 }
 
 interface RunDetailPageProps {
@@ -181,6 +184,7 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
                         slug={slug}
                         initialStatus={laneStatus.status}
                         initialStaged={laneStatus.staged}
+                        initialAutonomy={laneStatus.autonomy}
                       />
                     );
                   })}

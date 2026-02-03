@@ -7,7 +7,8 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { WarRoomPlan, StatusJson, Lane } from "@/lib/plan-schema";
+import { WarRoomPlan, StatusJson, Lane, LaneAutonomy } from "@/lib/plan-schema";
+import { generatePacketMarkdown } from "@/lib/packet-templates";
 
 const execAsync = promisify(exec);
 
@@ -36,18 +37,18 @@ interface StageResponse {
 }
 
 // Write WARROOM_PACKET.md to a worktree
-// Reads the packet content from runDir/packets/<laneId>.md and writes to worktree root
+// Regenerates the packet content with current autonomy settings
 async function writePacketToWorktree(
-  runDir: string,
-  laneId: string,
-  worktreePath: string
+  lane: Lane,
+  plan: WarRoomPlan,
+  worktreePath: string,
+  autonomyOverride?: LaneAutonomy
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const packetPath = path.join(runDir, "packets", `${laneId}.md`);
     const destPath = path.join(worktreePath, "WARROOM_PACKET.md");
 
-    // Read the packet content
-    const content = await fs.readFile(packetPath, "utf-8");
+    // Generate packet content with current autonomy settings
+    const content = generatePacketMarkdown(lane, plan, autonomyOverride);
 
     // Write to worktree root
     await fs.writeFile(destPath, content, "utf-8");
@@ -230,6 +231,15 @@ export async function POST(
       );
     }
 
+    // Read current status to get autonomy overrides
+    let existingStatus: StatusJson | null = null;
+    try {
+      const content = await fs.readFile(statusPath, "utf-8");
+      existingStatus = JSON.parse(content);
+    } catch {
+      // No existing status, will use plan defaults
+    }
+
     // Stage each lane (create worktrees and write packets)
     const results: StageResult[] = [];
 
@@ -238,10 +248,13 @@ export async function POST(
 
       // If worktree created successfully, write the packet file
       if (result.success && result.worktreePath) {
+        // Get autonomy override from status.json if available
+        const statusAutonomy = existingStatus?.lanes?.[lane.laneId]?.autonomy;
         const packetResult = await writePacketToWorktree(
-          runDir,
-          lane.laneId,
-          result.worktreePath
+          lane,
+          plan,
+          result.worktreePath,
+          statusAutonomy
         );
         result.packetWritten = packetResult.success;
         if (!packetResult.success && packetResult.error) {
@@ -297,6 +310,7 @@ export async function POST(
       currentStatus.lanes[result.laneId] = {
         staged: true,
         status: currentStatus.lanes[result.laneId]?.status ?? "pending",
+        autonomy: currentStatus.lanes[result.laneId]?.autonomy,
       };
     }
 

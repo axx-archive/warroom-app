@@ -129,15 +129,34 @@ const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
   },
 };
 
-export function generatePacketMarkdown(lane: Lane, plan: WarRoomPlan): string {
+export function generatePacketMarkdown(
+  lane: Lane,
+  plan: WarRoomPlan,
+  options?: { dangerouslySkipPermissions?: boolean }
+): string {
   const config = AGENT_CONFIGS[lane.agent];
   const dependsOnText =
     lane.dependsOn.length > 0
       ? `Depends on: ${lane.dependsOn.join(", ")}`
       : "None (can start immediately)";
 
-  return `# WAR ROOM PACKET
+  // Use options override, or fall back to lane autonomy setting
+  const skipPermissions =
+    options?.dangerouslySkipPermissions ?? lane.autonomy.dangerouslySkipPermissions;
 
+  const autonomySection = skipPermissions
+    ? `
+## How to Start
+**IMPORTANT:** This lane has autonomy mode enabled. Run Claude Code with:
+\`\`\`bash
+claude --dangerously-skip-permissions
+\`\`\`
+This skips permission prompts for faster autonomous execution. Use with caution.
+`
+    : "";
+
+  return `# WAR ROOM PACKET
+${autonomySection}
 ## Lane
 - laneId: ${lane.laneId}
 - agent: ${lane.agent}
@@ -187,12 +206,14 @@ ${config.defaultStopConditions.map((s) => `- ${s}`).join("\n")}
 }
 
 export function generateAllPackets(
-  plan: WarRoomPlan
+  plan: WarRoomPlan,
+  autonomyOverrides?: Record<string, { dangerouslySkipPermissions: boolean }>
 ): Map<string, { filename: string; content: string }> {
   const packets = new Map<string, { filename: string; content: string }>();
 
   for (const lane of plan.lanes) {
-    const content = generatePacketMarkdown(lane, plan);
+    const autonomyOption = autonomyOverrides?.[lane.laneId];
+    const content = generatePacketMarkdown(lane, plan, autonomyOption);
     packets.set(lane.laneId, {
       filename: `${lane.laneId}.md`,
       content,

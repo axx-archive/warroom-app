@@ -5,12 +5,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
-import { StatusJson, LaneStatus, RunStatus } from "@/lib/plan-schema";
+import { StatusJson, LaneStatus, RunStatus, LaneAutonomy } from "@/lib/plan-schema";
 
 interface UpdateStatusRequest {
   // Update lane completion status
   laneId?: string;
   laneStatus?: LaneStatus;
+  // Update lane autonomy settings
+  autonomy?: LaneAutonomy;
   // Update overall run status
   status?: RunStatus;
 }
@@ -71,6 +73,7 @@ export async function POST(
       currentStatus.lanes[body.laneId] = {
         staged: currentStatus.lanes[body.laneId]?.staged ?? false,
         status: body.laneStatus,
+        autonomy: currentStatus.lanes[body.laneId]?.autonomy,
       };
 
       // Format 2: Also update lanesCompleted array for backwards compatibility
@@ -85,6 +88,21 @@ export async function POST(
           (id) => id !== body.laneId
         );
       }
+    }
+
+    // Update lane autonomy settings
+    if (body.laneId && body.autonomy !== undefined) {
+      if (!currentStatus.lanes) {
+        currentStatus.lanes = {};
+      }
+
+      // Preserve existing lane status if it exists
+      const existingLane = currentStatus.lanes[body.laneId];
+      currentStatus.lanes[body.laneId] = {
+        staged: existingLane?.staged ?? false,
+        status: existingLane?.status ?? "pending",
+        autonomy: body.autonomy,
+      };
     }
 
     // Update timestamp
