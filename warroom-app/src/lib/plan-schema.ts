@@ -79,11 +79,19 @@ export interface WarRoomPlan {
   merge: MergeConfig;
 }
 
+export type LaneStatus = "pending" | "in_progress" | "complete" | "failed";
+
+export interface LaneStatusEntry {
+  staged: boolean;
+  status: LaneStatus;
+}
+
 export interface StatusJson {
   runId: string;
   status: RunStatus;
   currentLane?: string;
-  lanesCompleted: string[];
+  lanesCompleted?: string[];
+  lanes?: Record<string, LaneStatusEntry>;
   updatedAt: string;
 }
 

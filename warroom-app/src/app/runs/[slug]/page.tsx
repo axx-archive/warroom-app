@@ -3,9 +3,34 @@ import { notFound } from "next/navigation";
 import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
-import { WarRoomPlan, StatusJson } from "@/lib/plan-schema";
+import { WarRoomPlan, StatusJson, LaneStatus } from "@/lib/plan-schema";
 
 export const dynamic = "force-dynamic";
+
+// Helper to get lane status from either status.json format
+function getLaneStatus(
+  laneId: string,
+  status: StatusJson | null
+): { status: LaneStatus; staged: boolean } {
+  if (!status) {
+    return { status: "pending", staged: false };
+  }
+
+  // Format 1: lanes object with per-lane status
+  if (status.lanes && status.lanes[laneId]) {
+    return {
+      status: status.lanes[laneId].status,
+      staged: status.lanes[laneId].staged,
+    };
+  }
+
+  // Format 2: lanesCompleted array
+  if (status.lanesCompleted?.includes(laneId)) {
+    return { status: "complete", staged: true };
+  }
+
+  return { status: "pending", staged: false };
+}
 
 interface RunDetailPageProps {
   params: Promise<{ slug: string }>;
@@ -146,16 +171,19 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
                 </h3>
                 <div className="space-y-3">
                   {plan.lanes.map((lane) => {
-                    const isCompleted =
-                      status?.lanesCompleted?.includes(lane.laneId) ?? false;
+                    const laneStatus = getLaneStatus(lane.laneId, status);
+                    const borderClass =
+                      laneStatus.status === "complete"
+                        ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/10"
+                        : laneStatus.status === "in_progress"
+                          ? "border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/10"
+                          : laneStatus.status === "failed"
+                            ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10"
+                            : "border-zinc-200 dark:border-zinc-700";
                     return (
                       <div
                         key={lane.laneId}
-                        className={`p-4 border rounded-lg ${
-                          isCompleted
-                            ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/10"
-                            : "border-zinc-200 dark:border-zinc-700"
-                        }`}
+                        className={`p-4 border rounded-lg ${borderClass}`}
                       >
                         <div className="flex items-start justify-between">
                           <div>
@@ -166,16 +194,17 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
                               <span className="px-2 py-0.5 text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded">
                                 {lane.agent}
                               </span>
+                              {laneStatus.staged && (
+                                <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded">
+                                  staged
+                                </span>
+                              )}
                             </div>
                             <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 font-mono">
                               {lane.branch}
                             </p>
                           </div>
-                          {isCompleted && (
-                            <span className="text-green-600 dark:text-green-400 text-sm">
-                              Completed
-                            </span>
-                          )}
+                          <LaneStatusBadge status={laneStatus.status} />
                         </div>
                         {lane.dependsOn.length > 0 && (
                           <div className="mt-2 text-xs text-zinc-500">
@@ -218,11 +247,23 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
                   </div>
                   <div>
                     <dt className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Lanes Completed
+                      Lane Progress
                     </dt>
                     <dd className="text-zinc-900 dark:text-zinc-100 mt-1">
-                      {status.lanesCompleted?.length ?? 0}
-                      {plan?.lanes && ` / ${plan.lanes.length}`}
+                      {(() => {
+                        if (!plan?.lanes) return "No lanes";
+                        const counts = plan.lanes.reduce(
+                          (acc, lane) => {
+                            const laneStatus = getLaneStatus(lane.laneId, status);
+                            acc[laneStatus.status] = (acc[laneStatus.status] || 0) + 1;
+                            return acc;
+                          },
+                          {} as Record<string, number>
+                        );
+                        const completed = counts.complete || 0;
+                        const total = plan.lanes.length;
+                        return `${completed} / ${total} complete`;
+                      })()}
                     </dd>
                   </div>
                   <div>
@@ -307,6 +348,31 @@ function StatusBadge({ status }: { status: string }) {
       {status.replace(/_/g, " ")}
     </span>
   );
+}
+
+function LaneStatusBadge({ status }: { status: LaneStatus }) {
+  const statusConfig: Record<LaneStatus, { color: string; label: string }> = {
+    pending: {
+      color: "text-zinc-500 dark:text-zinc-400",
+      label: "Pending",
+    },
+    in_progress: {
+      color: "text-yellow-600 dark:text-yellow-400",
+      label: "In Progress",
+    },
+    complete: {
+      color: "text-green-600 dark:text-green-400",
+      label: "Complete",
+    },
+    failed: {
+      color: "text-red-600 dark:text-red-400",
+      label: "Failed",
+    },
+  };
+
+  const config = statusConfig[status];
+
+  return <span className={`text-sm font-medium ${config.color}`}>{config.label}</span>;
 }
 
 function formatDate(isoString: string): string {
