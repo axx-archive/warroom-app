@@ -172,6 +172,7 @@ ${config.defaultScope.map((s) => `- ${s}`).join("\n")}
 
 ### DO NOT:
 - Make changes outside your designated scope
+- Make changes outside your Allowed Paths (see below)
 - Commit directly to main or integration branch
 - Skip verification commands
 
@@ -184,6 +185,23 @@ ${plan.workstream.prdPath ? `- PRD: ${plan.workstream.prdPath}` : ""}
 \`\`\`
 (Context-specific files will be identified during execution)
 \`\`\`
+
+## Allowed Paths
+**IMPORTANT:** Your changes MUST stay within these paths. Before committing, verify:
+\`\`\`bash
+git diff --stat
+\`\`\`
+All modified files must match one of these patterns:
+${
+  lane.allowedPaths && lane.allowedPaths.length > 0
+    ? lane.allowedPaths.map((p) => `- \`${p}\``).join("\n")
+    : "- `**/*` (unrestricted - use good judgment)"
+}
+
+**Guardrail Rule:** If \`git diff --stat\` shows files outside your allowed paths, you MUST:
+1. Stash or revert those changes
+2. Document why you needed to touch them
+3. Request path expansion from War Room operator
 
 ## Verification
 Run these commands before marking complete:

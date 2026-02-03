@@ -59,6 +59,36 @@ const FOUNDATION_KEYWORDS = [
   "new architecture",
 ];
 
+// Default allowed paths by agent type - these define guardrails for each role
+// Non-overlapping paths help prevent merge conflicts when lanes run in parallel
+const AGENT_ALLOWED_PATHS: Record<AgentType, string[]> = {
+  "product-owner": ["docs/", "*.md", "tasks/", "specs/"],
+  architect: [
+    "docs/architecture/",
+    "src/lib/",
+    "src/types/",
+    "*.config.*",
+    "tsconfig*.json",
+  ],
+  developer: ["src/"], // Generic - will be subdivided for parallel developers
+  "staff-engineer-reviewer": ["**/*"], // Reviewers need to see everything
+  "doc-updater": ["docs/", "*.md", "README*", "CHANGELOG*"],
+  techdebt: ["src/", "tests/", "*.config.*"],
+  "visual-qa": ["src/app/", "src/components/", "src/styles/", "*.css"],
+  "qa-tester": ["tests/", "src/__tests__/", "*.test.*", "*.spec.*"],
+  "security-reviewer": ["src/", "package.json", "package-lock.json", ".env*"],
+};
+
+// Subdivided paths for parallel developer lanes to avoid conflicts
+const DEVELOPER_PATH_SUBDIVISIONS = [
+  ["src/app/", "src/pages/"], // Routes and pages
+  ["src/components/", "src/ui/"], // UI components
+  ["src/lib/", "src/utils/", "src/helpers/"], // Library code
+  ["src/hooks/", "src/context/"], // React hooks and context
+  ["src/api/", "src/services/"], // API and services
+  ["src/types/", "src/interfaces/"], // Type definitions
+];
+
 /**
  * Detects if a goal involves scaffolding/foundation changes
  * that require lane-1 to complete before parallel lanes can start
@@ -137,7 +167,8 @@ function createLane(
   worktreesPath: string,
   dependsOn: string[],
   autonomy: boolean,
-  foundation: boolean = false
+  foundation: boolean = false,
+  allowedPaths?: string[]
 ): Lane {
   const laneId = `lane-${index + 1}`;
   const branchName = `warroom/${slug}/${agent}${
@@ -158,6 +189,7 @@ function createLane(
       commands: [...DEFAULT_VERIFY_COMMANDS],
       required: true,
     },
+    allowedPaths: allowedPaths ?? AGENT_ALLOWED_PATHS[agent],
   };
 
   if (foundation) {
@@ -184,12 +216,33 @@ export function generatePlan(
   // Build lanes with dependencies
   // For MVP: simple linear dependencies
   // Future: AI-powered dependency analysis
+
+  // Track developer index for path subdivision
+  let developerIndex = 0;
+
   const lanes: Lane[] = agentChain.map((agent, index) => {
     // Developers can run in parallel, others depend on previous
     let dependsOn: string[] = [];
 
     // First lane (lane-1) is the foundation lane if scaffolding is needed
     const isFoundationLane = hasFoundation && index === 0;
+
+    // Assign non-overlapping paths for parallel developer lanes
+    let allowedPaths: string[] | undefined;
+    if (agent === "developer") {
+      // Count how many developers are in the chain
+      const developerCount = agentChain.filter((a) => a === "developer").length;
+
+      if (developerCount > 1) {
+        // Multiple developers - assign subdivided paths to avoid conflicts
+        const subdivisionIndex =
+          developerIndex % DEVELOPER_PATH_SUBDIVISIONS.length;
+        allowedPaths = DEVELOPER_PATH_SUBDIVISIONS[subdivisionIndex];
+      }
+      // else: single developer gets default AGENT_ALLOWED_PATHS["developer"]
+
+      developerIndex++;
+    }
 
     if (index > 0) {
       // If we have a foundation lane, ALL other lanes must depend on lane-1
@@ -233,7 +286,8 @@ export function generatePlan(
       config.worktreesPath,
       dependsOn,
       request.autonomy ?? false,
-      isFoundationLane
+      isFoundationLane,
+      allowedPaths
     );
   });
 

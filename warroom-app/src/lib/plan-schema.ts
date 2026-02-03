@@ -57,6 +57,7 @@ export interface Lane {
   autonomy: LaneAutonomy;
   verify: LaneVerify;
   foundation?: boolean; // True if this lane handles scaffolding/foundation setup
+  allowedPaths?: string[]; // Directories/files this lane may modify (guardrail)
 }
 
 export interface MergeConfig {
