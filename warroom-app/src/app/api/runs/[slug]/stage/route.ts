@@ -17,6 +17,7 @@ interface StageResult {
   worktreePath?: string;
   branch?: string;
   error?: string;
+  packetWritten?: boolean;
 }
 
 interface CursorResult {
@@ -32,6 +33,32 @@ interface StageResponse {
   errors: StageResult[];
   cursorOpened: CursorResult[];
   cursorErrors: CursorResult[];
+}
+
+// Write WARROOM_PACKET.md to a worktree
+// Reads the packet content from runDir/packets/<laneId>.md and writes to worktree root
+async function writePacketToWorktree(
+  runDir: string,
+  laneId: string,
+  worktreePath: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const packetPath = path.join(runDir, "packets", `${laneId}.md`);
+    const destPath = path.join(worktreePath, "WARROOM_PACKET.md");
+
+    // Read the packet content
+    const content = await fs.readFile(packetPath, "utf-8");
+
+    // Write to worktree root
+    await fs.writeFile(destPath, content, "utf-8");
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 // Check if a git branch exists (local or remote)
@@ -203,11 +230,28 @@ export async function POST(
       );
     }
 
-    // Stage each lane (create worktrees)
+    // Stage each lane (create worktrees and write packets)
     const results: StageResult[] = [];
 
     for (const lane of plan.lanes) {
       const result = await createWorktree(plan.repo.path, lane);
+
+      // If worktree created successfully, write the packet file
+      if (result.success && result.worktreePath) {
+        const packetResult = await writePacketToWorktree(
+          runDir,
+          lane.laneId,
+          result.worktreePath
+        );
+        result.packetWritten = packetResult.success;
+        if (!packetResult.success && packetResult.error) {
+          // Append packet error to result but don't fail the whole stage
+          result.error = result.error
+            ? `${result.error}; Packet: ${packetResult.error}`
+            : `Packet: ${packetResult.error}`;
+        }
+      }
+
       results.push(result);
     }
 
