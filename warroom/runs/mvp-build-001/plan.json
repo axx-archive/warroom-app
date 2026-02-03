@@ -1,0 +1,72 @@
+{
+  "runId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "runSlug": "mvp-build-001",
+  "runDir": "/Users/ajhart/.openclaw/workspace/warroom/runs/mvp-build-001",
+  "createdAt": "2026-02-02T22:15:00Z",
+  "startMode": "claude_code_import",
+  "repo": {
+    "name": "workspace",
+    "path": "/Users/ajhart/.openclaw/workspace"
+  },
+  "goal": "Build War Room MVP milestones M0-M2: read-only dashboard with repo selector, OpenClaw plan generation, and lane staging with worktrees + Cursor launcher",
+  "workstream": {
+    "type": "quick_task",
+    "prdPath": "docs/WAR_ROOM_APP_PRD.md",
+    "prdJsonPath": null,
+    "nextStoryId": null
+  },
+  "integrationBranch": "warroom/integration/mvp-build",
+  "lanes": [
+    {
+      "laneId": "lane-1",
+      "agent": "developer",
+      "branch": "warroom/mvp/dashboard-shell",
+      "worktreePath": "/Users/ajhart/.openclaw/worktrees/mvp-dashboard",
+      "packetName": "WARROOM_PACKET.md",
+      "dependsOn": [],
+      "autonomy": {
+        "dangerouslySkipPermissions": false
+      },
+      "verify": {
+        "commands": ["npm run typecheck", "npm run lint", "npm run build"],
+        "required": true
+      }
+    },
+    {
+      "laneId": "lane-2",
+      "agent": "developer",
+      "branch": "warroom/mvp/plan-generator",
+      "worktreePath": "/Users/ajhart/.openclaw/worktrees/mvp-plangen",
+      "packetName": "WARROOM_PACKET.md",
+      "dependsOn": [],
+      "autonomy": {
+        "dangerouslySkipPermissions": false
+      },
+      "verify": {
+        "commands": ["npm run typecheck", "npm run lint"],
+        "required": true
+      }
+    },
+    {
+      "laneId": "lane-3",
+      "agent": "developer",
+      "branch": "warroom/mvp/lane-stager",
+      "worktreePath": "/Users/ajhart/.openclaw/worktrees/mvp-stager",
+      "packetName": "WARROOM_PACKET.md",
+      "dependsOn": ["lane-1"],
+      "autonomy": {
+        "dangerouslySkipPermissions": false
+      },
+      "verify": {
+        "commands": ["npm run typecheck", "npm run lint"],
+        "required": true
+      }
+    }
+  ],
+  "merge": {
+    "proposedOrder": ["lane-1", "lane-2", "lane-3"],
+    "method": "merge",
+    "notes": "Merge sequentially to integration branch. Lane-1 and Lane-2 can merge in parallel. Lane-3 after Lane-1. Final merge to main requires full QA pass.",
+    "requiresHuman": true
+  }
+}
