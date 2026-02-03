@@ -70,8 +70,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-03: StatusJson supports both lanes object and lanesCompleted array formats"
     },
     {
       "id": "WR-012",

@@ -12,6 +12,7 @@
 - Use `export const dynamic = "force-dynamic"` for pages that read from disk at request time
 - Next.js 16 async params: `const { slug } = await params` in page components
 - Run folder path: ~/.openclaw/workspace/warroom/runs/<runSlug>/
+- StatusJson has two formats: `lanes` object (per-lane status) OR `lanesCompleted` array - always support both
 
 ---
 
@@ -85,4 +86,23 @@
   - StatusJson in the wild may have different schema than plan-schema.ts (e.g., lanes as object vs lanesCompleted array)
   - Use `export const dynamic = "force-dynamic"` for pages that read from disk at request time
   - Next.js 16 async params: await params before destructuring in page components
+---
+
+## 2026-02-03 - WR-011
+- What was implemented: Enhanced plan/status rendering with proper lane status display
+- Files changed:
+  - src/lib/plan-schema.ts - Added LaneStatus type and LaneStatusEntry interface, updated StatusJson to support both formats
+  - src/app/runs/[slug]/page.tsx - Added getLaneStatus helper, LaneStatusBadge component, enhanced lane rendering
+- All acceptance criteria verified:
+  - UI reads plan.json from disk (server-side) and renders plan summary ✓
+  - UI reads status.json from disk and renders lane completion status ✓
+  - Lane list shows each lane with its status ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Real-world status.json has TWO formats in the wild:
+    1. `lanes` object: `{ "lane-1": { "staged": false, "status": "pending" } }` (mvp-build-001 style)
+    2. `lanesCompleted` array: `["lane-1", "lane-2"]` (openclaw generated style)
+  - Always design schemas to gracefully handle multiple formats when reading existing data
+  - LaneStatus values: "pending" | "in_progress" | "complete" | "failed"
 ---
