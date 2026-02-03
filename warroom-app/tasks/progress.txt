@@ -245,3 +245,20 @@
   - StageResponse now includes: staged, errors (for worktrees), cursorOpened, cursorErrors (for Cursor windows)
   - HTTP 207 returned when either worktree OR cursor errors exist
 ---
+
+## 2026-02-03 - WR-032
+- What was implemented: Stage API writes WARROOM_PACKET.md to each worktree during staging
+- Files changed:
+  - src/app/api/runs/[slug]/stage/route.ts - Added writePacketToWorktree function, packetWritten field in StageResult
+- All acceptance criteria verified:
+  - WARROOM_PACKET.md written to root of each worktree ✓
+  - Content matches corresponding packet in run folder packets/ ✓
+  - File written during stage operation ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Packet files in run folders are named `<laneId>.md` (e.g., lane-1.md) in the packets/ directory
+  - writePacketToWorktree reads from runDir/packets/<laneId>.md and writes to worktreePath/WARROOM_PACKET.md
+  - Packet write failures are non-fatal: worktree staging succeeds, error is appended to result
+  - StageResult now includes packetWritten: boolean to track if packet was written successfully
+---
