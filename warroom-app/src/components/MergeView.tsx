@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { LaneStatus } from "@/lib/plan-schema";
+import { LaneStatus, MergeMethod, MergeProposal } from "@/lib/plan-schema";
 
 interface LaneMergeInfo {
   laneId: string;
@@ -24,6 +24,12 @@ interface MergeInfoResponse {
   error?: string;
 }
 
+interface MergeProposalResponse {
+  success: boolean;
+  proposal?: MergeProposal;
+  error?: string;
+}
+
 interface MergeViewProps {
   slug: string;
 }
@@ -32,6 +38,10 @@ export function MergeView({ slug }: MergeViewProps) {
   const [mergeInfo, setMergeInfo] = useState<MergeInfoResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [proposal, setProposal] = useState<MergeProposal | null>(null);
+  const [proposalLoading, setProposalLoading] = useState(false);
+  const [proposalError, setProposalError] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
 
   const fetchMergeInfo = useCallback(async () => {
     setLoading(true);
@@ -51,9 +61,53 @@ export function MergeView({ slug }: MergeViewProps) {
     }
   }, [slug]);
 
+  const fetchExistingProposal = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/runs/${slug}/merge-proposal`);
+      const data: MergeProposalResponse = await response.json();
+      if (data.success && data.proposal) {
+        setProposal(data.proposal);
+      }
+    } catch {
+      // No existing proposal, that's fine
+    }
+  }, [slug]);
+
+  const generateProposal = useCallback(async () => {
+    setProposalLoading(true);
+    setProposalError(null);
+    try {
+      const response = await fetch(`/api/runs/${slug}/merge-proposal`, {
+        method: "POST",
+      });
+      const data: MergeProposalResponse = await response.json();
+      if (data.success && data.proposal) {
+        setProposal(data.proposal);
+      } else {
+        setProposalError(data.error || "Failed to generate proposal");
+      }
+    } catch (err) {
+      setProposalError(String(err));
+    } finally {
+      setProposalLoading(false);
+    }
+  }, [slug]);
+
+  const copyPMPrompt = useCallback(async () => {
+    if (!proposal?.pmPrompt) return;
+    try {
+      await navigator.clipboard.writeText(proposal.pmPrompt);
+      setCopyState("copied");
+      setTimeout(() => setCopyState("idle"), 2000);
+    } catch {
+      // Clipboard failed
+    }
+  }, [proposal?.pmPrompt]);
+
   useEffect(() => {
     fetchMergeInfo();
-  }, [fetchMergeInfo]);
+    fetchExistingProposal();
+  }, [fetchMergeInfo, fetchExistingProposal]);
 
   if (loading) {
     return (
@@ -200,6 +254,66 @@ export function MergeView({ slug }: MergeViewProps) {
           </div>
         </div>
       )}
+
+      {/* Merge Proposal Section */}
+      <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            Merge Proposal
+          </h4>
+          <button
+            onClick={generateProposal}
+            disabled={proposalLoading || mergeCandidates.length === 0}
+            className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            {proposalLoading ? (
+              <>
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                <span>Generating...</span>
+              </>
+            ) : proposal ? (
+              "Regenerate Proposal"
+            ) : (
+              "Generate Merge Proposal"
+            )}
+          </button>
+        </div>
+
+        {proposalError && (
+          <div className="text-red-500 dark:text-red-400 text-sm mb-4">
+            {proposalError}
+          </div>
+        )}
+
+        {mergeCandidates.length === 0 && (
+          <div className="text-sm text-zinc-500 dark:text-zinc-400">
+            No lanes are ready to merge yet. Complete at least one lane to generate a merge proposal.
+          </div>
+        )}
+
+        {proposal && (
+          <MergeProposalDisplay
+            proposal={proposal}
+            copyState={copyState}
+            onCopy={copyPMPrompt}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -349,6 +463,148 @@ function LaneMergeCard({ lane }: { lane: LaneMergeInfo }) {
           {lane.error}
         </div>
       )}
+    </div>
+  );
+}
+
+interface MergeProposalDisplayProps {
+  proposal: MergeProposal;
+  copyState: "idle" | "copied";
+  onCopy: () => void;
+}
+
+function MergeProposalDisplay({
+  proposal,
+  copyState,
+  onCopy,
+}: MergeProposalDisplayProps) {
+  const methodColors: Record<MergeMethod, string> = {
+    merge: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+    squash: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    "cherry-pick": "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Warnings */}
+      {proposal.warnings.length > 0 && (
+        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+          <div className="flex items-start gap-2">
+            <svg
+              className="w-4 h-4 mt-0.5 text-amber-600 dark:text-amber-400 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <div className="text-sm text-amber-700 dark:text-amber-300">
+              <div className="font-medium mb-1">Warnings:</div>
+              <ul className="list-disc list-inside space-y-0.5">
+                {proposal.warnings.map((warning, idx) => (
+                  <li key={idx}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Merge Order */}
+      <div>
+        <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+          Proposed Merge Order:
+        </div>
+        <div className="space-y-2">
+          {proposal.mergeOrder.map((lane) => (
+            <div
+              key={lane.laneId}
+              className="flex items-center gap-3 p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/50"
+            >
+              <div className="w-6 h-6 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                {lane.order}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                    {lane.laneId}
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.5 text-xs font-medium rounded ${methodColors[lane.method]}`}
+                  >
+                    {lane.method}
+                  </span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {lane.commitsAhead} {lane.commitsAhead === 1 ? "commit" : "commits"}
+                  </span>
+                </div>
+                {lane.notes && (
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    {lane.notes}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Copy PM Prompt Button */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onCopy}
+          className="px-4 py-2 text-sm font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors flex items-center gap-2"
+        >
+          {copyState === "copied" ? (
+            <>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+              <span>Copied!</span>
+            </>
+          ) : (
+            <>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
+              <span>Copy PM Prompt</span>
+            </>
+          )}
+        </button>
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          Generated: {new Date(proposal.createdAt).toLocaleString()}
+        </span>
+      </div>
+
+      {/* Saved location */}
+      <div className="text-xs text-zinc-500 dark:text-zinc-400">
+        Proposal saved to: <code className="font-mono">merge-proposal.json</code>
+      </div>
     </div>
   );
 }

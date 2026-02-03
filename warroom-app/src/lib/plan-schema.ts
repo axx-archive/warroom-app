@@ -115,3 +115,27 @@ export interface GeneratePlanResponse {
   runDir?: string;
   error?: string;
 }
+
+// Merge proposal types
+export interface MergeProposalLane {
+  laneId: string;
+  branch: string;
+  order: number;
+  method: MergeMethod;
+  dependsOn: string[];
+  commitsAhead: number;
+  conflictRisk: "none" | "low" | "medium" | "high";
+  overlappingLanes: string[];
+  notes: string;
+}
+
+export interface MergeProposal {
+  runId: string;
+  runSlug: string;
+  createdAt: string;
+  integrationBranch: string;
+  mergeOrder: MergeProposalLane[];
+  defaultMethod: MergeMethod;
+  warnings: string[];
+  pmPrompt: string;
+}
