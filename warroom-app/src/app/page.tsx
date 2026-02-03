@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { WarRoomPlan } from "@/lib/plan-schema";
 import { PlanGenerator } from "@/components/PlanGenerator";
 import { PlanViewer } from "@/components/PlanViewer";
@@ -32,14 +33,22 @@ export default function Home() {
               War Room
             </h1>
           </div>
-          {generatedPlan && (
-            <button
-              onClick={handleReset}
+          <div className="flex items-center gap-2">
+            <Link
+              href="/runs"
               className="px-3 py-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
             >
-              + New Plan
-            </button>
-          )}
+              View Runs
+            </Link>
+            {generatedPlan && (
+              <button
+                onClick={handleReset}
+                className="px-3 py-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+              >
+                + New Plan
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
