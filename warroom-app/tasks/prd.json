@@ -177,8 +177,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-03: Stage API opens Cursor windows with -n flag, tracks cursorOpened/cursorErrors in response"
     },
     {
       "id": "WR-032",

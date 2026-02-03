@@ -228,3 +228,20 @@
   - Status.json lanes object tracks `staged: boolean` per lane
   - HTTP 207 Multi-Status is appropriate for partial success responses
 ---
+
+## 2026-02-03 - WR-031
+- What was implemented: Stage API opens Cursor windows for each lane worktree
+- Files changed:
+  - src/app/api/runs/[slug]/stage/route.ts - Added openCursorWindow function, CursorResult interface, cursorOpened/cursorErrors in response
+- All acceptance criteria verified:
+  - Stage API runs /usr/local/bin/cursor -n <worktreePath> for each lane ✓
+  - UI shows 'staged' status after successful staging ✓ (existing behavior from WR-030)
+  - Errors from cursor command surfaced appropriately ✓ (cursorErrors array in response)
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Use timeout option with execAsync for external commands that may hang (10s for cursor)
+  - Cursor errors are non-fatal - worktree creation success is independent of Cursor launch
+  - StageResponse now includes: staged, errors (for worktrees), cursorOpened, cursorErrors (for Cursor windows)
+  - HTTP 207 returned when either worktree OR cursor errors exist
+---
