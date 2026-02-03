@@ -106,3 +106,22 @@
   - Always design schemas to gracefully handle multiple formats when reading existing data
   - LaneStatus values: "pending" | "in_progress" | "complete" | "failed"
 ---
+
+## 2026-02-03 - WR-012
+- What was implemented: Status update API for lane completion with UI toggle
+- Files changed:
+  - src/app/api/runs/[slug]/status/route.ts (new) - POST endpoint to update status.json
+  - src/components/LaneStatusCard.tsx (new) - Client component with completion checkbox
+  - src/app/runs/[slug]/page.tsx - Integrated LaneStatusCard, removed inline lane rendering
+- All acceptance criteria verified:
+  - API endpoint POST /api/runs/[slug]/status updates status.json ✓
+  - API updates lanesCompleted array, status field, and updatedAt timestamp ✓
+  - UI can toggle lane complete via checkbox ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Use `useTransition` for non-blocking optimistic updates in React 19
+  - The status API updates BOTH formats (lanes object and lanesCompleted array) for backwards compatibility
+  - Client components in /components folder can use fetch to call API routes
+  - Server components pass initial data to client components as props for SSR
+---
