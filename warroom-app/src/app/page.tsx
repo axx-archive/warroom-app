@@ -2,17 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { WarRoomPlan } from "@/lib/plan-schema";
 import { PlanGenerator } from "@/components/PlanGenerator";
 import { PlanViewer } from "@/components/PlanViewer";
 import { ImportPlanModal } from "@/components/ImportPlanModal";
+import { ImportRunFolderModal } from "@/components/ImportRunFolderModal";
 
 export default function Home() {
+  const router = useRouter();
   const [generatedPlan, setGeneratedPlan] = useState<{
     plan: WarRoomPlan;
     runDir: string;
   } | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showImportFolderModal, setShowImportFolderModal] = useState(false);
 
   const handlePlanGenerated = (plan: WarRoomPlan, runDir: string) => {
     setGeneratedPlan({ plan, runDir });
@@ -21,6 +25,14 @@ export default function Home() {
   const handlePlanImported = (plan: WarRoomPlan, runDir: string) => {
     setGeneratedPlan({ plan, runDir });
     setShowImportModal(false);
+  };
+
+  const handleRunFolderImported = (runDir: string) => {
+    // Extract slug from runDir path (last segment)
+    const slug = runDir.split("/").pop() || "";
+    setShowImportFolderModal(false);
+    // Navigate to the run detail page
+    router.push(`/runs/${slug}`);
   };
 
   const handleReset = () => {
@@ -48,12 +60,20 @@ export default function Home() {
               View Runs
             </Link>
             {!generatedPlan && (
-              <button
-                onClick={() => setShowImportModal(true)}
-                className="px-3 py-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
-              >
-                Import Plan
-              </button>
+              <>
+                <button
+                  onClick={() => setShowImportFolderModal(true)}
+                  className="px-3 py-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+                >
+                  Open Folder
+                </button>
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="px-3 py-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+                >
+                  Import Plan
+                </button>
+              </>
             )}
             {generatedPlan && (
               <button
@@ -92,7 +112,7 @@ export default function Home() {
             />
 
             {/* Info Section */}
-            <div className="mt-8 grid md:grid-cols-3 gap-4">
+            <div className="mt-8 grid md:grid-cols-2 gap-4">
               <div className="p-4 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
                 <h3 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">
                   OpenClaw Kickoff
@@ -114,6 +134,20 @@ export default function Home() {
                   className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   Import Plan JSON →
+                </button>
+              </div>
+              <div className="p-4 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <h3 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+                  Open Existing Folder
+                </h3>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
+                  Point to an existing run folder on disk to view and continue.
+                </p>
+                <button
+                  onClick={() => setShowImportFolderModal(true)}
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Open Run Folder →
                 </button>
               </div>
               <div className="p-4 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
@@ -143,6 +177,14 @@ export default function Home() {
         <ImportPlanModal
           onClose={() => setShowImportModal(false)}
           onImported={handlePlanImported}
+        />
+      )}
+
+      {/* Import Run Folder Modal */}
+      {showImportFolderModal && (
+        <ImportRunFolderModal
+          onClose={() => setShowImportFolderModal(false)}
+          onImported={handleRunFolderImported}
         />
       )}
     </div>
