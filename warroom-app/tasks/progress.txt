@@ -125,3 +125,26 @@
   - Client components in /components folder can use fetch to call API routes
   - Server components pass initial data to client components as props for SSR
 ---
+
+## 2026-02-03 - WR-020
+- What was implemented: Verification story - confirmed existing plan generation implementation
+- Files already in place:
+  - src/app/api/generate-plan/route.ts - POST endpoint accepting {goal, repoPath}, returns {success, plan, runDir}
+  - src/lib/plan-generator.ts - Generates WarRoomPlan with lanes, agent chain selection, dependencies
+  - src/lib/run-manager.ts - initializeRun() creates directory structure, writes plan.json and status.json
+  - src/lib/packet-templates.ts - generateAllPackets() creates lane-N.md files with role, scope, verification
+  - src/lib/plan-schema.ts - TypeScript interfaces for WarRoomPlan, Lane, StatusJson, etc.
+- All acceptance criteria verified:
+  - POST /api/generate-plan accepts goal and returns {plan, runDir} ✓
+  - Run folder created at ~/.openclaw/workspace/warroom/runs/<runSlug>/ ✓
+  - plan.json written with correct schema ✓
+  - packets/*.md generated for each lane ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - Plan generation uses a template-based approach with agent chain selection based on goal keywords
+  - DEFAULT_AGENT_CHAIN is: architect → developer → qa-tester
+  - Quick tasks (fix, bug, typo) use just developer
+  - Security/doc keywords add security-reviewer or doc-updater lanes
+  - runSlug format: `<slugified-goal>-<base36-timestamp>` (e.g., test-run-creation-ml6abc)
+  - Packet files are named lane-1.md, lane-2.md, etc. in the packets/ directory
+---
