@@ -43,7 +43,7 @@
         "dangerouslySkipPermissions": false
       },
       "verify": {
-        "commands": ["npm run typecheck", "npm run lint"],
+        "commands": ["npm run typecheck", "npm run lint", "npm run build"],
         "required": true
       }
     },
@@ -58,7 +58,7 @@
         "dangerouslySkipPermissions": false
       },
       "verify": {
-        "commands": ["npm run typecheck", "npm run lint"],
+        "commands": ["npm run typecheck", "npm run lint", "npm run build"],
         "required": true
       }
     }
