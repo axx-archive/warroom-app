@@ -5,15 +5,22 @@ import Link from "next/link";
 import { WarRoomPlan } from "@/lib/plan-schema";
 import { PlanGenerator } from "@/components/PlanGenerator";
 import { PlanViewer } from "@/components/PlanViewer";
+import { ImportPlanModal } from "@/components/ImportPlanModal";
 
 export default function Home() {
   const [generatedPlan, setGeneratedPlan] = useState<{
     plan: WarRoomPlan;
     runDir: string;
   } | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const handlePlanGenerated = (plan: WarRoomPlan, runDir: string) => {
     setGeneratedPlan({ plan, runDir });
+  };
+
+  const handlePlanImported = (plan: WarRoomPlan, runDir: string) => {
+    setGeneratedPlan({ plan, runDir });
+    setShowImportModal(false);
   };
 
   const handleReset = () => {
@@ -40,6 +47,14 @@ export default function Home() {
             >
               View Runs
             </Link>
+            {!generatedPlan && (
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="px-3 py-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+              >
+                Import Plan
+              </button>
+            )}
             {generatedPlan && (
               <button
                 onClick={handleReset}
@@ -77,7 +92,7 @@ export default function Home() {
             />
 
             {/* Info Section */}
-            <div className="mt-8 grid md:grid-cols-2 gap-4">
+            <div className="mt-8 grid md:grid-cols-3 gap-4">
               <div className="p-4 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
                 <h3 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">
                   OpenClaw Kickoff
@@ -86,6 +101,20 @@ export default function Home() {
                   Click Generate Plan to have War Room create a plan with agent
                   lanes and run packets automatically.
                 </p>
+              </div>
+              <div className="p-4 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <h3 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+                  Import Plan
+                </h3>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
+                  Paste a plan.json from Claude Code PM or another source.
+                </p>
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Import Plan JSON →
+                </button>
               </div>
               <div className="p-4 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
                 <h3 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">
@@ -108,6 +137,14 @@ export default function Home() {
           War Room MVP - Plan Generation (M1)
         </div>
       </footer>
+
+      {/* Import Plan Modal */}
+      {showImportModal && (
+        <ImportPlanModal
+          onClose={() => setShowImportModal(false)}
+          onImported={handlePlanImported}
+        />
+      )}
     </div>
   );
 }
