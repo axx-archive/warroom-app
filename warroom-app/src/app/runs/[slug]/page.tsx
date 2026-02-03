@@ -6,6 +6,7 @@ import os from "os";
 import { WarRoomPlan, StatusJson } from "@/lib/plan-schema";
 import type { LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
 import { LaneStatusCard } from "@/components/LaneStatusCard";
+import { MergeView } from "@/components/MergeView";
 
 export const dynamic = "force-dynamic";
 
@@ -191,6 +192,9 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
                 </div>
               </div>
             )}
+
+            {/* Merge Readiness */}
+            {plan && <MergeView slug={slug} />}
 
             {/* No plan available */}
             {!plan && (
