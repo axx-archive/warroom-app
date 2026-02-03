@@ -187,3 +187,23 @@
   - Modal patterns: fixed positioning with backdrop click to close, escape key support
   - startMode "claude_code_import" distinguishes imported plans from "openclaw" generated ones
 ---
+
+## 2026-02-03 - WR-023
+- What was implemented: Import run folder by path functionality
+- Files changed:
+  - src/app/api/import-run-folder/route.ts (new) - POST endpoint validates path, reads plan.json and status.json
+  - src/components/ImportRunFolderModal.tsx (new) - Modal with path input, validation, error display
+  - src/app/page.tsx - Added "Open Folder" button in header and info section, integrated ImportRunFolderModal
+- All acceptance criteria verified:
+  - UI can open an existing runDir via path input ✓
+  - Existing plan.json and status.json are read and rendered ✓
+  - Error shown if path invalid or missing required files ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Use useRouter from next/navigation for client-side navigation in app directory
+  - Extract slug from runDir path (last segment) to navigate to /runs/[slug]
+  - Path expansion supports ~ for home directory via process.env.HOME
+  - API validates: path exists, is directory, has plan.json; status.json is optional
+  - Grid layout md:grid-cols-2 provides better balance with 4 info cards
+---

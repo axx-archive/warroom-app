@@ -147,8 +147,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-03: ImportRunFolderModal with path input, API validates and reads files, navigates to run detail"
     },
     {
       "id": "WR-030",
