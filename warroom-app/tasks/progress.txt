@@ -399,3 +399,22 @@
   - MergeResponse includes results array showing success/failure per lane
   - ConflictInfo includes worktreePath for opening the correct location in Cursor
 ---
+
+## 2026-02-03 - WR-070
+- What was implemented: Improved War Room UI clarity with prominent "Next Steps" panel
+- Files changed:
+  - src/components/PlanViewer.tsx - Added Next Steps section with two-column action cards and numbered checklist
+- All acceptance criteria verified:
+  - Plan viewer shows 'Next steps' checklist after plan generation ✓
+  - 'Copy PM Prompt' button is prominently displayed for manual mode ✓
+  - 'Stage Lanes' button explains: opens Cursor windows and writes packets ✓
+  - Each action has brief description of what will happen ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - Gradient backgrounds (from-blue-50 to-purple-50) make action panels stand out
+  - Two-column grid for action cards gives clear visual separation of options
+  - "Recommended" badge helps guide users to the common path
+  - Numbered checklist format (1-4 steps) provides clear post-action guidance
+  - Dynamic lane count in button description ({plan.lanes.length}) personalizes the UI
+  - Button descriptions should explain WHAT happens, not just the action name
+---
