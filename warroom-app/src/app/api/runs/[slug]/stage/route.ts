@@ -19,10 +19,19 @@ interface StageResult {
   error?: string;
 }
 
+interface CursorResult {
+  laneId: string;
+  success: boolean;
+  worktreePath?: string;
+  error?: string;
+}
+
 interface StageResponse {
   success: boolean;
   staged: StageResult[];
   errors: StageResult[];
+  cursorOpened: CursorResult[];
+  cursorErrors: CursorResult[];
 }
 
 // Check if a git branch exists (local or remote)
@@ -65,6 +74,34 @@ async function worktreeExists(worktreePath: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+// Open Cursor window for a worktree
+async function openCursorWindow(
+  laneId: string,
+  worktreePath: string
+): Promise<CursorResult> {
+  try {
+    // Use -n flag to open in new window
+    // Use spawn with detached option so Cursor doesn't block
+    await execAsync(`/usr/local/bin/cursor -n "${worktreePath}"`, {
+      timeout: 10000, // 10 second timeout for cursor to launch
+    });
+
+    return {
+      laneId,
+      success: true,
+      worktreePath,
+    };
+  } catch (error) {
+    // If cursor command fails, it's non-fatal - worktree is still staged
+    return {
+      laneId,
+      success: false,
+      worktreePath,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -178,6 +215,21 @@ export async function POST(
     const staged = results.filter((r) => r.success);
     const errors = results.filter((r) => !r.success);
 
+    // Open Cursor windows for successfully staged lanes
+    const cursorResults: CursorResult[] = [];
+    for (const result of staged) {
+      if (result.worktreePath) {
+        const cursorResult = await openCursorWindow(
+          result.laneId,
+          result.worktreePath
+        );
+        cursorResults.push(cursorResult);
+      }
+    }
+
+    const cursorOpened = cursorResults.filter((r) => r.success);
+    const cursorErrors = cursorResults.filter((r) => !r.success);
+
     // Update status.json
     let currentStatus: StatusJson;
     try {
@@ -217,10 +269,14 @@ export async function POST(
       success: errors.length === 0,
       staged,
       errors,
+      cursorOpened,
+      cursorErrors,
     };
 
+    // 207 Multi-Status if partial success (worktree or cursor errors)
+    const hasAnyErrors = errors.length > 0 || cursorErrors.length > 0;
     return NextResponse.json(response, {
-      status: errors.length === 0 ? 200 : 207, // 207 Multi-Status if partial success
+      status: hasAnyErrors ? 207 : 200,
     });
   } catch (error) {
     console.error("Error staging lanes:", error);
