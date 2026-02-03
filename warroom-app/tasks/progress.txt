@@ -166,3 +166,24 @@
   - Visual feedback (idle/copied state) improves UX for copy actions
   - PM prompts should include structured context: repo info, goal, constraints, run context, and clear instructions
 ---
+
+## 2026-02-03 - WR-022
+- What was implemented: Import plan.json via paste functionality
+- Files changed:
+  - src/app/api/import-plan/route.ts (new) - POST endpoint accepting planJson string, validates and normalizes plan
+  - src/components/ImportPlanModal.tsx (new) - Modal with textarea, JSON validation, error display
+  - src/app/page.tsx - Added Import Plan button in header and info section, integrated ImportPlanModal
+- All acceptance criteria verified:
+  - UI has 'Import Plan' button that opens a modal with textarea ✓
+  - Import accepts valid JSON and writes to new run folder ✓
+  - Packets auto-generated if not provided in JSON ✓
+  - Validation errors shown for invalid JSON ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Import API should normalize incomplete plans by providing sensible defaults (runId, runSlug, runDir, lanes)
+  - Minimal required fields for import: goal and repo.path - everything else can be auto-generated
+  - Local JSON.parse() before API call gives immediate user feedback for syntax errors
+  - Modal patterns: fixed positioning with backdrop click to close, escape key support
+  - startMode "claude_code_import" distinguishes imported plans from "openclaw" generated ones
+---
