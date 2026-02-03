@@ -175,6 +175,7 @@ ${config.defaultScope.map((s) => `- ${s}`).join("\n")}
 - Make changes outside your Allowed Paths (see below)
 - Commit directly to main or integration branch
 - Skip verification commands
+- **Never commit \`.next/\`, \`node_modules/\`, \`dist/\`, or other generated artifacts** - these should be in .gitignore
 
 ## Inputs
 - Repo: ${plan.repo.path}
