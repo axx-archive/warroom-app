@@ -25,6 +25,16 @@ Notes:
 - Ralph uses `tasks/prd.json` as the active story list and updates `passes: false → true`.
 - If a prior workstream exists, **archive it** (e.g. rename to `tasks/prd-<workstream>.json`) before starting a new PRD.
 
+### Orchestrators: Hybrid “Tasks + File Truth” (Solo Founder Speed Default)
+- Use **file-backed state as canonical** for multi-day workstreams:
+  - `tasks/prd.json` (story truth, `passes:true/false`)
+  - `tasks/progress.txt` (append-only continuity)
+  - git commits (real history)
+- Treat tool-level TASKS (TaskCreate/TaskUpdate) as **optional coordination/UX**, and mirror to the file truth rather than replacing it.
+- Orchestrators should expose two modes:
+  - **Quick Task** (default): native task graph for one-off fixes/features.
+  - **Ralph Workstream**: multi-story/multi-day; commit per story; flip `passes:true` per story.
+
 ### Tailwind v4 + Turbopack Root Instability (Fix)
 - If dev server starts resolving Tailwind imports relative to `~/Desktop` / `~/node_modules`, force Turbopack root:
   - Prefer `next.config.js` (CJS) with `turbopack: { root: __dirname }`.
@@ -37,6 +47,13 @@ qmd vsearch "topic" -c memories    # Search your own notes
 qmd vsearch "topic" -c horizon     # Search codebase
 ```
 Your memories are indexed. Use them before asking.
+
+### Claude Code Context Hygiene: Plan → Fresh Context → Execute
+X/community + CC feature notes:
+- Treat **one plan / one small feature** as the unit of work.
+- Prefer: **plan mode → accept plan → start implementation in a fresh context window** (auto-clear-on-plan-accept exists; can be disabled).
+- Repeat per story: execute → verify → commit → update file truth.
+- Use `/context` as a debugging move when outputs start drifting; be careful with `/compact` selection quirks.
 
 ### Codebase Search → Use QMD
 When AJ asks about code (especially Horizon/InsideOut), **use qmd first** instead of grep/manual file reading:
