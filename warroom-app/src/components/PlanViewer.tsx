@@ -1,10 +1,54 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { WarRoomPlan, AgentType } from "@/lib/plan-schema";
 import { generatePacketMarkdown } from "@/lib/packet-templates";
 import { LaneCard } from "./LaneCard";
 import { PacketPreview, PacketExpander } from "./PacketPreview";
+
+/**
+ * Generates a PM prompt for Claude Code to kick off manual planning.
+ * Includes /warroom-plan command reference, repoPath, goal, and constraints.
+ */
+function generatePMPrompt(plan: WarRoomPlan): string {
+  const constraints = [
+    `Integration branch: ${plan.integrationBranch}`,
+    `Lanes: ${plan.lanes.length} (${plan.lanes.map(l => l.agent).join(" → ")})`,
+    `Merge method: ${plan.merge.method}`,
+  ];
+
+  if (plan.workstream.type === "ralph_workstream" && plan.workstream.prdPath) {
+    constraints.push(`PRD: ${plan.workstream.prdPath}`);
+  }
+
+  return `# War Room Planning Session
+
+Use the /warroom-plan skill to begin planning for this project.
+
+## Repository
+- **Path**: ${plan.repo.path}
+- **Name**: ${plan.repo.name}
+
+## Goal
+${plan.goal}
+
+## Constraints
+${constraints.map(c => `- ${c}`).join("\n")}
+
+## Run Context
+- **Run ID**: ${plan.runSlug}
+- **Run Directory**: ${plan.runDir}
+
+## Instructions
+1. Review the goal and constraints above
+2. Stage the lanes when ready: each lane will get a Cursor window
+3. Copy each lane's packet and paste it to start the agent
+4. Monitor progress and mark lanes complete as work finishes
+5. Run merge choreography when all lanes are done
+
+Refer to the War Room UI for real-time status tracking.
+`;
+}
 
 interface PlanViewerProps {
   plan: WarRoomPlan;
@@ -28,6 +72,18 @@ export function PlanViewer({ plan, runDir }: PlanViewerProps) {
     laneId: string;
     content: string;
   } | null>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
+
+  const handleCopyPMPrompt = useCallback(async () => {
+    const prompt = generatePMPrompt(plan);
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopyStatus("copied");
+      setTimeout(() => setCopyStatus("idle"), 2000);
+    } catch (err) {
+      console.error("Failed to copy to clipboard:", err);
+    }
+  }, [plan]);
 
   // Generate packet content for all lanes (derived state, not async)
   const packets = useMemo(() => {
@@ -134,6 +190,30 @@ export function PlanViewer({ plan, runDir }: PlanViewerProps) {
           <code className="text-sm font-mono text-zinc-700 dark:text-zinc-300 break-all">
             {runDir}
           </code>
+        </div>
+
+        {/* Copy PM Prompt Button */}
+        <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                Manual Kickoff
+              </h4>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                Copy a prompt for Claude Code PM to manually kick off planning
+              </p>
+            </div>
+            <button
+              onClick={handleCopyPMPrompt}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                copyStatus === "copied"
+                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                  : "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              }`}
+            >
+              {copyStatus === "copied" ? "Copied!" : "Copy PM Prompt"}
+            </button>
+          </div>
         </div>
       </div>
 
