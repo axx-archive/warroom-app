@@ -323,3 +323,17 @@
   - Single developer gets default ["src/"] which is more permissive
   - Guardrail rule instructs agents to run `git diff --stat` before committing and verify all files are within allowed paths
 ---
+
+## 2026-02-03 - WR-042
+- What was implemented: Explicit warning in packets about never committing generated artifacts
+- Files changed:
+  - src/lib/packet-templates.ts - Added warning in "DO NOT" section about .next/, node_modules/, dist/ artifacts
+- All acceptance criteria verified:
+  - .next/ is in .gitignore ✓ (already present at line 17)
+  - Packets include explicit warning: 'Never commit .next/ or other generated artifacts' ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - The .gitignore already had /.next/ from the default Next.js template
+  - The "DO NOT" section in packet templates is the ideal place for explicit prohibitions
+  - Warning covers .next/, node_modules/, dist/ and mentions "other generated artifacts" for completeness
+---

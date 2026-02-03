@@ -247,8 +247,8 @@
         "Typecheck passes"
       ],
       "priority": 17,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-03: .next/ in .gitignore, packet templates include explicit warning about generated artifacts"
     },
     {
       "id": "WR-060",
