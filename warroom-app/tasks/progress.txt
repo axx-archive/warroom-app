@@ -357,3 +357,22 @@
   - Branch existence check: `git show-ref --verify --quiet refs/heads/<branch>`
   - MergeView is a client component that fetches data via API to allow refresh without page reload
 ---
+
+## 2026-02-03 - WR-061
+- What was implemented: Merge proposal generation with topological sort, conflict risk analysis, and PM prompt
+- Files changed:
+  - src/app/api/runs/[slug]/merge-proposal/route.ts (new) - POST generates proposal, GET reads existing
+  - src/components/MergeView.tsx - Added Generate Merge Proposal button, MergeProposalDisplay component
+  - src/lib/plan-schema.ts - Added MergeProposal and MergeProposalLane interfaces
+- All acceptance criteria verified:
+  - UI button generates merge proposal based on lane dependencies and conflicts ✓
+  - Proposal includes merge order and method (merge/rebase/squash) ✓
+  - Proposal stored in run artifacts as merge-proposal.json ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - Topological sort ensures dependencies are merged first (visit dependencies before current node)
+  - Merge method selection: squash for single commits or low risk, merge for high conflict risk
+  - PM prompt is markdown with commands reference for manual merge execution
+  - Use cycle detection in topological sort to handle circular dependencies gracefully
+  - Filter to only complete lanes when building merge proposal (incomplete lanes added as warning)
+---
