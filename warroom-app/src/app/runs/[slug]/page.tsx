@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
-import { WarRoomPlan, StatusJson, LaneStatus } from "@/lib/plan-schema";
+import { WarRoomPlan, StatusJson } from "@/lib/plan-schema";
+import type { LaneStatus } from "@/lib/plan-schema";
+import { LaneStatusCard } from "@/components/LaneStatusCard";
 
 export const dynamic = "force-dynamic";
 
@@ -172,46 +174,14 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
                 <div className="space-y-3">
                   {plan.lanes.map((lane) => {
                     const laneStatus = getLaneStatus(lane.laneId, status);
-                    const borderClass =
-                      laneStatus.status === "complete"
-                        ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/10"
-                        : laneStatus.status === "in_progress"
-                          ? "border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/10"
-                          : laneStatus.status === "failed"
-                            ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10"
-                            : "border-zinc-200 dark:border-zinc-700";
                     return (
-                      <div
+                      <LaneStatusCard
                         key={lane.laneId}
-                        className={`p-4 border rounded-lg ${borderClass}`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                                {lane.laneId}
-                              </span>
-                              <span className="px-2 py-0.5 text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded">
-                                {lane.agent}
-                              </span>
-                              {laneStatus.staged && (
-                                <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded">
-                                  staged
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 font-mono">
-                              {lane.branch}
-                            </p>
-                          </div>
-                          <LaneStatusBadge status={laneStatus.status} />
-                        </div>
-                        {lane.dependsOn.length > 0 && (
-                          <div className="mt-2 text-xs text-zinc-500">
-                            Depends on: {lane.dependsOn.join(", ")}
-                          </div>
-                        )}
-                      </div>
+                        lane={lane}
+                        slug={slug}
+                        initialStatus={laneStatus.status}
+                        initialStaged={laneStatus.staged}
+                      />
                     );
                   })}
                 </div>
@@ -348,31 +318,6 @@ function StatusBadge({ status }: { status: string }) {
       {status.replace(/_/g, " ")}
     </span>
   );
-}
-
-function LaneStatusBadge({ status }: { status: LaneStatus }) {
-  const statusConfig: Record<LaneStatus, { color: string; label: string }> = {
-    pending: {
-      color: "text-zinc-500 dark:text-zinc-400",
-      label: "Pending",
-    },
-    in_progress: {
-      color: "text-yellow-600 dark:text-yellow-400",
-      label: "In Progress",
-    },
-    complete: {
-      color: "text-green-600 dark:text-green-400",
-      label: "Complete",
-    },
-    failed: {
-      color: "text-red-600 dark:text-red-400",
-      label: "Failed",
-    },
-  };
-
-  const config = statusConfig[status];
-
-  return <span className={`text-sm font-medium ${config.color}`}>{config.label}</span>;
 }
 
 function formatDate(isoString: string): string {
