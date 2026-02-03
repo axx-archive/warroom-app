@@ -68,12 +68,39 @@ Contains role, scope, verification, stop conditions.
 - In the UI: “Describe what you want” textbox + **Generate Plan** button.
 - War Room asks OpenClaw (autonomously) to run **PM planning** and return a structured plan artifact.
 
-### R4 — Import Plan (Claude Code)
+### R4 — Manual PM kickoff helpers (Claude Code)
+War Room must generate copy/paste prompts so AJ never has to remember how to talk to PM.
+
+UI elements:
+- **Copy PM Prompt** button
+- **Copy PM Prompt (JSON-only output)** toggle (optional)
+
+Prompt template (filled by UI):
+```text
+@pm
+
+/warroom-plan
+(Read .claude/skills/warroom-plan/SKILL.md if needed)
+
+Repo: <repoPath>
+Goal: <goal>
+Constraints:
+- Max lanes: <N>
+- Autonomy: <on/off>
+- Workstream: <quick_task|ralph_workstream>
+- Require verification: true
+References:
+- <paths: PRD, tasks/prd.json, etc>
+```
+
+### R5 — Import Plan (Claude Code output)
 - UI affordance: **Import Plan**
 - Accept:
   - paste JSON
   - upload a file
   - or point at a file path in the repo
+
+Note: Import should support pointing at an existing run folder containing `plan.json` + `packets/`.
 
 ### R5 — Plan Viewer
 - Show:
