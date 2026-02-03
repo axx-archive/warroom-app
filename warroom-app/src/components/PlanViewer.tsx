@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { WarRoomPlan, AgentType } from "@/lib/plan-schema";
 import { generatePacketMarkdown } from "@/lib/packet-templates";
 import { LaneCard } from "./LaneCard";
@@ -68,11 +69,14 @@ const AGENT_COLORS: Record<AgentType, string> = {
 };
 
 export function PlanViewer({ plan, runDir }: PlanViewerProps) {
+  const router = useRouter();
   const [selectedPacket, setSelectedPacket] = useState<{
     laneId: string;
     content: string;
   } | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
+  const [isStaging, setIsStaging] = useState(false);
+  const [stageError, setStageError] = useState<string | null>(null);
 
   const handleCopyPMPrompt = useCallback(async () => {
     const prompt = generatePMPrompt(plan);
@@ -84,6 +88,29 @@ export function PlanViewer({ plan, runDir }: PlanViewerProps) {
       console.error("Failed to copy to clipboard:", err);
     }
   }, [plan]);
+
+  const handleStageLanes = useCallback(async () => {
+    setIsStaging(true);
+    setStageError(null);
+    try {
+      const response = await fetch(`/api/runs/${plan.runSlug}/stage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to stage lanes");
+      }
+
+      // Navigate to the run detail page after successful staging
+      router.push(`/runs/${plan.runSlug}`);
+    } catch (err) {
+      setStageError(err instanceof Error ? err.message : "Failed to stage lanes");
+    } finally {
+      setIsStaging(false);
+    }
+  }, [plan.runSlug, router]);
 
   // Generate packet content for all lanes (derived state, not async)
   const packets = useMemo(() => {
@@ -192,28 +219,112 @@ export function PlanViewer({ plan, runDir }: PlanViewerProps) {
           </code>
         </div>
 
-        {/* Copy PM Prompt Button */}
-        <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                Manual Kickoff
-              </h4>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Copy a prompt for Claude Code PM to manually kick off planning
-              </p>
+      </div>
+
+      {/* Next Steps - Prominent Action Panel */}
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg border border-blue-200 dark:border-blue-800 p-6">
+        <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4 flex items-center gap-2">
+          <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm">!</span>
+          Next Steps
+        </h3>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+          Your plan is ready. War Room has created run files on disk. Now choose how to proceed:
+        </p>
+
+        {/* Two-column action cards */}
+        <div className="grid md:grid-cols-2 gap-4">
+          {/* Option 1: Stage Lanes (Recommended) */}
+          <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 p-4">
+            <div className="flex items-start gap-3 mb-3">
+              <span className="px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">
+                Recommended
+              </span>
             </div>
+            <h4 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+              Stage Lanes
+            </h4>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
+              Opens a Cursor window for each lane with the packet ready. You paste the packet into each Cursor to start the agent.
+            </p>
+            <ul className="text-xs text-zinc-500 dark:text-zinc-400 space-y-1 mb-4">
+              <li>• Creates git worktrees for each lane</li>
+              <li>• Opens {plan.lanes.length} Cursor window{plan.lanes.length !== 1 ? "s" : ""}</li>
+              <li>• Writes WARROOM_PACKET.md to each worktree</li>
+            </ul>
+            <button
+              onClick={handleStageLanes}
+              disabled={isStaging}
+              className={`w-full px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${
+                isStaging
+                  ? "bg-zinc-100 text-zinc-400 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-500"
+                  : "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              }`}
+            >
+              {isStaging ? "Staging..." : "Stage Lanes & Open Cursor"}
+            </button>
+          </div>
+
+          {/* Option 2: Manual Mode */}
+          <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 p-4">
+            <div className="flex items-start gap-3 mb-3">
+              <span className="px-2 py-0.5 text-xs font-semibold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 rounded">
+                Manual
+              </span>
+            </div>
+            <h4 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+              Copy PM Prompt
+            </h4>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
+              Copies a prompt to your clipboard for pasting into Claude Code. Use this if you want to manually orchestrate the agents.
+            </p>
+            <ul className="text-xs text-zinc-500 dark:text-zinc-400 space-y-1 mb-4">
+              <li>• Includes /warroom-plan command reference</li>
+              <li>• Contains repo path, goal, and constraints</li>
+              <li>• Lists all lanes and their dependencies</li>
+            </ul>
             <button
               onClick={handleCopyPMPrompt}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              className={`w-full px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${
                 copyStatus === "copied"
                   ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                  : "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+                  : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
               }`}
             >
               {copyStatus === "copied" ? "Copied!" : "Copy PM Prompt"}
             </button>
           </div>
+        </div>
+
+        {/* Error display */}
+        {stageError && (
+          <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <p className="text-sm text-red-700 dark:text-red-400">{stageError}</p>
+          </div>
+        )}
+
+        {/* Checklist */}
+        <div className="mt-6 pt-4 border-t border-blue-200 dark:border-blue-800">
+          <h4 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">
+            What happens after staging:
+          </h4>
+          <ol className="text-sm text-zinc-600 dark:text-zinc-400 space-y-2">
+            <li className="flex items-start gap-2">
+              <span className="w-5 h-5 bg-zinc-200 dark:bg-zinc-700 rounded-full flex items-center justify-center text-xs font-medium shrink-0 mt-0.5">1</span>
+              <span><strong>Copy packet</strong> from WARROOM_PACKET.md in each Cursor window</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="w-5 h-5 bg-zinc-200 dark:bg-zinc-700 rounded-full flex items-center justify-center text-xs font-medium shrink-0 mt-0.5">2</span>
+              <span><strong>Paste packet</strong> into Claude Code chat to start the agent</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="w-5 h-5 bg-zinc-200 dark:bg-zinc-700 rounded-full flex items-center justify-center text-xs font-medium shrink-0 mt-0.5">3</span>
+              <span><strong>Monitor progress</strong> in War Room and mark lanes complete as work finishes</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="w-5 h-5 bg-zinc-200 dark:bg-zinc-700 rounded-full flex items-center justify-center text-xs font-medium shrink-0 mt-0.5">4</span>
+              <span><strong>Run merge</strong> when all lanes are done to integrate changes</span>
+            </li>
+          </ol>
         </div>
       </div>
 
