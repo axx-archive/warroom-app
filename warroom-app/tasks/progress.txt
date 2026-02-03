@@ -9,6 +9,9 @@
 - Use `npm run build` for production build verification
 - warroom-app/ is the canonical Next.js app directory
 - Next.js 16.1.6 with Turbopack, React 19, TypeScript 5
+- Use `export const dynamic = "force-dynamic"` for pages that read from disk at request time
+- Next.js 16 async params: `const { slug } = await params` in page components
+- Run folder path: ~/.openclaw/workspace/warroom/runs/<runSlug>/
 
 ---
 
@@ -62,4 +65,24 @@
   - The default Next.js .gitignore template includes most common patterns already
   - Use `git ls-files --cached | grep` to check for accidentally tracked files
   - Adding *.log catches individual log files anywhere in the tree
+---
+
+## 2026-02-03 - WR-010
+- What was implemented: Runs dashboard that lists run folders and navigates to detail view
+- Files changed:
+  - src/app/api/runs/route.ts (new) - GET endpoint to list runs from disk
+  - src/app/runs/page.tsx (new) - Runs dashboard page with SSR
+  - src/app/runs/[slug]/page.tsx (new) - Run detail page showing plan and status
+  - src/components/RunsList.tsx (new) - Client component for runs list display
+  - src/app/page.tsx (modified) - Added "View Runs" navigation link
+- All acceptance criteria verified:
+  - UI shows list of runs with slug, status, startMode, updatedAt ✓
+  - Clicking a run navigates to run detail view ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - The run-manager.ts already had a listRuns function that reads from disk
+  - StatusJson in the wild may have different schema than plan-schema.ts (e.g., lanes as object vs lanesCompleted array)
+  - Use `export const dynamic = "force-dynamic"` for pages that read from disk at request time
+  - Next.js 16 async params: await params before destructuring in page components
 ---
