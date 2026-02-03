@@ -303,3 +303,23 @@
   - Lane.foundation is optional boolean - only set to true when it's a foundation lane
   - The foundation detection is keyword-based for MVP; future: AI-powered detection
 ---
+
+## 2026-02-03 - WR-041
+- What was implemented: Allowed paths in packets for lane guardrails
+- Files changed:
+  - src/lib/plan-schema.ts - Added optional `allowedPaths?: string[]` field to Lane interface
+  - src/lib/plan-generator.ts - Added AGENT_ALLOWED_PATHS mapping, DEVELOPER_PATH_SUBDIVISIONS array, updated createLane and generatePlan
+  - src/lib/packet-templates.ts - Added "Allowed Paths" section with guardrail rule and git diff --stat verification
+- All acceptance criteria verified:
+  - Packets include 'Allowed Paths' section listing permitted directories/files ✓
+  - Packets include rule: 'git diff --stat must stay within allowed paths' ✓
+  - Plan generator assigns non-overlapping paths to parallel lanes ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - AGENT_ALLOWED_PATHS defines default paths per agent type (architect gets lib/types, qa-tester gets tests/, etc.)
+  - DEVELOPER_PATH_SUBDIVISIONS provides 6 non-overlapping path sets for parallel developer lanes
+  - When multiple developers exist in chain, each gets a different subdivision (modulo the number of subdivisions)
+  - Single developer gets default ["src/"] which is more permissive
+  - Guardrail rule instructs agents to run `git diff --stat` before committing and verify all files are within allowed paths
+---

@@ -234,8 +234,8 @@
         "Typecheck passes"
       ],
       "priority": 16,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-03: AGENT_ALLOWED_PATHS per agent, DEVELOPER_PATH_SUBDIVISIONS for parallel devs, packet guardrail rule"
     },
     {
       "id": "WR-042",
