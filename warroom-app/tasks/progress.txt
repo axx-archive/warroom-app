@@ -337,3 +337,23 @@
   - The "DO NOT" section in packet templates is the ideal place for explicit prohibitions
   - Warning covers .next/, node_modules/, dist/ and mentions "other generated artifacts" for completeness
 ---
+
+## 2026-02-03 - WR-060
+- What was implemented: Merge screen showing lane readiness with commit counts and file overlap detection
+- Files changed:
+  - src/app/api/runs/[slug]/merge-info/route.ts (new) - GET endpoint returns lane merge info with commit counts, files changed, conflict risk
+  - src/components/MergeView.tsx (new) - Client component displays merge readiness panel with lane cards
+  - src/app/runs/[slug]/page.tsx - Integrated MergeView component into run detail page
+- All acceptance criteria verified:
+  - Merge view shows per-lane commit count ahead of integration branch ✓
+  - UI highlights potential conflict risk based on file overlap heuristic ✓
+  - Lanes marked complete are shown as merge candidates ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - Use `git rev-list --count base..branch` to count commits ahead of a branch
+  - Use `git diff --name-only base...branch` (triple dot) for symmetric diff to get changed files
+  - Fall back to main/master if integration branch doesn't exist yet
+  - Conflict risk is calculated based on file overlap: none (0 lanes), low (1 lane), medium (2-3), high (4+)
+  - Branch existence check: `git show-ref --verify --quiet refs/heads/<branch>`
+  - MergeView is a client component that fetches data via API to allow refresh without page reload
+---
