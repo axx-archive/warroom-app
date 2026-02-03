@@ -55,6 +55,18 @@ X/community + CC feature notes:
 - Repeat per story: execute → verify → commit → update file truth.
 - Use `/context` as a debugging move when outputs start drifting; be careful with `/compact` selection quirks.
 
+### Skills That Compound: techdebt + doc-updater
+High-leverage system primitives added to AJ’s Claude Code system:
+- **techdebt skill**: end-of-session/end-of-story tech debt sweep (dedupe, dead code removal, pattern normalization), **verify**, then **commit with explicit approval checkpoint**.
+- **doc-updater agent**: doc-only updates and doc-only commits with approval; keep runbooks/codemaps/README in sync after major changes.
+- **staff-engineer-reviewer agent**: plan/diff critic role to catch edge cases, sequencing errors, and verification gaps on high-stakes work.
+
+### Terminal UX vs Filesystem Truth
+Claude Code may expose terminal affordances like `@agent` and `/command`, but the stable system is file-backed:
+- Agents: `.claude/agents/*.md`
+- Skills: `.claude/skills/<skill>/SKILL.md`
+Prefer the file-backed invocation form when writing portable prompts.
+
 ### Codebase Search → Use QMD
 When AJ asks about code (especially Horizon/InsideOut), **use qmd first** instead of grep/manual file reading:
 ```bash
