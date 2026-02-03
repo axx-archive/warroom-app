@@ -207,3 +207,24 @@
   - API validates: path exists, is directory, has plan.json; status.json is optional
   - Grid layout md:grid-cols-2 provides better balance with 4 info cards
 ---
+
+## 2026-02-03 - WR-030
+- What was implemented: Stage lanes API that creates git worktrees for each lane
+- Files changed:
+  - src/app/api/runs/[slug]/stage/route.ts (new) - POST endpoint creates worktrees and branches
+- All acceptance criteria verified:
+  - API endpoint POST /api/runs/[slug]/stage creates worktrees ✓
+  - Worktrees created at lane.worktreePath for each lane ✓
+  - Branches created per lane if they don't exist ✓
+  - Errors handled and surfaced in API response ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Use `promisify(exec)` for async/await shell command execution
+  - Git worktree creation: `git worktree add <path> <branch>` creates worktree at path on branch
+  - Branch existence check: `git show-ref --verify --quiet refs/heads/<branch>` (local) or `refs/remotes/origin/<branch>` (remote)
+  - Create parent dirs with `fs.mkdir(parentDir, { recursive: true })` before worktree creation
+  - Worktree paths from plan.json are in ~/.openclaw/worktrees/ directory
+  - Status.json lanes object tracks `staged: boolean` per lane
+  - HTTP 207 Multi-Status is appropriate for partial success responses
+---

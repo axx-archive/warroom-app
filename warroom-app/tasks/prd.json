@@ -162,8 +162,8 @@
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-03: POST /api/runs/[slug]/stage creates worktrees, branches, and updates status.json"
     },
     {
       "id": "WR-031",
