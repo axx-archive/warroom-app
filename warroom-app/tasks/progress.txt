@@ -148,3 +148,21 @@
   - runSlug format: `<slugified-goal>-<base36-timestamp>` (e.g., test-run-creation-ml6abc)
   - Packet files are named lane-1.md, lane-2.md, etc. in the packets/ directory
 ---
+
+## 2026-02-03 - WR-021
+- What was implemented: Copy PM Prompt button for manual planning kickoff
+- Files changed:
+  - src/components/PlanViewer.tsx - Added generatePMPrompt function and Copy PM Prompt button with clipboard integration
+- All acceptance criteria verified:
+  - UI shows 'Copy PM Prompt' button on plan creation screen ✓
+  - Prompt includes /warroom-plan command reference ✓
+  - Prompt includes repoPath, goal, and constraints ✓
+  - Copy button copies text to clipboard ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Use `navigator.clipboard.writeText()` for clipboard access in browser
+  - useCallback helps prevent unnecessary re-renders for event handlers
+  - Visual feedback (idle/copied state) improves UX for copy actions
+  - PM prompts should include structured context: repo info, goal, constraints, run context, and clear instructions
+---

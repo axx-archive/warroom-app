@@ -116,8 +116,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-03: Copy PM Prompt button in PlanViewer with /warroom-plan reference, repo path, goal, constraints"
     },
     {
       "id": "WR-022",
