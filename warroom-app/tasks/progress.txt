@@ -376,3 +376,26 @@
   - Use cycle detection in topological sort to handle circular dependencies gracefully
   - Filter to only complete lanes when building merge proposal (incomplete lanes added as warning)
 ---
+
+## 2026-02-03 - WR-062
+- What was implemented: Execute merge with checkpoints - API endpoint and UI for executing merges
+- Files changed:
+  - src/app/api/runs/[slug]/merge/route.ts (new) - POST endpoint executes merges in proposal order
+  - src/app/api/open-cursor/route.ts (new) - POST endpoint opens Cursor for conflict resolution
+  - src/components/MergeView.tsx - Added merge execution UI with conflict display, Open in Cursor button, merge-to-main confirmation
+- All acceptance criteria verified:
+  - API endpoint POST /api/runs/[slug]/merge executes merges in proposed order ✓
+  - On conflict: merge stops and returns conflict info ✓
+  - UI shows 'Open in Cursor' for manual conflict resolution ✓
+  - Merge to main requires explicit confirmation checkbox ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - Git merge execution flow: checkout integration branch → merge lane branch → handle conflicts
+  - Squash merges require a separate commit step after `git merge --squash`
+  - Conflict detection via `git diff --name-only --diff-filter=U` lists unmerged files
+  - HTTP 409 Conflict is appropriate status code for merge conflicts
+  - Two-step confirmation for merge to main: checkbox to enable + explicit confirmation checkbox
+  - Open in Cursor uses `/usr/local/bin/cursor -n <path>` for new window
+  - MergeResponse includes results array showing success/failure per lane
+  - ConflictInfo includes worktreePath for opening the correct location in Cursor
+---

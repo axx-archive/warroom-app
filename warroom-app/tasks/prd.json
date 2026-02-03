@@ -292,8 +292,8 @@
         "Typecheck passes"
       ],
       "priority": 20,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-03: POST /api/runs/[slug]/merge endpoint, conflict detection, Open in Cursor button, confirmation checkbox"
     },
     {
       "id": "WR-070",
