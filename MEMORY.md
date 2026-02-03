@@ -95,6 +95,12 @@ See TOOLS.md for full docs.
 - Repo: https://github.com/snarktank/ralph
 - The upstream README’s **Workflow / Run Ralph** section is the canonical contract.
 
+**New CLI (recommended):**
+From any project:
+- `/ralph setup` — one-time: creates `tasks/` and Ralph scaffolding
+- `/ralph convert my-prd.md` — converts PRD → `tasks/prd.json`
+- `/ralph run 21` — runs in background for N iterations
+
 Key upstream expectations:
 - Default `max_iterations` is **10**.
 - Script lives at `./scripts/ralph/ralph.sh` (if you copied it into a project).
