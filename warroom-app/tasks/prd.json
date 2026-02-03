@@ -28,8 +28,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-02: .nvmrc pins Node 25, engines field requires >=20"
     },
     {
       "id": "WR-003",
@@ -41,8 +41,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified 2026-02-02: Added /dist and /logs + *.log patterns"
     },
     {
       "id": "WR-010",

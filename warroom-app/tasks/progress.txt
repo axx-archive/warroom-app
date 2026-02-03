@@ -27,3 +27,39 @@
   - Port 3000 may be in use; dev server auto-selects available port (3001)
   - TypeScript and ESLint are already configured and passing
 ---
+
+## 2026-02-02 - WR-002
+- What was implemented: Node/bin-link reliability via version pinning
+- Files changed:
+  - .nvmrc (new) - pins Node version 25
+  - package.json - added engines field requiring Node >=20
+  - package-lock.json (regenerated)
+- All acceptance criteria verified:
+  - Fresh npm install works ✓
+  - npm run typecheck passes ✓
+  - npm run lint passes ✓
+  - npm run build passes ✓
+  - .nvmrc exists ✓
+- **Learnings for future iterations:**
+  - Node 25.4.0 is the current version used in this environment
+  - npm 11.7.0 is the current version
+  - The engines field in package.json provides additional enforcement
+  - .nvmrc uses just the major version (25) for flexibility
+---
+
+## 2026-02-02 - WR-003
+- What was implemented: Added missing gitignore entries for dist/ and logs
+- Files changed:
+  - .gitignore - added /dist and /logs + *.log patterns
+- All acceptance criteria verified:
+  - .gitignore includes .next/ ✓ (was already present)
+  - .gitignore includes node_modules/ ✓ (was already present)
+  - .gitignore includes dist/ ✓ (added)
+  - .gitignore includes logs ✓ (added)
+  - No tracked .next/ or node_modules/ files in repo ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - The default Next.js .gitignore template includes most common patterns already
+  - Use `git ls-files --cached | grep` to check for accidentally tracked files
+  - Adding *.log catches individual log files anywhere in the tree
+---
