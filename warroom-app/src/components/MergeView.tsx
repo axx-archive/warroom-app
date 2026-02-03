@@ -30,6 +30,29 @@ interface MergeProposalResponse {
   error?: string;
 }
 
+interface ConflictInfo {
+  laneId: string;
+  branch: string;
+  conflictingFiles: string[];
+  worktreePath: string;
+}
+
+interface MergeLaneResult {
+  laneId: string;
+  branch: string;
+  success: boolean;
+  method: string;
+  error?: string;
+}
+
+interface MergeResponse {
+  success: boolean;
+  results: MergeLaneResult[];
+  conflict?: ConflictInfo;
+  mergedToMain?: boolean;
+  error?: string;
+}
+
 interface MergeViewProps {
   slug: string;
 }
@@ -42,6 +65,15 @@ export function MergeView({ slug }: MergeViewProps) {
   const [proposalLoading, setProposalLoading] = useState(false);
   const [proposalError, setProposalError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+
+  // Merge execution state
+  const [mergeLoading, setMergeLoading] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
+  const [mergeResults, setMergeResults] = useState<MergeLaneResult[]>([]);
+  const [conflict, setConflict] = useState<ConflictInfo | null>(null);
+  const [mergeToMain, setMergeToMain] = useState(false);
+  const [confirmMergeToMain, setConfirmMergeToMain] = useState(false);
+  const [mergedToMain, setMergedToMain] = useState(false);
 
   const fetchMergeInfo = useCallback(async () => {
     setLoading(true);
@@ -103,6 +135,58 @@ export function MergeView({ slug }: MergeViewProps) {
       // Clipboard failed
     }
   }, [proposal?.pmPrompt]);
+
+  const executeMerge = useCallback(async () => {
+    if (!proposal) return;
+
+    setMergeLoading(true);
+    setMergeError(null);
+    setConflict(null);
+    setMergeResults([]);
+    setMergedToMain(false);
+
+    try {
+      const response = await fetch(`/api/runs/${slug}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mergeToMain,
+          confirmMergeToMain: mergeToMain && confirmMergeToMain,
+        }),
+      });
+      const data: MergeResponse = await response.json();
+
+      setMergeResults(data.results);
+
+      if (data.conflict) {
+        setConflict(data.conflict);
+        setMergeError(data.error || "Merge conflict occurred");
+      } else if (!data.success) {
+        setMergeError(data.error || "Merge failed");
+      } else {
+        setMergedToMain(data.mergedToMain || false);
+        // Refresh merge info to show updated state
+        fetchMergeInfo();
+      }
+    } catch (err) {
+      setMergeError(String(err));
+    } finally {
+      setMergeLoading(false);
+    }
+  }, [slug, proposal, mergeToMain, confirmMergeToMain, fetchMergeInfo]);
+
+  const openInCursor = useCallback(async (worktreePath: string) => {
+    try {
+      // Call a simple endpoint to open Cursor (we'll use the stage endpoint's cursor logic)
+      await fetch(`/api/open-cursor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: worktreePath }),
+      });
+    } catch {
+      // Opening Cursor is best-effort
+    }
+  }, []);
 
   useEffect(() => {
     fetchMergeInfo();
@@ -311,6 +395,17 @@ export function MergeView({ slug }: MergeViewProps) {
             proposal={proposal}
             copyState={copyState}
             onCopy={copyPMPrompt}
+            mergeLoading={mergeLoading}
+            mergeError={mergeError}
+            mergeResults={mergeResults}
+            conflict={conflict}
+            mergeToMain={mergeToMain}
+            setMergeToMain={setMergeToMain}
+            confirmMergeToMain={confirmMergeToMain}
+            setConfirmMergeToMain={setConfirmMergeToMain}
+            mergedToMain={mergedToMain}
+            onExecuteMerge={executeMerge}
+            onOpenInCursor={openInCursor}
           />
         )}
       </div>
@@ -471,18 +566,42 @@ interface MergeProposalDisplayProps {
   proposal: MergeProposal;
   copyState: "idle" | "copied";
   onCopy: () => void;
+  mergeLoading: boolean;
+  mergeError: string | null;
+  mergeResults: MergeLaneResult[];
+  conflict: ConflictInfo | null;
+  mergeToMain: boolean;
+  setMergeToMain: (v: boolean) => void;
+  confirmMergeToMain: boolean;
+  setConfirmMergeToMain: (v: boolean) => void;
+  mergedToMain: boolean;
+  onExecuteMerge: () => void;
+  onOpenInCursor: (path: string) => void;
 }
 
 function MergeProposalDisplay({
   proposal,
   copyState,
   onCopy,
+  mergeLoading,
+  mergeError,
+  mergeResults,
+  conflict,
+  mergeToMain,
+  setMergeToMain,
+  confirmMergeToMain,
+  setConfirmMergeToMain,
+  mergedToMain,
+  onExecuteMerge,
+  onOpenInCursor,
 }: MergeProposalDisplayProps) {
   const methodColors: Record<MergeMethod, string> = {
     merge: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
     squash: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
     "cherry-pick": "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   };
+
+  const hasLanesToMerge = proposal.mergeOrder.some((l) => l.commitsAhead > 0);
 
   return (
     <div className="space-y-4">
@@ -521,41 +640,251 @@ function MergeProposalDisplay({
           Proposed Merge Order:
         </div>
         <div className="space-y-2">
-          {proposal.mergeOrder.map((lane) => (
-            <div
-              key={lane.laneId}
-              className="flex items-center gap-3 p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/50"
-            >
-              <div className="w-6 h-6 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                {lane.order}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
-                    {lane.laneId}
-                  </span>
-                  <span
-                    className={`px-1.5 py-0.5 text-xs font-medium rounded ${methodColors[lane.method]}`}
-                  >
-                    {lane.method}
-                  </span>
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {lane.commitsAhead} {lane.commitsAhead === 1 ? "commit" : "commits"}
-                  </span>
+          {proposal.mergeOrder.map((lane) => {
+            const result = mergeResults.find((r) => r.laneId === lane.laneId);
+            const isConflict = conflict?.laneId === lane.laneId;
+
+            return (
+              <div
+                key={lane.laneId}
+                className={`flex items-center gap-3 p-2 rounded-lg ${
+                  result?.success
+                    ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800"
+                    : isConflict
+                    ? "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
+                    : "bg-zinc-50 dark:bg-zinc-800/50"
+                }`}
+              >
+                <div
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                    result?.success
+                      ? "bg-green-500 text-white"
+                      : isConflict
+                      ? "bg-red-500 text-white"
+                      : "bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+                  }`}
+                >
+                  {result?.success ? (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : isConflict ? (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  ) : (
+                    lane.order
+                  )}
                 </div>
-                {lane.notes && (
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    {lane.notes}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                      {lane.laneId}
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 text-xs font-medium rounded ${methodColors[lane.method]}`}
+                    >
+                      {lane.method}
+                    </span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      {lane.commitsAhead} {lane.commitsAhead === 1 ? "commit" : "commits"}
+                    </span>
+                    {result?.success && (
+                      <span className="px-1.5 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
+                        merged
+                      </span>
+                    )}
                   </div>
-                )}
+                  {lane.notes && (
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      {lane.notes}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Conflict Display */}
+      {conflict && (
+        <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+          <div className="flex items-start gap-3">
+            <svg
+              className="w-5 h-5 text-red-500 shrink-0 mt-0.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <div className="flex-1">
+              <div className="font-medium text-red-700 dark:text-red-300 mb-2">
+                Merge Conflict in {conflict.laneId}
+              </div>
+              <div className="text-sm text-red-600 dark:text-red-400 mb-3">
+                The following files have conflicts that need manual resolution:
+              </div>
+              <div className="bg-red-100 dark:bg-red-900/30 rounded p-2 mb-3 max-h-32 overflow-y-auto">
+                {conflict.conflictingFiles.map((file) => (
+                  <div key={file} className="text-xs font-mono text-red-700 dark:text-red-300 py-0.5">
+                    {file}
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => onOpenInCursor(conflict.worktreePath)}
+                className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  />
+                </svg>
+                Open in Cursor to Resolve
+              </button>
+              <div className="mt-2 text-xs text-red-500 dark:text-red-400">
+                Path: <code className="font-mono">{conflict.worktreePath}</code>
               </div>
             </div>
-          ))}
+          </div>
+        </div>
+      )}
+
+      {/* Merge Error (non-conflict) */}
+      {mergeError && !conflict && (
+        <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+          <div className="text-sm text-red-700 dark:text-red-300">{mergeError}</div>
+        </div>
+      )}
+
+      {/* Success Message */}
+      {mergeResults.length > 0 && mergeResults.every((r) => r.success) && !conflict && (
+        <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+          <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="font-medium">
+              All lanes merged successfully to integration branch!
+              {mergedToMain && " Also merged to main."}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Execute Merge Section */}
+      <div className="pt-4 border-t border-zinc-200 dark:border-zinc-700 space-y-4">
+        <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Execute Merge
+        </div>
+
+        {/* Merge to Main Option */}
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={mergeToMain}
+              onChange={(e) => {
+                setMergeToMain(e.target.checked);
+                if (!e.target.checked) {
+                  setConfirmMergeToMain(false);
+                }
+              }}
+              className="w-4 h-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-zinc-700 dark:text-zinc-300">
+              Also merge integration branch to main after lanes merge
+            </span>
+          </label>
+
+          {mergeToMain && (
+            <div className="ml-6 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={confirmMergeToMain}
+                  onChange={(e) => setConfirmMergeToMain(e.target.checked)}
+                  className="w-4 h-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500 mt-0.5"
+                />
+                <div>
+                  <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                    I confirm I want to merge to main
+                  </span>
+                  <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    This will merge the integration branch into main/master. This action modifies your production branch.
+                  </div>
+                </div>
+              </label>
+            </div>
+          )}
+        </div>
+
+        {/* Execute Button */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onExecuteMerge}
+            disabled={
+              mergeLoading ||
+              !hasLanesToMerge ||
+              (mergeToMain && !confirmMergeToMain) ||
+              (mergeResults.length > 0 && mergeResults.every((r) => r.success) && !conflict)
+            }
+            className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            {mergeLoading ? (
+              <>
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                <span>Merging...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                  />
+                </svg>
+                <span>Execute Merge</span>
+              </>
+            )}
+          </button>
+          {mergeToMain && !confirmMergeToMain && (
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              Check the confirmation box to enable merge to main
+            </span>
+          )}
         </div>
       </div>
 
       {/* Copy PM Prompt Button */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 pt-4 border-t border-zinc-200 dark:border-zinc-700">
         <button
           onClick={onCopy}
           className="px-4 py-2 text-sm font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors flex items-center gap-2"
