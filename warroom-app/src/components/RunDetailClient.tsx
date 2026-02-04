@@ -11,6 +11,7 @@ import { ActivityFeed } from "./ActivityFeed";
 import { useActivityFeed } from "@/hooks/useActivityFeed";
 import { MissionPhase, MissionProgressEvent } from "@/lib/websocket/types";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { AddLaneModal } from "./AddLaneModal";
 
 interface RunDetailClientProps {
   lanes: Lane[];
@@ -150,6 +151,11 @@ export function RunDetailClient({
   // Diff preview modal state
   const [previewLaneId, setPreviewLaneId] = useState<string | null>(null);
 
+  // Add lane modal state
+  const [showAddLaneModal, setShowAddLaneModal] = useState(false);
+  // Local lanes state - allows adding lanes without page reload
+  const [currentLanes, setCurrentLanes] = useState<Lane[]>(lanes);
+
   // Mission state for one-click Start Mission
   const [missionState, setMissionState] = useState<MissionState>({
     isRunning: false,
@@ -161,7 +167,7 @@ export function RunDetailClient({
     lanesComplete: 0,
     lanesFailed: 0,
     lanesMerged: 0,
-    totalLanes: lanes.length,
+    totalLanes: currentLanes.length,
   });
   const [missionNotification, setMissionNotification] = useState<MissionNotification | null>(null);
   const [isStartingMission, setIsStartingMission] = useState(false);
@@ -254,7 +260,7 @@ export function RunDetailClient({
         isRunning: true,
         phase: "launching",
         message: "Launching lanes...",
-        totalLanes: lanes.length,
+        totalLanes: currentLanes.length,
       }));
 
       setMissionNotification({
@@ -272,7 +278,7 @@ export function RunDetailClient({
     } finally {
       setIsStartingMission(false);
     }
-  }, [slug, lanes.length]);
+  }, [slug, currentLanes.length]);
 
   // Stop mission handler
   const handleStopMission = useCallback(async () => {
@@ -316,9 +322,16 @@ export function RunDetailClient({
     }
   }, [missionNotification]);
 
+  // Handle lane added - add to local state and update lane states
+  const handleLaneAdded = useCallback((newLane: Lane) => {
+    setCurrentLanes((prev) => [...prev, newLane]);
+    // Add default state for the new lane
+    updateLaneState(newLane.laneId, "pending");
+  }, [updateLaneState]);
+
   // Auto-generate merge proposal when all lanes become complete
   useEffect(() => {
-    const allComplete = lanes.length > 0 && lanes.every(
+    const allComplete = currentLanes.length > 0 && currentLanes.every(
       (lane) => laneStates[lane.laneId]?.status === "complete"
     );
 
@@ -403,7 +416,7 @@ export function RunDetailClient({
     }
 
     prevAllCompleteRef.current = allComplete;
-  }, [lanes, laneStates, slug]);
+  }, [currentLanes, laneStates, slug]);
 
   // Clear merge notification after 10 seconds (for success notifications only)
   useEffect(() => {
@@ -417,12 +430,12 @@ export function RunDetailClient({
 
   // Calculate progress
   const progress = useMemo(() => {
-    const total = lanes.length;
-    const completed = lanes.filter(
+    const total = currentLanes.length;
+    const completed = currentLanes.filter(
       (lane) => laneStates[lane.laneId]?.status === "complete"
     ).length;
     return { completed, total };
-  }, [lanes, laneStates]);
+  }, [currentLanes, laneStates]);
 
   const handleStatusChange = useCallback((laneId: string, newStatus: LaneStatus) => {
     // Update local state optimistically for immediate UI feedback
@@ -506,11 +519,11 @@ export function RunDetailClient({
 
   // Find lanes that are ready to launch (pending/in_progress with dependencies met)
   const getReadyLanes = useCallback(() => {
-    const completedLaneIds = lanes
+    const completedLaneIds = currentLanes
       .filter((lane) => laneStates[lane.laneId]?.status === "complete")
       .map((lane) => lane.laneId);
 
-    return lanes.filter((lane) => {
+    return currentLanes.filter((lane) => {
       const state = laneStates[lane.laneId];
       const status = state?.status || "pending";
       // Lane must be pending or in_progress (not complete or failed)
@@ -521,7 +534,7 @@ export function RunDetailClient({
         lane.dependsOn.every((depId) => completedLaneIds.includes(depId));
       return dependenciesMet;
     });
-  }, [lanes, laneStates]);
+  }, [currentLanes, laneStates]);
 
   // Launch all ready lanes sequentially with 2-second delay
   const handleLaunchAllReady = useCallback(async () => {
@@ -618,7 +631,7 @@ export function RunDetailClient({
     const launched = results.filter((r) => r.success).length;
     const failed = results.filter((r) => !r.success).length;
     // Blocked lanes = total lanes - ready lanes
-    blockedCount = lanes.length - readyLanes.length - progress.completed;
+    blockedCount = currentLanes.length - readyLanes.length - progress.completed;
 
     setLaunchAllProgress((prev) => ({
       ...prev,
@@ -637,7 +650,7 @@ export function RunDetailClient({
 
     // Refresh merge view
     setMergeViewKey((prev) => prev + 1);
-  }, [getReadyLanes, slug, laneStates, updateLaneState, lanes.length, progress.completed]);
+  }, [getReadyLanes, slug, laneStates, updateLaneState, currentLanes.length, progress.completed]);
 
   // Count of ready lanes for the button
   const readyLanesCount = useMemo(() => getReadyLanes().length, [getReadyLanes]);
@@ -817,6 +830,19 @@ export function RunDetailClient({
                 </>
               )}
             </button>
+
+            {/* Add Lane Button */}
+            <button
+              onClick={() => setShowAddLaneModal(true)}
+              className="btn btn--sm btn--secondary"
+              title="Add a new lane to this run"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Lane
+            </button>
+
             {/* Live progress counter */}
             <span
               className={`badge ${
@@ -954,7 +980,7 @@ export function RunDetailClient({
         )}
 
         <LanesManager
-          lanes={lanes}
+          lanes={currentLanes}
           slug={slug}
           laneStates={laneStates}
           laneUncommitted={laneUncommitted}
@@ -1062,6 +1088,16 @@ export function RunDetailClient({
           laneId={previewLaneId}
           onClose={handleClosePreview}
           onApproveAndComplete={handleApproveAndComplete}
+        />
+      )}
+
+      {/* Add lane modal */}
+      {showAddLaneModal && (
+        <AddLaneModal
+          slug={slug}
+          existingLanes={currentLanes}
+          onClose={() => setShowAddLaneModal(false)}
+          onLaneAdded={handleLaneAdded}
         />
       )}
     </>
