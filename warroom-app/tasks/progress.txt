@@ -397,3 +397,16 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Check mission status on mount via GET to show correct state if page refreshes during mission
   - Stop Mission button calls DELETE on the endpoint and resets run status to "staged"
 ---
+
+## 2026-02-04 - US-401: Lane reset/restart mechanism
+- Implemented lane reset functionality for failed/complete lanes
+- Files changed:
+  - `src/app/api/runs/[slug]/reset-lane/route.ts` - New API endpoint for resetting lanes
+  - `src/components/LaneStatusCard.tsx` - Added Reset button and confirmation dialog
+- **Learnings for future iterations:**
+  - Use `git checkout .` to discard modifications to tracked files, `git clean -fd` to remove untracked files/dirs
+  - Reset preserves autonomy and launchMode settings while clearing: commitsAtLaunch, suggestionDismissed, lastActivityAt, completionDetection, retryState, pushState
+  - Reset button shows for status === "failed" || "complete" || "conflict"
+  - Confirmation dialog pattern: fixed inset-0 z-50 overlay with centered modal
+  - Emit WebSocket event only when previous status differs from new status
+---
