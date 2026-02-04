@@ -10,6 +10,7 @@ Started: Wed Feb  4 08:01:43 PST 2026
 - Status data stored in `~/.openclaw/workspace/warroom/runs/{slug}/status.json`
 - Export shared types (like `LaneUncommittedStatus`) from hooks for use in components
 - Use `useRef` for popover triggers to handle click-outside detection properly
+- Use `getFileWatcher(runSlug)` from `@/lib/file-watcher` to get/create watchers - singleton per run
 
 ---
 
@@ -97,4 +98,20 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Initialize WebSocket server via side effect in API route module load (`initializeWebSocketServer()`)
   - ConnectionStatus type: "connecting" | "connected" | "disconnected" | "error"
   - Event types: lane-activity, lane-status-change, merge-ready, run-complete, connection-status
+---
+
+## 2026-02-04 - US-106: File watcher service
+- Implemented FileWatcher class for real-time worktree monitoring
+- Files changed:
+  - `src/lib/file-watcher/file-watcher.ts` - FileWatcher class with debouncing and WebSocket integration
+  - `src/lib/file-watcher/index.ts` - Module exports
+  - `src/app/api/runs/[slug]/watcher/route.ts` - API endpoint to start/stop watcher
+- **Learnings for future iterations:**
+  - Node.js `fs.watch` with `recursive: true` monitors entire directory tree on macOS
+  - Debouncing pattern: store pending events in a Map (keyed by path), reset timer on each new event
+  - Ignore patterns for `.git/`, `node_modules/`, `.next/`, temp files to reduce noise
+  - Singleton pattern for watchers: Map<runSlug, FileWatcher> ensures one watcher per run
+  - Watch error recovery: on watcher error, close and restart after 1 second delay
+  - File existence check after `rename` event determines if it was create vs delete
+  - Worktrees stored in `~/.openclaw/workspace/warroom/worktrees/{runSlug}/{laneName}`
 ---
