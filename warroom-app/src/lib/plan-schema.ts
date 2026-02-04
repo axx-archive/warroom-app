@@ -83,6 +83,9 @@ export interface WarRoomPlan {
 
 export type LaneStatus = "pending" | "in_progress" | "complete" | "failed";
 
+// Launch mode determines how the lane is opened
+export type LaunchMode = "cursor" | "terminal";
+
 // Auto-completion detection log entry
 export interface CompletionDetection {
   detected: boolean;
@@ -96,6 +99,7 @@ export interface LaneStatusEntry {
   staged: boolean;
   status: LaneStatus;
   autonomy?: LaneAutonomy;
+  launchMode?: LaunchMode; // How to launch: 'cursor' for Cursor IDE, 'terminal' for iTerm2/Terminal.app with Claude Code
   commitsAtLaunch?: number; // Track commit count when lane was launched
   suggestionDismissed?: boolean; // True if user dismissed completion suggestion
   lastActivityAt?: string; // ISO-8601 timestamp of last file activity in worktree

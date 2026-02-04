@@ -55,6 +55,7 @@ export function LanesManager({
             initialStatus={state.status}
             initialStaged={state.staged}
             initialAutonomy={state.autonomy}
+            initialLaunchMode={uncommitted?.launchMode}
             completedLanes={completedLanes}
             uncommittedStatus={uncommitted}
             onStatusChange={handleStatusChange}

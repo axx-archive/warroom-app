@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { StatusJson, LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
+import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode } from "@/lib/plan-schema";
 
 const POLL_INTERVAL = 5000; // 5 seconds
 
@@ -30,6 +30,8 @@ export interface LaneUncommittedStatus {
   branch?: string;
   // Completion suggestion
   completionSuggestion?: CompletionSuggestion;
+  // Launch mode preference
+  launchMode?: LaunchMode;
 }
 
 export interface LaneState {
@@ -132,6 +134,7 @@ export function useStatusPolling({
             currentCommits?: number;
             branch?: string;
             completionSuggestion?: CompletionSuggestion;
+            launchMode?: LaunchMode;
           };
           newLaneUncommitted[laneId] = {
             uncommittedCount: data.uncommittedCount,
@@ -143,6 +146,7 @@ export function useStatusPolling({
             currentCommits: data.currentCommits,
             branch: data.branch,
             completionSuggestion: data.completionSuggestion,
+            launchMode: data.launchMode,
           };
         }
       }

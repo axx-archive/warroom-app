@@ -62,9 +62,73 @@ async function ensureWorktree(
   }
 }
 
+type LaunchMode = "cursor" | "terminal";
+
 interface LaunchRequest {
   laneId: string;
   skipPermissions?: boolean;
+  launchMode?: LaunchMode;
+}
+
+// Check if iTerm2 is installed
+async function hasIterm(): Promise<boolean> {
+  try {
+    await fs.access("/Applications/iTerm.app");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Spawn iTerm2 or Terminal.app with Claude Code
+async function spawnTerminal(
+  worktreePath: string,
+  laneId: string,
+  slug: string,
+  skipPermissions: boolean
+): Promise<{ success: boolean; terminal: string; error?: string }> {
+  try {
+    const claudeCmd = skipPermissions
+      ? "claude --dangerously-skip-permissions"
+      : "claude";
+
+    const useIterm = await hasIterm();
+
+    if (useIterm) {
+      // Open iTerm2 with Claude Code
+      const appleScript = `
+        tell application "iTerm"
+          activate
+          create window with default profile
+          tell current session of current window
+            write text "cd '${worktreePath.replace(/'/g, "'\\''")}' && ${claudeCmd}"
+          end tell
+          tell current window
+            set name to "Lane: ${laneId} (${slug})"
+          end tell
+        end tell
+      `;
+      await execAsync(`osascript -e '${appleScript.replace(/'/g, "'\\''")}'`);
+      return { success: true, terminal: "iTerm" };
+    } else {
+      // Fall back to Terminal.app
+      const appleScript = `
+        tell application "Terminal"
+          activate
+          do script "cd '${worktreePath.replace(/'/g, "'\\''")}' && ${claudeCmd}"
+          set custom title of front window to "Lane: ${laneId} (${slug})"
+        end tell
+      `;
+      await execAsync(`osascript -e '${appleScript.replace(/'/g, "'\\''")}'`);
+      return { success: true, terminal: "Terminal.app" };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      terminal: "unknown",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 // Common output file patterns to look for in completed lane worktrees
@@ -134,7 +198,7 @@ export async function POST(
   try {
     const { slug } = await params;
     const body: LaunchRequest = await request.json();
-    const { laneId, skipPermissions } = body;
+    const { laneId, skipPermissions, launchMode = "cursor" } = body;
 
     if (!laneId) {
       return NextResponse.json(
@@ -266,13 +330,37 @@ export async function POST(
       );
     }
 
-    // Open Cursor with -n flag for new window
+    // Always write the packet file to worktree before launching (for Terminal mode to read)
+    const packetDestPath = path.join(openPath, "WARROOM_PACKET.md");
     try {
-      await execAsync(`cursor -n "${openPath}"`);
-    } catch (error) {
-      console.error("Failed to open Cursor:", error);
-      // Don't fail the request - maybe Cursor isn't installed
-      // Return success anyway so clipboard copy still works
+      await fs.writeFile(packetDestPath, packetContent, "utf-8");
+    } catch (writeError) {
+      console.error("Failed to write packet to worktree:", writeError);
+    }
+
+    // Launch based on mode
+    let terminalResult: { success: boolean; terminal: string; error?: string } | undefined;
+
+    if (launchMode === "terminal") {
+      // Terminal mode: spawn iTerm2/Terminal.app with Claude Code
+      terminalResult = await spawnTerminal(
+        openPath,
+        laneId,
+        slug,
+        skipPermissions ?? false
+      );
+      if (!terminalResult.success) {
+        console.error("Failed to spawn terminal:", terminalResult.error);
+      }
+    } else {
+      // Cursor mode: open Cursor with -n flag for new window
+      try {
+        await execAsync(`cursor -n "${openPath}"`);
+      } catch (error) {
+        console.error("Failed to open Cursor:", error);
+        // Don't fail the request - maybe Cursor isn't installed
+        // Return success anyway so clipboard copy still works
+      }
     }
 
     // Update status.json to mark lane as staged and update run status
@@ -332,6 +420,8 @@ export async function POST(
       worktreeCreated,
       packetContent,
       statusUpdated: true,
+      launchMode,
+      terminal: terminalResult?.terminal,
     });
   } catch (error) {
     console.error("Launch error:", error);

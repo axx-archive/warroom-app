@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
-import { StatusJson, LaneStatus, RunStatus, LaneAutonomy } from "@/lib/plan-schema";
+import { StatusJson, LaneStatus, RunStatus, LaneAutonomy, LaunchMode } from "@/lib/plan-schema";
 import { emitLaneStatusChange, initializeWebSocketServer } from "@/lib/websocket";
 
 // Initialize WebSocket server on module load
@@ -78,6 +78,8 @@ interface UpdateStatusRequest {
   status?: RunStatus;
   // Dismiss completion suggestion for a lane
   suggestionDismissed?: boolean;
+  // Update lane launch mode preference
+  launchMode?: LaunchMode;
 }
 
 export async function POST(
@@ -193,6 +195,22 @@ export async function POST(
         staged: existingLane?.staged ?? false,
         status: existingLane?.status ?? "pending",
         suggestionDismissed: body.suggestionDismissed,
+      };
+    }
+
+    // Update lane launch mode preference
+    if (body.laneId && body.launchMode !== undefined) {
+      if (!currentStatus.lanes) {
+        currentStatus.lanes = {};
+      }
+
+      // Preserve existing lane data
+      const existingLane = currentStatus.lanes[body.laneId];
+      currentStatus.lanes[body.laneId] = {
+        ...existingLane,
+        staged: existingLane?.staged ?? false,
+        status: existingLane?.status ?? "pending",
+        launchMode: body.launchMode,
       };
     }
 

@@ -8,7 +8,7 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { WarRoomPlan, Lane, StatusJson, CompletionDetection } from "@/lib/plan-schema";
+import { WarRoomPlan, Lane, StatusJson, CompletionDetection, LaunchMode } from "@/lib/plan-schema";
 import { detectLaneCompletion } from "@/lib/completion-detector";
 import { emitLaneStatusChange } from "@/lib/websocket";
 
@@ -43,6 +43,8 @@ interface LaneUncommittedStatus {
   // Auto-completion detection
   completionDetection?: CompletionDetection;
   autoMarkedComplete?: boolean; // True if lane was auto-marked complete this poll cycle
+  // Launch mode preference
+  launchMode?: LaunchMode; // 'cursor' or 'terminal'
 }
 
 export interface LaneStatusResponse {
@@ -226,6 +228,7 @@ export async function GET(
         const commitsAtLaunch = laneStatusEntry?.commitsAtLaunch;
         const suggestionDismissed = laneStatusEntry?.suggestionDismissed ?? false;
         const laneStatus = laneStatusEntry?.status;
+        const launchMode = laneStatusEntry?.launchMode;
 
         // Calculate commits since launch
         let commitsSinceLaunch: number | undefined;
@@ -307,6 +310,7 @@ export async function GET(
           completionSuggestion,
           completionDetection: detection.detected ? detection : undefined,
           autoMarkedComplete,
+          launchMode,
         };
       })
     );

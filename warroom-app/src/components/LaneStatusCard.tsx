@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useCallback, useRef, useEffect } from "react";
-import { Lane, LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
+import { Lane, LaneStatus, LaneAutonomy, LaunchMode } from "@/lib/plan-schema";
 import { LaneUncommittedStatus, UncommittedFile } from "@/hooks/useStatusPolling";
 
 interface LaneStatusCardProps {
@@ -10,6 +10,7 @@ interface LaneStatusCardProps {
   initialStatus: LaneStatus;
   initialStaged: boolean;
   initialAutonomy: LaneAutonomy;
+  initialLaunchMode?: LaunchMode; // Initial launch mode preference ('cursor' or 'terminal')
   completedLanes?: string[]; // List of completed lane IDs to check dependencies
   uncommittedStatus?: LaneUncommittedStatus; // Uncommitted files data from polling
   onStatusChange?: (laneId: string, newStatus: LaneStatus) => void; // Callback when status changes
@@ -162,6 +163,7 @@ export function LaneStatusCard({
   initialStatus,
   initialStaged,
   initialAutonomy,
+  initialLaunchMode,
   completedLanes = [],
   uncommittedStatus,
   onStatusChange,
@@ -171,9 +173,12 @@ export function LaneStatusCard({
   const [status, setStatus] = useState<LaneStatus>(initialStatus);
   const [staged] = useState(initialStaged);
   const [autonomy, setAutonomy] = useState<LaneAutonomy>(initialAutonomy);
+  // Default launch mode based on autonomy setting: terminal when skip permissions enabled, cursor otherwise
+  const defaultLaunchMode: LaunchMode = autonomy.dangerouslySkipPermissions ? "terminal" : "cursor";
+  const [launchMode, setLaunchMode] = useState<LaunchMode>(initialLaunchMode ?? defaultLaunchMode);
   const [isPending, startTransition] = useTransition();
   const [isLaunching, setIsLaunching] = useState(false);
-  const [launchStatus, setLaunchStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [launchStatus, setLaunchStatus] = useState<"idle" | "copied" | "error" | "launched">("idle");
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitStatus, setCommitStatus] = useState<"idle" | "success" | "nochanges" | "error">("idle");
   const [showUncommittedPopover, setShowUncommittedPopover] = useState(false);
@@ -197,6 +202,25 @@ export function LaneStatusCard({
     ? lane.dependsOn.filter(depId => !completedLanes.includes(depId))
     : [];
 
+  // Handle launch mode change
+  const handleLaunchModeChange = useCallback(async (newMode: LaunchMode) => {
+    setLaunchMode(newMode);
+
+    // Persist to status.json
+    try {
+      await fetch(`/api/runs/${slug}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          laneId: lane.laneId,
+          launchMode: newMode,
+        }),
+      });
+    } catch (error) {
+      console.error("Error saving launch mode:", error);
+    }
+  }, [slug, lane.laneId]);
+
   const handleLaunch = useCallback(async () => {
     setIsLaunching(true);
     setLaunchStatus("idle");
@@ -208,6 +232,7 @@ export function LaneStatusCard({
         body: JSON.stringify({
           laneId: lane.laneId,
           skipPermissions: autonomy.dangerouslySkipPermissions,
+          launchMode: launchMode,
         }),
       });
 
@@ -221,7 +246,8 @@ export function LaneStatusCard({
       console.log("Launch response:", {
         success: data.success,
         hasPacket: !!data.packetContent,
-        packetLength: data.packetContent?.length
+        packetLength: data.packetContent?.length,
+        launchMode: data.launchMode,
       });
 
       // Update local status to in_progress
@@ -230,33 +256,38 @@ export function LaneStatusCard({
         onStatusChange?.(lane.laneId, "in_progress");
       }
 
-      // Copy packet content to clipboard
-      if (data.packetContent) {
-        try {
-          await navigator.clipboard.writeText(data.packetContent);
-          setLaunchStatus("copied");
-          console.log("Copied to clipboard successfully");
-        } catch (clipboardError) {
-          console.error("Clipboard error:", clipboardError);
-          // Fallback: open a prompt with the content
-          // This ensures user can still get the content even if clipboard fails
-          const textarea = document.createElement("textarea");
-          textarea.value = data.packetContent;
-          textarea.style.position = "fixed";
-          textarea.style.opacity = "0";
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand("copy");
-          document.body.removeChild(textarea);
-          setLaunchStatus("copied");
-          console.log("Copied using fallback method");
-        }
-        // Reset status after 3 seconds
+      // Handle based on launch mode
+      if (launchMode === "terminal") {
+        // Terminal mode: Claude Code was spawned in iTerm2/Terminal
+        setLaunchStatus("launched");
         setTimeout(() => setLaunchStatus("idle"), 3000);
       } else {
-        console.warn("No packet content in response");
-        setLaunchStatus("error");
-        setTimeout(() => setLaunchStatus("idle"), 3000);
+        // Cursor mode: copy packet to clipboard
+        if (data.packetContent) {
+          try {
+            await navigator.clipboard.writeText(data.packetContent);
+            setLaunchStatus("copied");
+            console.log("Copied to clipboard successfully");
+          } catch (clipboardError) {
+            console.error("Clipboard error:", clipboardError);
+            // Fallback: use execCommand
+            const textarea = document.createElement("textarea");
+            textarea.value = data.packetContent;
+            textarea.style.position = "fixed";
+            textarea.style.opacity = "0";
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
+            setLaunchStatus("copied");
+            console.log("Copied using fallback method");
+          }
+          setTimeout(() => setLaunchStatus("idle"), 3000);
+        } else {
+          console.warn("No packet content in response");
+          setLaunchStatus("error");
+          setTimeout(() => setLaunchStatus("idle"), 3000);
+        }
       }
     } catch (error) {
       console.error("Launch error:", error);
@@ -265,7 +296,7 @@ export function LaneStatusCard({
     } finally {
       setIsLaunching(false);
     }
-  }, [slug, lane.laneId, autonomy.dangerouslySkipPermissions]);
+  }, [slug, lane.laneId, autonomy.dangerouslySkipPermissions, launchMode, status, onStatusChange]);
 
   const handleToggleComplete = () => {
     const newStatus: LaneStatus = isComplete ? "pending" : "complete";
@@ -527,7 +558,9 @@ export function LaneStatusCard({
                 ? "Lane is complete"
                 : isBlocked
                 ? `Blocked by: ${blockedByLanes.join(", ")}`
-                : "Open in Cursor & copy packet"
+                : launchMode === "cursor"
+                ? "Open in Cursor & copy packet"
+                : "Open in Terminal with Claude Code"
             }
           >
             {isLaunching ? (
@@ -544,6 +577,13 @@ export function LaneStatusCard({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 Copied!
+              </>
+            ) : launchStatus === "launched" ? (
+              <>
+                <svg className="w-3 h-3" style={{ color: "var(--status-success)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Launched!
               </>
             ) : launchStatus === "error" ? (
               <>
@@ -650,32 +690,61 @@ export function LaneStatusCard({
         </div>
       )}
 
-      {/* Autonomy Toggle */}
-      <div className="mt-3 ml-8 flex items-center gap-2">
-        <button
-          onClick={handleToggleAutonomy}
-          disabled={isPending}
-          className={`toggle ${autonomy.dangerouslySkipPermissions ? "active" : ""} ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}
-          role="switch"
-          aria-checked={autonomy.dangerouslySkipPermissions}
-          title={
-            autonomy.dangerouslySkipPermissions
-              ? "Disable skip permissions mode"
-              : "Enable skip permissions mode"
-          }
-          style={{
-            width: "32px",
-            height: "18px",
-          }}
-        />
-        <span className="small" style={{ color: "var(--muted)" }}>
-          Skip permissions
-          {autonomy.dangerouslySkipPermissions && (
-            <span className="ml-1.5 font-medium" style={{ color: "var(--accent)" }}>
-              (enabled)
-            </span>
-          )}
-        </span>
+      {/* Autonomy Toggle and Launch Mode */}
+      <div className="mt-3 ml-8 flex items-center gap-4 flex-wrap">
+        {/* Autonomy Toggle */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleToggleAutonomy}
+            disabled={isPending}
+            className={`toggle ${autonomy.dangerouslySkipPermissions ? "active" : ""} ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}
+            role="switch"
+            aria-checked={autonomy.dangerouslySkipPermissions}
+            title={
+              autonomy.dangerouslySkipPermissions
+                ? "Disable skip permissions mode"
+                : "Enable skip permissions mode"
+            }
+            style={{
+              width: "32px",
+              height: "18px",
+            }}
+          />
+          <span className="small" style={{ color: "var(--muted)" }}>
+            Skip permissions
+            {autonomy.dangerouslySkipPermissions && (
+              <span className="ml-1.5 font-medium" style={{ color: "var(--accent)" }}>
+                (enabled)
+              </span>
+            )}
+          </span>
+        </div>
+
+        {/* Launch Mode Selector */}
+        <div className="flex items-center gap-2">
+          <span className="small" style={{ color: "var(--muted)" }}>
+            Launch:
+          </span>
+          <select
+            value={launchMode}
+            onChange={(e) => handleLaunchModeChange(e.target.value as LaunchMode)}
+            disabled={isPending || isComplete}
+            className="text-xs px-2 py-1 rounded border bg-transparent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              borderColor: "var(--border)",
+              color: "var(--text)",
+              minWidth: "140px",
+            }}
+            title={
+              launchMode === "cursor"
+                ? "Open in Cursor IDE and copy packet to clipboard"
+                : "Open iTerm2/Terminal with Claude Code (autonomous)"
+            }
+          >
+            <option value="cursor">Cursor</option>
+            <option value="terminal">Terminal (Claude Code)</option>
+          </select>
+        </div>
       </div>
 
       {/* Completion Suggestion Banner */}
