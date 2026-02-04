@@ -359,6 +359,8 @@ export function LaneStatusCard({
   const [commitStatus, setCommitStatus] = useState<"idle" | "success" | "nochanges" | "error">("idle");
   const [showUncommittedPopover, setShowUncommittedPopover] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const uncommittedBadgeRef = useRef<HTMLButtonElement>(null);
 
   const isComplete = status === "complete";
@@ -631,6 +633,34 @@ export function LaneStatusCard({
     });
   }, [slug, lane.laneId, onStatusChange]);
 
+  // Handle resetting the lane to initial state
+  const handleReset = useCallback(async () => {
+    setIsResetting(true);
+    try {
+      const response = await fetch(`/api/runs/${slug}/reset-lane`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ laneId: lane.laneId }),
+      });
+
+      if (response.ok) {
+        setStatus("pending");
+        onStatusChange?.(lane.laneId, "pending");
+        setShowResetConfirm(false);
+      } else {
+        const data = await response.json();
+        console.error("Failed to reset lane:", data.error);
+      }
+    } catch (error) {
+      console.error("Error resetting lane:", error);
+    } finally {
+      setIsResetting(false);
+    }
+  }, [slug, lane.laneId, onStatusChange]);
+
+  // Show reset button for failed or complete lanes
+  const canReset = status === "failed" || status === "complete" || status === "conflict";
+
   return (
     <div
       className="task-card"
@@ -851,6 +881,32 @@ export function LaneStatusCard({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
               Preview
+            </button>
+          )}
+          {/* Reset Lane Button - show for failed or complete lanes */}
+          {canReset && (
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              disabled={isResetting}
+              className={`btn btn--sm btn--secondary ${isResetting ? "opacity-50 cursor-wait" : ""}`}
+              title="Reset lane to initial state"
+            >
+              {isResetting ? (
+                <>
+                  <svg className="w-3 h-3 spinner" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Reset
+                </>
+              )}
             </button>
           )}
           <span
@@ -1088,6 +1144,87 @@ export function LaneStatusCard({
       {/* Retry Exhausted Banner */}
       {uncommittedStatus?.retryState && uncommittedStatus.retryState.status === "exhausted" && (
         <RetryExhaustedBanner retryState={uncommittedStatus.retryState} />
+      )}
+
+      {/* Reset Confirmation Dialog */}
+      {showResetConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+        >
+          <div
+            className="p-6 rounded-lg shadow-xl max-w-md w-full mx-4"
+            style={{
+              backgroundColor: "var(--panel)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <svg
+                className="w-6 h-6 shrink-0 mt-0.5"
+                style={{ color: "var(--status-warning)" }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+              <div>
+                <h3 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
+                  Reset Lane?
+                </h3>
+                <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+                  This will reset <strong>{lane.laneId}</strong> to its initial state:
+                </p>
+                <ul className="text-sm mt-2 ml-4 list-disc" style={{ color: "var(--text-secondary)" }}>
+                  <li>Discard all uncommitted changes</li>
+                  <li>Remove all untracked files</li>
+                  <li>Clear LANE_STATUS.json</li>
+                  <li>Reset status to &quot;pending&quot;</li>
+                </ul>
+                <p className="text-sm mt-2 font-medium" style={{ color: "var(--status-warning)" }}>
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                disabled={isResetting}
+                className="btn btn--secondary btn--sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={isResetting}
+                className={`btn btn--sm ${isResetting ? "opacity-50 cursor-wait" : ""}`}
+                style={{
+                  backgroundColor: "var(--status-error)",
+                  color: "white",
+                  border: "none",
+                }}
+              >
+                {isResetting ? (
+                  <>
+                    <svg className="w-3 h-3 spinner" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Resetting...
+                  </>
+                ) : (
+                  "Reset Lane"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
