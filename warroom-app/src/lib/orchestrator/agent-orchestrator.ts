@@ -24,6 +24,9 @@ import {
   OutputLine,
   DetectedError,
 } from "./output-buffer";
+import {
+  autoCommitLaneWork,
+} from "./git-operations";
 
 // Retry configuration constants
 const MAX_RETRY_ATTEMPTS = 3;
@@ -339,25 +342,14 @@ class AgentOrchestrator {
         if (!isOpen) {
           clearInterval(checkInterval);
 
-          // Window was closed - assume work is complete
-          // (The actual completion status should be determined by LANE_STATUS.json in US-304)
+          // Window was closed - process completion with auto-commit
           laneState.stoppedAt = new Date().toISOString();
-          laneState.status = "complete";
           laneState.exitCode = 0;
 
           console.log(`[AgentOrchestrator] Terminal window closed for ${lane.laneId}`);
 
-          // Emit status change event
-          emitLaneStatusChange({
-            runSlug,
-            laneId: lane.laneId,
-            previousStatus: "in_progress" as LaneStatus,
-            newStatus: "complete" as LaneStatus,
-            timestamp: new Date().toISOString(),
-          });
-
-          // Check if we should start more lanes
-          this.onLaneComplete(runSlug, lane.laneId, true);
+          // Auto-commit lane work and complete
+          await this.handleLaneCompletion(runSlug, lane, laneState);
         }
       } catch (error) {
         console.error(`[AgentOrchestrator] Error checking terminal window:`, error);
@@ -420,7 +412,7 @@ class AgentOrchestrator {
     }
 
     // Handle process exit
-    claudeProcess.on("exit", (code) => {
+    claudeProcess.on("exit", async (code) => {
       laneState.exitCode = code;
       laneState.stoppedAt = new Date().toISOString();
 
@@ -433,19 +425,8 @@ class AgentOrchestrator {
       console.log(`[AgentOrchestrator] Lane ${lane.laneId} exited with code ${code}, errors: ${hadErrors}`);
 
       if (success) {
-        laneState.status = "complete";
-
-        // Emit status change event
-        emitLaneStatusChange({
-          runSlug,
-          laneId: lane.laneId,
-          previousStatus: "in_progress" as LaneStatus,
-          newStatus: "complete" as LaneStatus,
-          timestamp: new Date().toISOString(),
-        });
-
-        // Check if we should start more lanes
-        this.onLaneComplete(runSlug, lane.laneId, true);
+        // Auto-commit lane work on successful completion
+        await this.handleLaneCompletion(runSlug, lane, laneState);
       } else {
         // Handle failure with potential retry
         this.handleLaneFailure(runSlug, lane, laneState, code, hadErrors);
@@ -656,6 +637,83 @@ class AgentOrchestrator {
     console.log(`[AgentOrchestrator] Spawned Claude process for ${laneId}, PID: ${childProcess.pid}`);
 
     return childProcess;
+  }
+
+  // Handle lane completion with auto-commit
+  private async handleLaneCompletion(
+    runSlug: string,
+    lane: Lane,
+    laneState: LaneProcessState
+  ): Promise<void> {
+    const laneId = lane.laneId;
+
+    console.log(`[AgentOrchestrator] Handling completion for lane ${laneId}`);
+
+    // Auto-commit any uncommitted work
+    const commitResult = await autoCommitLaneWork(lane.worktreePath, laneId);
+
+    if (commitResult.success) {
+      if (commitResult.committed) {
+        console.log(`[AgentOrchestrator] Auto-committed lane ${laneId}: ${commitResult.commitHash}`);
+
+        // Emit commit activity event
+        emitLaneActivity({
+          runSlug,
+          laneId,
+          type: "commit",
+          message: commitResult.commitMessage,
+          details: {
+            stream: "stdout",
+            line: `Auto-committed ${commitResult.filesChanged} file(s): ${commitResult.commitHash}`,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        console.log(`[AgentOrchestrator] No uncommitted changes in lane ${laneId}, skipping commit`);
+      }
+
+      // Mark lane as complete
+      laneState.status = "complete";
+
+      // Emit status change event
+      emitLaneStatusChange({
+        runSlug,
+        laneId,
+        previousStatus: "in_progress" as LaneStatus,
+        newStatus: "complete" as LaneStatus,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Continue with lane completion flow
+      this.onLaneComplete(runSlug, laneId, true);
+    } else {
+      // Commit failed - log but still mark as complete since the work itself succeeded
+      console.error(`[AgentOrchestrator] Auto-commit failed for lane ${laneId}: ${commitResult.error}`);
+
+      // Emit activity event about commit failure
+      emitLaneActivity({
+        runSlug,
+        laneId,
+        type: "status",
+        message: `Auto-commit failed: ${commitResult.error}`,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Still mark lane as complete - the agent's work succeeded
+      laneState.status = "complete";
+
+      // Emit status change event
+      emitLaneStatusChange({
+        runSlug,
+        laneId,
+        previousStatus: "in_progress" as LaneStatus,
+        newStatus: "complete" as LaneStatus,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Continue with lane completion flow
+      this.onLaneComplete(runSlug, laneId, true);
+    }
   }
 
   // Handle lane completion

@@ -53,3 +53,16 @@ export type {
   SpawnTerminalResult,
   SpawnTerminalOptions,
 } from "./terminal-spawner";
+
+// Git operations exports
+export {
+  autoCommitLaneWork,
+  hasUncommittedChanges,
+  getUncommittedFileCount,
+  readLaneStatus,
+  isLaneStatusComplete,
+} from "./git-operations";
+
+export type {
+  AutoCommitResult,
+} from "./git-operations";
