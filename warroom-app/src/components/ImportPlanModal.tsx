@@ -14,16 +14,13 @@ export function ImportPlanModal({ onClose, onImported }: ImportPlanModalProps) {
   const [isImporting, setIsImporting] = useState(false);
 
   const handleImport = useCallback(async () => {
-    // Reset error
     setError(null);
 
-    // Validate JSON before sending
     if (!planJson.trim()) {
-      setError("Please paste your plan JSON");
+      setError("Please paste your mission plan JSON");
       return;
     }
 
-    // Try to parse locally first for immediate feedback
     try {
       JSON.parse(planJson);
     } catch (e) {
@@ -43,11 +40,10 @@ export function ImportPlanModal({ onClose, onImported }: ImportPlanModalProps) {
       const result = await response.json();
 
       if (!result.success) {
-        setError(result.error || "Failed to import plan");
+        setError(result.error || "Failed to import mission plan");
         return;
       }
 
-      // Success - call the callback
       onImported(result.plan, result.runDir);
     } catch (e) {
       setError(`Network error: ${e instanceof Error ? e.message : "Unknown error"}`);
@@ -67,96 +63,101 @@ export function ImportPlanModal({ onClose, onImported }: ImportPlanModalProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      className="modal-backdrop"
       onClick={(e) => e.target === e.currentTarget && onClose()}
       onKeyDown={handleKeyDown}
     >
-      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+      <div className="modal max-w-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-700">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Import Plan
-          </h2>
+        <div className="modal-header">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: "rgba(124, 58, 237, 0.15)", border: "1px solid rgba(124, 58, 237, 0.3)" }}>
+              <svg className="w-4 h-4" style={{ color: "var(--accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="h3" style={{ color: "var(--text)" }}>
+                Import Mission Plan
+              </h2>
+              <p className="label">
+                Load External Configuration
+              </p>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="p-1 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="btn btn--icon"
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-4 flex-1 overflow-auto">
-          <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
-            Paste a plan.json to create a new run. At minimum, the JSON needs:
+        <div className="modal-body">
+          <p className="small mb-4" style={{ color: "var(--muted)" }}>
+            Paste a plan.json to create a new mission run. Required fields:
           </p>
-          <ul className="text-sm text-zinc-600 dark:text-zinc-400 mb-4 list-disc list-inside space-y-1">
-            <li>
-              <code className="text-xs bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded">
-                goal
-              </code>{" "}
-              - What you want to accomplish
-            </li>
-            <li>
-              <code className="text-xs bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded">
-                repo.path
-              </code>{" "}
-              - Path to the repository
-            </li>
-          </ul>
+          <div className="flex flex-wrap gap-2 mb-5">
+            <code className="mono" style={{ background: "var(--panel)", padding: "2px 6px", borderRadius: "3px" }}>goal</code>
+            <code className="mono" style={{ background: "var(--panel)", padding: "2px 6px", borderRadius: "3px" }}>repo.path</code>
+          </div>
 
           <textarea
             value={planJson}
             onChange={(e) => {
               setPlanJson(e.target.value);
-              setError(null); // Clear error on change
+              setError(null);
             }}
             placeholder={`{
-  "goal": "Build a new feature...",
+  "goal": "Mission objective...",
   "repo": {
     "path": "/path/to/your/repo",
     "name": "my-project"
   },
   "lanes": [...]  // optional - auto-generated if omitted
 }`}
-            className="w-full h-64 p-3 font-mono text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="textarea h-64 mono small"
             spellCheck={false}
           />
 
-          {/* Error Display */}
           {error && (
-            <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+            <div className="card--static mt-4 p-4" style={{ borderColor: "rgba(239, 68, 68, 0.3)", background: "rgba(239, 68, 68, 0.08)" }}>
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "var(--status-error)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <p className="small" style={{ color: "var(--status-error)" }}>{error}</p>
+              </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-4 border-t border-zinc-200 dark:border-zinc-700">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
-          >
+        <div className="modal-footer">
+          <button onClick={onClose} className="btn btn--ghost">
             Cancel
           </button>
           <button
             onClick={handleImport}
             disabled={isImporting || !planJson.trim()}
-            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-zinc-300 disabled:cursor-not-allowed dark:disabled:bg-zinc-700 transition-colors"
+            className="btn btn--primary"
           >
-            {isImporting ? "Importing..." : "Import Plan"}
+            {isImporting ? (
+              <>
+                <span className="spinner" />
+                Importing...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Import Plan
+              </>
+            )}
           </button>
         </div>
       </div>

@@ -5,12 +5,11 @@ import path from "path";
 import os from "os";
 import { WarRoomPlan, StatusJson } from "@/lib/plan-schema";
 import type { LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
-import { LaneStatusCard } from "@/components/LaneStatusCard";
-import { MergeView } from "@/components/MergeView";
+import { RunDetailClient } from "@/components/RunDetailClient";
+import { DeleteRunButton } from "@/components/DeleteRunButton";
 
 export const dynamic = "force-dynamic";
 
-// Helper to get lane status from either status.json format
 function getLaneStatus(
   laneId: string,
   status: StatusJson | null
@@ -21,7 +20,6 @@ function getLaneStatus(
     return { status: "pending", staged: false, autonomy: defaultAutonomy };
   }
 
-  // Format 1: lanes object with per-lane status
   if (status.lanes && status.lanes[laneId]) {
     return {
       status: status.lanes[laneId].status,
@@ -30,7 +28,6 @@ function getLaneStatus(
     };
   }
 
-  // Format 2: lanesCompleted array
   if (status.lanesCompleted?.includes(laneId)) {
     return { status: "complete", staged: true, autonomy: defaultAutonomy };
   }
@@ -80,6 +77,39 @@ async function getRunData(
   return { plan, status };
 }
 
+const STATUS_CONFIG: Record<string, { color: string; bgColor: string; borderColor: string }> = {
+  draft: {
+    color: "var(--text-tertiary)",
+    bgColor: "transparent",
+    borderColor: "var(--border-default)",
+  },
+  ready_to_stage: {
+    color: "var(--cyan)",
+    bgColor: "rgba(6, 182, 212, 0.15)",
+    borderColor: "rgba(6, 182, 212, 0.3)",
+  },
+  staged: {
+    color: "#a855f7",
+    bgColor: "rgba(168, 85, 247, 0.15)",
+    borderColor: "rgba(168, 85, 247, 0.3)",
+  },
+  in_progress: {
+    color: "var(--status-warning)",
+    bgColor: "rgba(234, 179, 8, 0.15)",
+    borderColor: "rgba(234, 179, 8, 0.3)",
+  },
+  merging: {
+    color: "#f97316",
+    bgColor: "rgba(249, 115, 22, 0.15)",
+    borderColor: "rgba(249, 115, 22, 0.3)",
+  },
+  complete: {
+    color: "var(--status-success)",
+    bgColor: "rgba(34, 197, 94, 0.15)",
+    borderColor: "rgba(34, 197, 94, 0.3)",
+  },
+};
+
 export default async function RunDetailPage({ params }: RunDetailPageProps) {
   const { slug } = await params;
   const data = await getRunData(slug);
@@ -89,46 +119,66 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
   }
 
   const { plan, status } = data;
+  const statusConfig = STATUS_CONFIG[status?.status || "draft"] || STATUS_CONFIG.draft;
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+    <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">WR</span>
+      <header className="panel-header sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="flex items-center gap-4 group">
+              <div className="logo-mark">WR</div>
+              <div>
+                <h1 className="logo-text group-hover:text-[var(--amber)] transition-colors">WAR ROOM</h1>
+                <p className="text-[10px] font-mono text-[var(--text-ghost)] tracking-[0.2em] uppercase mt-0.5">
+                  Mission Control v0.1
+                </p>
               </div>
-              <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-                War Room
-              </h1>
             </Link>
           </div>
-          <Link
-            href="/runs"
-            className="px-3 py-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
-          >
-            &larr; All Runs
-          </Link>
+
+          <div className="flex items-center gap-3">
+            <DeleteRunButton slug={slug} />
+            <Link
+              href="/runs"
+              className="btn-ghost"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              All Missions
+            </Link>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-10">
         {/* Run Header */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
-            {slug}
-          </h2>
-          <div className="flex items-center gap-4">
-            {status?.status && <StatusBadge status={status.status} />}
-            {status?.updatedAt && (
-              <span className="text-sm text-zinc-500 dark:text-zinc-400">
-                Updated {formatDate(status.updatedAt)}
+        <div className="mb-8">
+          <div className="flex items-center gap-4 mb-3">
+            <h2 className="text-2xl font-mono font-semibold text-[var(--text-primary)]">
+              {slug}
+            </h2>
+            {status?.status && (
+              <span
+                className="px-2.5 py-1 text-[10px] font-mono font-medium uppercase tracking-wider rounded"
+                style={{
+                  color: statusConfig.color,
+                  backgroundColor: statusConfig.bgColor,
+                  border: `1px solid ${statusConfig.borderColor}`,
+                }}
+              >
+                {status.status.replace(/_/g, " ")}
               </span>
             )}
           </div>
+          {status?.updatedAt && (
+            <p className="text-sm text-[var(--text-ghost)] font-mono">
+              Last updated: {formatDate(status.updatedAt)}
+            </p>
+          )}
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -136,72 +186,67 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
           <div className="lg:col-span-2 space-y-6">
             {/* Plan Summary */}
             {plan && (
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-6">
-                <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-4">
-                  Plan Summary
-                </h3>
-                <dl className="space-y-3">
-                  <div>
-                    <dt className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Goal
-                    </dt>
-                    <dd className="text-zinc-900 dark:text-zinc-100 mt-1">
-                      {plan.goal}
-                    </dd>
+              <div className="panel-bracketed p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-8 h-8 rounded bg-[var(--amber-glow)] border border-[var(--amber-dim)] flex items-center justify-center">
+                    <svg className="w-4 h-4 text-[var(--amber)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
                   </div>
+                  <h3 className="text-lg font-medium text-[var(--text-primary)]">
+                    Mission Summary
+                  </h3>
+                </div>
+
+                <dl className="space-y-4">
                   <div>
-                    <dt className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Start Mode
-                    </dt>
-                    <dd className="text-zinc-900 dark:text-zinc-100 mt-1">
-                      {plan.startMode}
-                    </dd>
+                    <dt className="label-caps mb-1">Objective</dt>
+                    <dd className="text-[var(--text-primary)]">{plan.goal}</dd>
                   </div>
-                  <div>
-                    <dt className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Integration Branch
-                    </dt>
-                    <dd className="font-mono text-sm text-zinc-900 dark:text-zinc-100 mt-1">
-                      {plan.integrationBranch}
-                    </dd>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <dt className="label-caps mb-1">Start Mode</dt>
+                      <dd className="badge badge-amber">{plan.startMode}</dd>
+                    </div>
+                    <div>
+                      <dt className="label-caps mb-1">Integration Branch</dt>
+                      <dd className="code-inline text-xs">{plan.integrationBranch}</dd>
+                    </div>
                   </div>
                 </dl>
               </div>
             )}
 
-            {/* Lanes */}
+            {/* Lanes and Merge View - Client Component for Reactivity */}
             {plan?.lanes && plan.lanes.length > 0 && (
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-6">
-                <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-4">
-                  Lanes ({plan.lanes.length})
-                </h3>
-                <div className="space-y-3">
-                  {plan.lanes.map((lane) => {
+              <RunDetailClient
+                lanes={plan.lanes}
+                slug={slug}
+                initialStates={Object.fromEntries(
+                  plan.lanes.map((lane) => {
                     const laneStatus = getLaneStatus(lane.laneId, status);
-                    return (
-                      <LaneStatusCard
-                        key={lane.laneId}
-                        lane={lane}
-                        slug={slug}
-                        initialStatus={laneStatus.status}
-                        initialStaged={laneStatus.staged}
-                        initialAutonomy={laneStatus.autonomy}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
+                    return [
+                      lane.laneId,
+                      {
+                        status: laneStatus.status,
+                        staged: laneStatus.staged,
+                        autonomy: laneStatus.autonomy,
+                      },
+                    ];
+                  })
+                )}
+              />
             )}
-
-            {/* Merge Readiness */}
-            {plan && <MergeView slug={slug} />}
 
             {/* No plan available */}
             {!plan && (
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-6">
-                <p className="text-zinc-500 dark:text-zinc-400">
-                  No plan.json found for this run.
-                </p>
+              <div className="panel p-6">
+                <div className="flex items-center gap-3 text-[var(--text-tertiary)]">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <p className="text-sm">No plan.json found for this mission.</p>
+                </div>
               </div>
             )}
           </div>
@@ -209,25 +254,32 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Status Panel */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-6">
-              <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-4">
-                Status
+            <div className="panel p-5">
+              <h3 className="text-sm font-medium text-[var(--text-primary)] mb-4 flex items-center gap-2">
+                <span className="indicator-dot indicator-dot-amber" />
+                System Status
               </h3>
+
               {status ? (
-                <dl className="space-y-3">
+                <dl className="space-y-4">
                   <div>
-                    <dt className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Current Status
-                    </dt>
-                    <dd className="mt-1">
-                      <StatusBadge status={status.status} />
+                    <dt className="label-caps mb-1">Current Status</dt>
+                    <dd>
+                      <span
+                        className="px-2.5 py-1 text-[10px] font-mono font-medium uppercase tracking-wider rounded"
+                        style={{
+                          color: statusConfig.color,
+                          backgroundColor: statusConfig.bgColor,
+                          border: `1px solid ${statusConfig.borderColor}`,
+                        }}
+                      >
+                        {status.status.replace(/_/g, " ")}
+                      </span>
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Lane Progress
-                    </dt>
-                    <dd className="text-zinc-900 dark:text-zinc-100 mt-1">
+                    <dt className="label-caps mb-1">Lane Progress</dt>
+                    <dd className="text-[var(--text-primary)] font-mono text-sm">
                       {(() => {
                         if (!plan?.lanes) return "No lanes";
                         const counts = plan.lanes.reduce(
@@ -245,41 +297,37 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Last Updated
-                    </dt>
-                    <dd className="text-zinc-900 dark:text-zinc-100 mt-1 text-sm">
+                    <dt className="label-caps mb-1">Last Updated</dt>
+                    <dd className="text-sm font-mono text-[var(--text-secondary)]">
                       {formatDate(status.updatedAt)}
                     </dd>
                   </div>
                 </dl>
               ) : (
-                <p className="text-zinc-500 dark:text-zinc-400 text-sm">
-                  No status.json found for this run.
+                <p className="text-sm text-[var(--text-ghost)]">
+                  No status.json found for this mission.
                 </p>
               )}
             </div>
 
-            {/* Quick Info */}
+            {/* Repository Info */}
             {plan && (
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-6">
-                <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-4">
+              <div className="panel p-5">
+                <h3 className="text-sm font-medium text-[var(--text-primary)] mb-4 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-[var(--text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
                   Repository
                 </h3>
+
                 <dl className="space-y-3">
                   <div>
-                    <dt className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Name
-                    </dt>
-                    <dd className="text-zinc-900 dark:text-zinc-100 mt-1">
-                      {plan.repo.name}
-                    </dd>
+                    <dt className="label-caps mb-1">Name</dt>
+                    <dd className="text-[var(--text-primary)]">{plan.repo.name}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Path
-                    </dt>
-                    <dd className="font-mono text-xs text-zinc-900 dark:text-zinc-100 mt-1 break-all">
+                    <dt className="label-caps mb-1">Path</dt>
+                    <dd className="text-xs font-mono text-[var(--text-secondary)] break-all">
                       {plan.repo.path}
                     </dd>
                   </div>
@@ -291,40 +339,20 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-zinc-200 dark:border-zinc-800 mt-auto">
-        <div className="max-w-5xl mx-auto px-4 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
-          War Room MVP - Run Detail
+      <footer className="border-t border-[var(--border-subtle)] mt-auto">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-4 text-[var(--text-ghost)] font-mono">
+            <span className="uppercase tracking-wider">War Room MVP</span>
+            <span className="text-[var(--border-default)]">|</span>
+            <span>Mission Detail</span>
+          </div>
+          <div className="flex items-center gap-2 text-[var(--text-ghost)]">
+            <span className="indicator-dot indicator-dot-success" style={{ width: '6px', height: '6px' }} />
+            <span className="font-mono uppercase tracking-wider">All Systems Nominal</span>
+          </div>
         </div>
       </footer>
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const statusColors: Record<string, string> = {
-    draft: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-    ready_to_stage:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    staged:
-      "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-    in_progress:
-      "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    merging:
-      "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-    complete:
-      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  };
-
-  const colorClass =
-    statusColors[status] ??
-    "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
-
-  return (
-    <span
-      className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${colorClass}`}
-    >
-      {status.replace(/_/g, " ")}
-    </span>
   );
 }
 

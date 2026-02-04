@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { StatusJson } from "@/lib/plan-schema";
 
@@ -14,10 +14,94 @@ interface RunsListProps {
   initialRuns?: RunSummary[];
 }
 
+const STATUS_CONFIG: Record<string, { color: string; bgColor: string; borderColor: string }> = {
+  draft: {
+    color: "var(--muted)",
+    bgColor: "transparent",
+    borderColor: "var(--border)",
+  },
+  ready_to_stage: {
+    color: "var(--accent-light)",
+    bgColor: "rgba(124, 58, 237, 0.15)",
+    borderColor: "rgba(124, 58, 237, 0.3)",
+  },
+  staged: {
+    color: "var(--accent)",
+    bgColor: "rgba(124, 58, 237, 0.15)",
+    borderColor: "rgba(124, 58, 237, 0.3)",
+  },
+  in_progress: {
+    color: "var(--accent-light)",
+    bgColor: "rgba(124, 58, 237, 0.15)",
+    borderColor: "rgba(124, 58, 237, 0.3)",
+  },
+  merging: {
+    color: "var(--status-warning)",
+    bgColor: "rgba(249, 115, 22, 0.15)",
+    borderColor: "rgba(249, 115, 22, 0.3)",
+  },
+  complete: {
+    color: "var(--status-success)",
+    bgColor: "rgba(34, 197, 94, 0.15)",
+    borderColor: "rgba(34, 197, 94, 0.3)",
+  },
+};
+
+function getLaneStatusClass(status?: string): string {
+  switch (status) {
+    case "complete":
+      return "lane-complete";
+    case "in_progress":
+    case "staged":
+      return "lane-in-progress";
+    case "merging":
+      return "lane-in-progress";
+    default:
+      return "";
+  }
+}
+
 export function RunsList({ initialRuns }: RunsListProps) {
   const [runs, setRuns] = useState<RunSummary[]>(initialRuns ?? []);
   const [loading, setLoading] = useState(!initialRuns);
   const [error, setError] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const handleDelete = useCallback(async (runSlug: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (deleteConfirm !== runSlug) {
+      setDeleteConfirm(runSlug);
+      return;
+    }
+
+    setDeleting(runSlug);
+    try {
+      const response = await fetch(`/api/runs/${runSlug}/delete`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setRuns((prev) => prev.filter((r) => r.runSlug !== runSlug));
+      } else {
+        const data = await response.json();
+        console.error("Delete failed:", data.error);
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+    } finally {
+      setDeleting(null);
+      setDeleteConfirm(null);
+    }
+  }, [deleteConfirm]);
+
+  const cancelDelete = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDeleteConfirm(null);
+  }, []);
 
   useEffect(() => {
     if (initialRuns) return;
@@ -44,101 +128,141 @@ export function RunsList({ initialRuns }: RunsListProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-pulse text-zinc-500">Loading runs...</div>
+      <div className="flex items-center justify-center py-16">
+        <div className="flex items-center gap-3" style={{ color: "var(--muted)" }}>
+          <span className="spinner" />
+          <span className="label">Loading missions...</span>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-        <p className="text-red-700 dark:text-red-400">{error}</p>
+      <div className="card--static p-5" style={{ borderColor: "rgba(239, 68, 68, 0.3)", background: "rgba(239, 68, 68, 0.08)" }}>
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "var(--status-error)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div>
+            <p className="small font-medium" style={{ color: "var(--status-error)" }}>Error Loading Missions</p>
+            <p className="small mt-0.5" style={{ color: "var(--muted)" }}>{error}</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (runs.length === 0) {
     return (
-      <div className="text-center py-12">
-        <p className="text-zinc-500 dark:text-zinc-400 mb-4">
-          No runs found. Create a new plan to get started.
+      <div className="text-center py-16">
+        <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ background: "var(--panel)", border: "1px solid var(--border)" }}>
+          <svg className="w-8 h-8" style={{ color: "var(--muted)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        </div>
+        <p className="mono small mb-6" style={{ color: "var(--muted)" }}>
+          No missions found. Initialize a new mission to begin.
         </p>
-        <Link
-          href="/"
-          className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-        >
-          + New Plan
+        <Link href="/" className="btn btn--primary">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          New Mission
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {runs.map((run) => (
-        <Link
-          key={run.runSlug}
-          href={`/runs/${run.runSlug}`}
-          className="block p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 transition-colors"
-        >
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                {run.runSlug}
-              </h3>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 truncate">
-                {run.runDir}
-              </p>
+    <div className="flex flex-col gap-3">
+      {runs.map((run) => {
+        const statusConfig = STATUS_CONFIG[run.status?.status || "draft"] || STATUS_CONFIG.draft;
+        const statusClass = getLaneStatusClass(run.status?.status);
+
+        return (
+          <Link
+            key={run.runSlug}
+            href={`/runs/${run.runSlug}`}
+            className={`lane-card ${statusClass} block group`}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3 mb-2">
+                  <h3 className="mono small font-medium group-hover:text-[var(--accent-light)] transition-colors truncate" style={{ color: "var(--text)" }}>
+                    {run.runSlug}
+                  </h3>
+                  <StatusBadge status={run.status?.status} config={statusConfig} />
+                </div>
+                <p className="mono small truncate" style={{ color: "var(--muted)" }}>
+                  {run.runDir}
+                </p>
+                {run.status && run.status.lanesCompleted && run.status.lanesCompleted.length > 0 && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="indicator-dot indicator-dot-success indicator-dot--sm" />
+                    <span className="mono small" style={{ color: "var(--muted)" }}>
+                      {run.status.lanesCompleted.length} lane{run.status.lanesCompleted.length !== 1 ? "s" : ""} completed
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-3 ml-4">
+                {run.status?.updatedAt && (
+                  <span className="mono small whitespace-nowrap" style={{ color: "var(--muted)" }}>
+                    {formatRelativeTime(run.status.updatedAt)}
+                  </span>
+                )}
+                {deleteConfirm === run.runSlug ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => handleDelete(run.runSlug, e)}
+                      disabled={deleting === run.runSlug}
+                      className="btn btn--danger btn--sm"
+                    >
+                      {deleting === run.runSlug ? "..." : "Confirm"}
+                    </button>
+                    <button
+                      onClick={cancelDelete}
+                      className="btn btn--ghost btn--sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(e) => handleDelete(run.runSlug, e)}
+                    className="btn btn--icon opacity-0 group-hover:opacity-100"
+                    title="Delete mission"
+                    style={{ color: "var(--muted)" }}
+                  >
+                    <svg className="w-4 h-4 hover:text-[var(--status-error)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
+                <svg className="w-4 h-4 group-hover:text-[var(--accent)] transition-colors" style={{ color: "var(--muted)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
             </div>
-            <div className="flex items-center gap-3 ml-4">
-              <StatusBadge status={run.status?.status} />
-              {run.status?.updatedAt && (
-                <span className="text-xs text-zinc-400 dark:text-zinc-500 whitespace-nowrap">
-                  {formatRelativeTime(run.status.updatedAt)}
-                </span>
-              )}
-            </div>
-          </div>
-          {run.status && (
-            <div className="mt-2 flex items-center gap-4 text-sm text-zinc-600 dark:text-zinc-400">
-              {run.status.lanesCompleted && (
-                <span>
-                  {run.status.lanesCompleted.length} lane
-                  {run.status.lanesCompleted.length !== 1 ? "s" : ""} completed
-                </span>
-              )}
-            </div>
-          )}
-        </Link>
-      ))}
+          </Link>
+        );
+      })}
     </div>
   );
 }
 
-function StatusBadge({ status }: { status?: string }) {
-  const statusColors: Record<string, string> = {
-    draft: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-    ready_to_stage:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    staged:
-      "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-    in_progress:
-      "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    merging:
-      "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-    complete:
-      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  };
-
+function StatusBadge({ status, config }: { status?: string; config: { color: string; bgColor: string; borderColor: string } }) {
   const displayStatus = status ?? "unknown";
-  const colorClass =
-    statusColors[displayStatus] ??
-    "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
 
   return (
     <span
-      className={`px-2 py-0.5 text-xs font-medium rounded-full ${colorClass}`}
+      className="badge"
+      style={{
+        color: config.color,
+        backgroundColor: config.bgColor,
+        borderColor: config.borderColor,
+      }}
     >
       {displayStatus.replace(/_/g, " ")}
     </span>

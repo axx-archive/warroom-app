@@ -7,10 +7,6 @@ import { generatePacketMarkdown } from "@/lib/packet-templates";
 import { LaneCard } from "./LaneCard";
 import { PacketPreview, PacketExpander } from "./PacketPreview";
 
-/**
- * Generates a PM prompt for Claude Code to kick off manual planning.
- * Includes /warroom-plan command reference, repoPath, goal, and constraints.
- */
 function generatePMPrompt(plan: WarRoomPlan): string {
   const constraints = [
     `Integration branch: ${plan.integrationBranch}`,
@@ -57,15 +53,15 @@ interface PlanViewerProps {
 }
 
 const AGENT_COLORS: Record<AgentType, string> = {
-  "product-owner": "bg-purple-500",
-  architect: "bg-blue-500",
-  developer: "bg-green-500",
-  "staff-engineer-reviewer": "bg-indigo-500",
-  "doc-updater": "bg-amber-500",
-  techdebt: "bg-orange-500",
-  "visual-qa": "bg-pink-500",
-  "qa-tester": "bg-cyan-500",
-  "security-reviewer": "bg-red-500",
+  "product-owner": "#a855f7",
+  architect: "#3b82f6",
+  developer: "#22c55e",
+  "staff-engineer-reviewer": "#6366f1",
+  "doc-updater": "var(--amber)",
+  techdebt: "#f97316",
+  "visual-qa": "#ec4899",
+  "qa-tester": "#06b6d4",
+  "security-reviewer": "#ef4444",
 };
 
 export function PlanViewer({ plan, runDir }: PlanViewerProps) {
@@ -103,7 +99,6 @@ export function PlanViewer({ plan, runDir }: PlanViewerProps) {
         throw new Error(data.error || "Failed to stage lanes");
       }
 
-      // Navigate to the run detail page after successful staging
       router.push(`/runs/${plan.runSlug}`);
     } catch (err) {
       setStageError(err instanceof Error ? err.message : "Failed to stage lanes");
@@ -112,7 +107,6 @@ export function PlanViewer({ plan, runDir }: PlanViewerProps) {
     }
   }, [plan.runSlug, router]);
 
-  // Generate packet content for all lanes (derived state, not async)
   const packets = useMemo(() => {
     const newPackets = new Map<string, string>();
     for (const lane of plan.lanes) {
@@ -129,11 +123,9 @@ export function PlanViewer({ plan, runDir }: PlanViewerProps) {
     }
   };
 
-  // Group lanes by dependencies for visualization
   const laneGroups = plan.lanes.reduce<
     { level: number; lanes: typeof plan.lanes }[]
   >((acc, lane) => {
-    // Determine the level based on dependencies
     let level = 0;
     if (lane.dependsOn.length > 0) {
       const depLevels = lane.dependsOn.map((depId) => {
@@ -160,219 +152,291 @@ export function PlanViewer({ plan, runDir }: PlanViewerProps) {
   return (
     <div className="space-y-6">
       {/* Plan Header */}
-      <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
-              Plan Generated
-            </h2>
-            <p className="text-zinc-600 dark:text-zinc-400">{plan.goal}</p>
+      <div className="panel-elevated p-6">
+        <div className="flex items-start justify-between gap-4 mb-6">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded bg-[var(--amber-glow)] border border-[var(--amber-dim)] flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-[var(--amber)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-1">
+                Mission Plan Generated
+              </h2>
+              <p className="text-[var(--text-secondary)]">{plan.goal}</p>
+            </div>
           </div>
           <span
-            className={`px-3 py-1 text-sm font-medium rounded-full ${
-              plan.startMode === "openclaw"
-                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-            }`}
+            className="badge"
+            style={{
+              color: plan.startMode === "openclaw" ? "var(--status-success)" : "var(--cyan)",
+              backgroundColor: plan.startMode === "openclaw" ? "rgba(34, 197, 94, 0.15)" : "rgba(6, 182, 212, 0.15)",
+              borderColor: plan.startMode === "openclaw" ? "rgba(34, 197, 94, 0.3)" : "rgba(6, 182, 212, 0.3)",
+            }}
           >
             {plan.startMode === "openclaw" ? "OpenClaw" : "Claude Code Import"}
           </span>
         </div>
 
         {/* Plan Metadata */}
-        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-[var(--hull)] rounded border border-[var(--border-subtle)]">
           <div>
-            <span className="text-zinc-500 dark:text-zinc-400 block">Run ID</span>
-            <code className="text-zinc-700 dark:text-zinc-300 font-mono text-xs">
+            <span className="label-caps block mb-1">Run ID</span>
+            <code className="text-xs font-mono text-[var(--amber)]">
               {plan.runSlug}
             </code>
           </div>
           <div>
-            <span className="text-zinc-500 dark:text-zinc-400 block">Repository</span>
-            <span className="text-zinc-700 dark:text-zinc-300">
+            <span className="label-caps block mb-1">Repository</span>
+            <span className="text-sm text-[var(--text-primary)]">
               {plan.repo.name}
             </span>
           </div>
           <div>
-            <span className="text-zinc-500 dark:text-zinc-400 block">
-              Integration Branch
-            </span>
-            <code className="text-zinc-700 dark:text-zinc-300 font-mono text-xs">
+            <span className="label-caps block mb-1">Integration Branch</span>
+            <code className="code-inline text-xs">
               {plan.integrationBranch}
             </code>
           </div>
           <div>
-            <span className="text-zinc-500 dark:text-zinc-400 block">Lanes</span>
-            <span className="text-zinc-700 dark:text-zinc-300">
+            <span className="label-caps block mb-1">Lanes</span>
+            <span className="text-sm text-[var(--text-primary)]">
               {plan.lanes.length}
             </span>
           </div>
         </div>
 
         {/* Run Directory */}
-        <div className="mt-4 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-md">
-          <span className="text-xs text-zinc-500 dark:text-zinc-400 block mb-1">
-            Run Directory
-          </span>
-          <code className="text-sm font-mono text-zinc-700 dark:text-zinc-300 break-all">
+        <div className="mt-4 p-3 bg-[var(--hull)] rounded border border-[var(--border-subtle)]">
+          <span className="label-caps block mb-1">Run Directory</span>
+          <code className="text-xs font-mono text-[var(--text-secondary)] break-all">
             {runDir}
           </code>
         </div>
-
       </div>
 
       {/* Next Steps - Prominent Action Panel */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg border border-blue-200 dark:border-blue-800 p-6">
-        <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4 flex items-center gap-2">
-          <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm">!</span>
-          Next Steps
-        </h3>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
-          Your plan is ready. War Room has created run files on disk. Now choose how to proceed:
+      <div className="panel-bracketed p-6" style={{ borderColor: "var(--amber-dim)" }}>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-full bg-[var(--amber)] flex items-center justify-center animate-[heartbeat_2s_ease-in-out_infinite]">
+            <svg className="w-5 h-5 text-[var(--void)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+              Next Steps
+            </h3>
+            <p className="text-xs font-mono text-[var(--text-ghost)] uppercase tracking-wider">
+              Deploy Agent Lanes
+            </p>
+          </div>
+        </div>
+
+        <p className="text-sm text-[var(--text-secondary)] mb-6">
+          Your mission plan is ready. War Room has created run files on disk. Choose how to proceed:
         </p>
 
         {/* Two-column action cards */}
         <div className="grid md:grid-cols-2 gap-4">
           {/* Option 1: Stage Lanes (Recommended) */}
-          <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 p-4">
-            <div className="flex items-start gap-3 mb-3">
-              <span className="px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">
-                Recommended
-              </span>
+          <div className="panel p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="badge badge-success text-[10px]">Recommended</span>
             </div>
-            <h4 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+            <h4 className="font-medium text-[var(--text-primary)] mb-2">
               Stage Lanes
             </h4>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
+            <p className="text-sm text-[var(--text-tertiary)] mb-4">
               Opens a Cursor window for each lane with the packet ready. You paste the packet into each Cursor to start the agent.
             </p>
-            <ul className="text-xs text-zinc-500 dark:text-zinc-400 space-y-1 mb-4">
-              <li>• Creates git worktrees for each lane</li>
-              <li>• Opens {plan.lanes.length} Cursor window{plan.lanes.length !== 1 ? "s" : ""}</li>
-              <li>• Writes WARROOM_PACKET.md to each worktree</li>
+            <ul className="text-xs text-[var(--text-ghost)] space-y-1.5 mb-5">
+              <li className="flex items-center gap-2">
+                <span className="w-1 h-1 rounded-full bg-[var(--text-ghost)]" />
+                Creates git worktrees for each lane
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1 h-1 rounded-full bg-[var(--text-ghost)]" />
+                Opens {plan.lanes.length} Cursor window{plan.lanes.length !== 1 ? "s" : ""}
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1 h-1 rounded-full bg-[var(--text-ghost)]" />
+                Writes WARROOM_PACKET.md to each worktree
+              </li>
             </ul>
             <button
               onClick={handleStageLanes}
               disabled={isStaging}
-              className={`w-full px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${
-                isStaging
-                  ? "bg-zinc-100 text-zinc-400 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-500"
-                  : "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-              }`}
+              className="btn-primary w-full"
             >
-              {isStaging ? "Staging..." : "Stage Lanes & Open Cursor"}
+              {isStaging ? (
+                <>
+                  <span className="spinner" />
+                  Staging...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Stage Lanes & Open Cursor
+                </>
+              )}
             </button>
           </div>
 
           {/* Option 2: Manual Mode */}
-          <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 p-4">
-            <div className="flex items-start gap-3 mb-3">
-              <span className="px-2 py-0.5 text-xs font-semibold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 rounded">
-                Manual
-              </span>
+          <div className="panel p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="badge badge-neutral text-[10px]">Manual</span>
             </div>
-            <h4 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+            <h4 className="font-medium text-[var(--text-primary)] mb-2">
               Copy PM Prompt
             </h4>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
+            <p className="text-sm text-[var(--text-tertiary)] mb-4">
               Copies a prompt to your clipboard for pasting into Claude Code. Use this if you want to manually orchestrate the agents.
             </p>
-            <ul className="text-xs text-zinc-500 dark:text-zinc-400 space-y-1 mb-4">
-              <li>• Includes /warroom-plan command reference</li>
-              <li>• Contains repo path, goal, and constraints</li>
-              <li>• Lists all lanes and their dependencies</li>
+            <ul className="text-xs text-[var(--text-ghost)] space-y-1.5 mb-5">
+              <li className="flex items-center gap-2">
+                <span className="w-1 h-1 rounded-full bg-[var(--text-ghost)]" />
+                Includes /warroom-plan command reference
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1 h-1 rounded-full bg-[var(--text-ghost)]" />
+                Contains repo path, goal, and constraints
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1 h-1 rounded-full bg-[var(--text-ghost)]" />
+                Lists all lanes and their dependencies
+              </li>
             </ul>
             <button
               onClick={handleCopyPMPrompt}
-              className={`w-full px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${
-                copyStatus === "copied"
-                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                  : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-              }`}
+              className={copyStatus === "copied" ? "btn-success w-full" : "btn-secondary w-full"}
             >
-              {copyStatus === "copied" ? "Copied!" : "Copy PM Prompt"}
+              {copyStatus === "copied" ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy PM Prompt
+                </>
+              )}
             </button>
           </div>
         </div>
 
         {/* Error display */}
         {stageError && (
-          <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-            <p className="text-sm text-red-700 dark:text-red-400">{stageError}</p>
+          <div className="mt-4 p-4 rounded border border-[var(--status-danger-dim)] bg-[rgba(239,68,68,0.1)]">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-[var(--status-danger)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className="text-sm text-[var(--status-danger)]">{stageError}</p>
+            </div>
           </div>
         )}
 
         {/* Checklist */}
-        <div className="mt-6 pt-4 border-t border-blue-200 dark:border-blue-800">
-          <h4 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">
+        <div className="mt-6 pt-5 border-t border-[var(--border-subtle)]">
+          <h4 className="text-sm font-medium text-[var(--text-primary)] mb-4">
             What happens after staging:
           </h4>
-          <ol className="text-sm text-zinc-600 dark:text-zinc-400 space-y-2">
-            <li className="flex items-start gap-2">
-              <span className="w-5 h-5 bg-zinc-200 dark:bg-zinc-700 rounded-full flex items-center justify-center text-xs font-medium shrink-0 mt-0.5">1</span>
-              <span><strong>Copy packet</strong> from WARROOM_PACKET.md in each Cursor window</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-5 h-5 bg-zinc-200 dark:bg-zinc-700 rounded-full flex items-center justify-center text-xs font-medium shrink-0 mt-0.5">2</span>
-              <span><strong>Paste packet</strong> into Claude Code chat to start the agent</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-5 h-5 bg-zinc-200 dark:bg-zinc-700 rounded-full flex items-center justify-center text-xs font-medium shrink-0 mt-0.5">3</span>
-              <span><strong>Monitor progress</strong> in War Room and mark lanes complete as work finishes</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-5 h-5 bg-zinc-200 dark:bg-zinc-700 rounded-full flex items-center justify-center text-xs font-medium shrink-0 mt-0.5">4</span>
-              <span><strong>Run merge</strong> when all lanes are done to integrate changes</span>
-            </li>
+          <ol className="space-y-3">
+            {[
+              { step: 1, action: "Copy packet", detail: "from WARROOM_PACKET.md in each Cursor window" },
+              { step: 2, action: "Paste packet", detail: "into Claude Code chat to start the agent" },
+              { step: 3, action: "Monitor progress", detail: "in War Room and mark lanes complete as work finishes" },
+              { step: 4, action: "Run merge", detail: "when all lanes are done to integrate changes" },
+            ].map(({ step, action, detail }) => (
+              <li key={step} className="flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-[var(--panel)] border border-[var(--border-default)] flex items-center justify-center text-xs font-mono text-[var(--text-tertiary)] flex-shrink-0">
+                  {step}
+                </span>
+                <span className="text-sm text-[var(--text-secondary)]">
+                  <strong className="text-[var(--text-primary)]">{action}</strong> {detail}
+                </span>
+              </li>
+            ))}
           </ol>
         </div>
       </div>
 
       {/* Agent Chain Visualization */}
-      <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-6">
-        <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-          Agent Chain
-        </h3>
+      <div className="panel p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded bg-[var(--cyan-glow)] border border-[var(--cyan-dim)] flex items-center justify-center">
+            <svg className="w-4 h-4 text-[var(--cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-[var(--text-primary)]">
+            Agent Chain
+          </h3>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2">
           {plan.lanes.map((lane, idx) => (
             <div key={lane.laneId} className="flex items-center gap-2">
               <div
-                className={`px-3 py-1.5 rounded-md text-white text-sm font-medium ${AGENT_COLORS[lane.agent]}`}
+                className="px-3 py-1.5 rounded text-sm font-medium"
+                style={{
+                  color: AGENT_COLORS[lane.agent],
+                  backgroundColor: `${AGENT_COLORS[lane.agent]}20`,
+                  border: `1px solid ${AGENT_COLORS[lane.agent]}40`,
+                }}
               >
                 {lane.agent}
               </div>
               {idx < plan.lanes.length - 1 && (
-                <span className="text-zinc-400">→</span>
+                <svg className="w-4 h-4 text-[var(--text-ghost)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
               )}
             </div>
           ))}
         </div>
 
-        {/* Parallelization Note */}
         {laneGroups.some((g) => g.lanes.length > 1) && (
-          <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
-            <span className="font-medium">Parallelization:</span> Some lanes can
-            run in parallel. Check dependencies to see which lanes can start
-            together.
+          <p className="mt-4 text-sm text-[var(--text-tertiary)]">
+            <span className="font-medium text-[var(--amber)]">Parallelization:</span>{" "}
+            Some lanes can run in parallel. Check dependencies to see which lanes can start together.
           </p>
         )}
       </div>
 
       {/* Lane List */}
-      <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-6">
-        <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-          Lanes
-        </h3>
+      <div className="panel p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded bg-[var(--panel-elevated)] border border-[var(--border-default)] flex items-center justify-center">
+            <svg className="w-4 h-4 text-[var(--text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-[var(--text-primary)]">
+            Lanes
+          </h3>
+        </div>
+
         <div className="space-y-4">
           {laneGroups.map((group, groupIdx) => (
             <div key={groupIdx}>
               {group.level > 0 && (
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="h-px flex-1 bg-[var(--border-subtle)]" />
+                  <span className="text-xs font-mono text-[var(--text-ghost)] uppercase tracking-wider">
                     Level {group.level} (depends on above)
                   </span>
-                  <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
+                  <div className="h-px flex-1 bg-[var(--border-subtle)]" />
                 </div>
               )}
               <div className={`grid gap-4 ${group.lanes.length > 1 ? "md:grid-cols-2" : ""}`}>
@@ -390,10 +454,18 @@ export function PlanViewer({ plan, runDir }: PlanViewerProps) {
       </div>
 
       {/* All Packets Expandable */}
-      <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-6">
-        <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-          Run Packets
-        </h3>
+      <div className="panel p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded bg-[var(--panel-elevated)] border border-[var(--border-default)] flex items-center justify-center">
+            <svg className="w-4 h-4 text-[var(--text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-[var(--text-primary)]">
+            Run Packets
+          </h3>
+        </div>
+
         <div className="space-y-2">
           {plan.lanes.map((lane) => (
             <PacketExpander
@@ -406,43 +478,52 @@ export function PlanViewer({ plan, runDir }: PlanViewerProps) {
       </div>
 
       {/* Merge Configuration */}
-      <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-6">
-        <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-          Merge Plan
-        </h3>
-        <div className="space-y-3">
+      <div className="panel p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded bg-[rgba(168,85,247,0.15)] border border-[rgba(168,85,247,0.3)] flex items-center justify-center">
+            <svg className="w-4 h-4 text-[#a855f7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-[var(--text-primary)]">
+            Merge Plan
+          </h3>
+        </div>
+
+        <div className="space-y-4">
           <div>
-            <span className="text-sm text-zinc-500 dark:text-zinc-400 block mb-1">
-              Proposed Order
-            </span>
+            <span className="label-caps block mb-2">Proposed Order</span>
             <div className="flex flex-wrap gap-2">
               {plan.merge.proposedOrder.map((laneId, idx) => (
-                <div key={laneId} className="flex items-center gap-1">
-                  <code className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded text-sm">
+                <div key={laneId} className="flex items-center gap-1.5">
+                  <code className="px-2 py-1 bg-[var(--hull)] text-[var(--text-secondary)] rounded text-xs font-mono border border-[var(--border-subtle)]">
                     {laneId}
                   </code>
                   {idx < plan.merge.proposedOrder.length - 1 && (
-                    <span className="text-zinc-400">→</span>
+                    <svg className="w-3 h-3 text-[var(--text-ghost)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
                   )}
                 </div>
               ))}
             </div>
           </div>
-          <div className="flex gap-4 text-sm">
+
+          <div className="flex gap-4">
             <div>
-              <span className="text-zinc-500 dark:text-zinc-400">Method: </span>
-              <span className="text-zinc-700 dark:text-zinc-300 font-medium">
-                {plan.merge.method}
-              </span>
+              <span className="label-caps block mb-1">Method</span>
+              <span className="badge badge-neutral">{plan.merge.method}</span>
             </div>
             {plan.merge.requiresHuman && (
-              <div className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded text-xs font-medium">
-                Requires Human Review
+              <div>
+                <span className="label-caps block mb-1">Review</span>
+                <span className="badge badge-warning">Requires Human Review</span>
               </div>
             )}
           </div>
+
           {plan.merge.notes && (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="text-sm text-[var(--text-tertiary)]">
               {plan.merge.notes}
             </p>
           )}
