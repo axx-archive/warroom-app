@@ -427,3 +427,26 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Lane ID validation: alphanumeric, dashes, underscores only (`/^[a-zA-Z0-9_-]+$/`)
   - Move state declarations before their usage to avoid "used before declaration" TypeScript errors
 ---
+
+## 2026-02-04 - US-403: Cost/token tracking
+- Implemented token usage and cost tracking for lanes
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `TokenUsage` and `CostTracking` interfaces, extended `LaneStatusEntry` with `costTracking`
+  - `src/lib/orchestrator/output-buffer.ts` - Added token parsing logic with model pricing, cost calculation methods
+  - `src/lib/orchestrator/index.ts` - Exported new cost tracking functions
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Added cost tracking to lane status response, total run cost calculation
+  - `src/app/api/runs/[slug]/lanes/[laneId]/output/route.ts` - Updated empty output state to include token/cost fields
+  - `src/hooks/useStatusPolling.ts` - Extended state with `totalCostUsd` and `costTracking` fields
+  - `src/hooks/useRealtimeStatus.ts` - Extended state with `totalCostUsd` and `costTracking` fields
+  - `src/components/LaneStatusCard.tsx` - Added `CostBadge` component showing per-lane estimated costs
+  - `src/components/RunDetailClient.tsx` - Added total run cost display in header next to progress counter
+- **Learnings for future iterations:**
+  - Model pricing stored in `MODEL_PRICING` constant with per-million-token rates for input, output, cache read, cache write
+  - Token parsing patterns detect various Claude Code output formats: "tokens: N", "input: N output: N", "(N tokens)"
+  - Cost calculation: (tokens / 1_000_000) * pricing_per_million_tokens
+  - TokenUsage interface: inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens, updatedAt
+  - CostTracking interface: model?, tokenUsage, estimatedCostUsd, isEstimate
+  - Purple color (#a855f7) for cost UI with `rgba(168, 85, 247, 0.15)` background
+  - Format cost display: <$0.001 for very small amounts, $0.00X for cents, $X.XX for dollars
+  - Format token counts: 1.2K for thousands, 1.5M for millions
+---
