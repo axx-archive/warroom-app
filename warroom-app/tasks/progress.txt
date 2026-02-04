@@ -268,3 +268,26 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Emit "output" type lane-activity events with `details: { stream, line }` for real-time updates
   - Terminal mode processes can't capture stdout - only direct spawn() processes
 ---
+
+## 2026-02-04 - US-304: Structured status protocol (LANE_STATUS.json)
+- Implemented LANE_STATUS.json protocol for agents to report progress to orchestrator
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `LaneAgentStatus` interface for LANE_STATUS.json schema
+  - `src/lib/packet-templates.ts` - Updated packet template with LANE_STATUS.json instructions
+  - `src/lib/websocket/types.ts` - Added `LaneProgressEvent` event type for progress updates
+  - `src/lib/websocket/server.ts` - Added `emitLaneProgress()` function for WebSocket events
+  - `src/lib/file-watcher/file-watcher.ts` - Added detection and parsing of LANE_STATUS.json changes
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Added reading of LANE_STATUS.json and `agentStatus` field in response
+  - `src/hooks/useRealtimeStatus.ts` - Extended `LaneUncommittedStatus` with `agentStatus` field
+  - `src/hooks/useStatusPolling.ts` - Extended `LaneUncommittedStatus` with `agentStatus` field
+  - `src/hooks/useWebSocket.ts` - Added `onLaneProgress` handler and `lane-progress` event support
+  - `src/components/LaneStatusCard.tsx` - Added progress bar and current step display for in_progress lanes
+- **Learnings for future iterations:**
+  - LaneAgentStatus schema: phase, completedSteps[], currentStep, progress (0-100), blockers[], updatedAt, summary?
+  - Valid phases: "analyzing", "designing", "implementing", "testing", "reviewing", "completing"
+  - File watcher checks for LANE_STATUS.json in flushEvents(), parses and validates required fields
+  - Progress bar only shows for lanes with status="in_progress" and existing agentStatus
+  - Blockers section shows warning icon and lists each blocker when array is non-empty
+  - WebSocket event flow: FileWatcher -> emitLaneProgress() -> client onLaneProgress callback
+  - API endpoint reads LANE_STATUS.json from worktree root, returns null if not exists or invalid
+---
