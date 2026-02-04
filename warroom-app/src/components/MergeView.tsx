@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { LaneStatus, MergeMethod, MergeProposal } from "@/lib/plan-schema";
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { LaneStatus, MergeMethod, MergeProposal, MergeState, AutoPushOptions, PushState } from "@/lib/plan-schema";
+
+// Imperative handle for parent to trigger refresh
+export interface MergeViewHandle {
+  refreshProposal: () => Promise<void>;
+}
 
 interface LaneMergeInfo {
   laneId: string;
@@ -21,6 +26,10 @@ interface MergeInfoResponse {
   integrationBranch: string;
   lanes: LaneMergeInfo[];
   overlapMatrix: Record<string, string[]>;
+  mergeState?: MergeState;
+  repoPath?: string;
+  autoPushOptions?: AutoPushOptions;
+  integrationBranchPushState?: PushState;
   error?: string;
 }
 
@@ -64,7 +73,7 @@ const RISK_CONFIG = {
   high: { color: "var(--status-error)", borderColor: "rgba(239, 68, 68, 0.3)" },
 };
 
-export function MergeView({ slug }: MergeViewProps) {
+export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function MergeView({ slug }, ref) {
   const [mergeInfo, setMergeInfo] = useState<MergeInfoResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +90,19 @@ export function MergeView({ slug }: MergeViewProps) {
   const [confirmMergeToMain, setConfirmMergeToMain] = useState(false);
   const [mergedToMain, setMergedToMain] = useState(false);
   const [launchMergeStatus, setLaunchMergeStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [openingCursor, setOpeningCursor] = useState(false);
+  const [autoPushOptions, setAutoPushOptions] = useState<AutoPushOptions>({
+    pushLaneBranches: false,
+    pushIntegrationBranch: false,
+  });
+
+  // Expose refresh function to parent via ref
+  useImperativeHandle(ref, () => ({
+    refreshProposal: async () => {
+      await fetchExistingProposal();
+      await fetchMergeInfo();
+    },
+  }));
 
   const fetchMergeInfo = useCallback(async () => {
     setLoading(true);
@@ -90,6 +112,10 @@ export function MergeView({ slug }: MergeViewProps) {
       const data = await response.json();
       if (data.success) {
         setMergeInfo(data);
+        // Load auto-push options from merge info
+        if (data.autoPushOptions) {
+          setAutoPushOptions(data.autoPushOptions);
+        }
       } else {
         setError(data.error || "Failed to fetch merge info");
       }
@@ -253,6 +279,7 @@ export function MergeView({ slug }: MergeViewProps) {
   }, [slug, proposal, mergeToMain, confirmMergeToMain, fetchMergeInfo]);
 
   const openInCursor = useCallback(async (worktreePath: string) => {
+    setOpeningCursor(true);
     try {
       await fetch(`/api/open-cursor`, {
         method: "POST",
@@ -261,8 +288,23 @@ export function MergeView({ slug }: MergeViewProps) {
       });
     } catch {
       // Best-effort
+    } finally {
+      setOpeningCursor(false);
     }
   }, []);
+
+  const updateAutoPushOptions = useCallback(async (newOptions: AutoPushOptions) => {
+    setAutoPushOptions(newOptions);
+    try {
+      await fetch(`/api/runs/${slug}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoPushOptions: newOptions }),
+      });
+    } catch (err) {
+      console.error("Failed to update auto-push options:", err);
+    }
+  }, [slug]);
 
   useEffect(() => {
     fetchMergeInfo();
@@ -359,6 +401,17 @@ export function MergeView({ slug }: MergeViewProps) {
         </div>
       </div>
 
+      {/* Auto-Merge Status - shows when merge has started or has conflict */}
+      {mergeInfo.mergeState && mergeInfo.mergeState.status !== "idle" && (
+        <AutoMergeStatusDisplay
+          mergeState={mergeInfo.mergeState}
+          repoPath={mergeInfo.repoPath || ""}
+          onOpenInCursor={openInCursor}
+          openingCursor={openingCursor}
+          onRefresh={fetchMergeInfo}
+        />
+      )}
+
       {/* Lane List */}
       <div className="space-y-3 mb-5">
         {mergeInfo.lanes.map((lane) => (
@@ -380,6 +433,13 @@ export function MergeView({ slug }: MergeViewProps) {
           </div>
         </div>
       )}
+
+      {/* Auto-Push Options */}
+      <AutoPushOptionsPanel
+        options={autoPushOptions}
+        onChange={updateAutoPushOptions}
+        integrationBranchPushState={mergeInfo.integrationBranchPushState}
+      />
 
       {/* Merge Proposal Section */}
       <div className="pt-5 border-t border-[var(--border-subtle)]">
@@ -437,7 +497,7 @@ export function MergeView({ slug }: MergeViewProps) {
       </div>
     </div>
   );
-}
+});
 
 function LaneMergeCard({ lane }: { lane: LaneMergeInfo }) {
   const [expanded, setExpanded] = useState(false);
@@ -590,6 +650,210 @@ const METHOD_COLORS: Record<MergeMethod, { color: string; bgColor: string; borde
     borderColor: "rgba(34, 197, 94, 0.3)",
   },
 };
+
+// Auto-merge status display component
+interface AutoMergeStatusDisplayProps {
+  mergeState: MergeState;
+  repoPath: string;
+  onOpenInCursor: (path: string) => void;
+  openingCursor: boolean;
+  onRefresh: () => void;
+}
+
+function AutoMergeStatusDisplay({
+  mergeState,
+  repoPath,
+  onOpenInCursor,
+  openingCursor,
+  onRefresh,
+}: AutoMergeStatusDisplayProps) {
+  const getStatusIcon = () => {
+    switch (mergeState.status) {
+      case "in_progress":
+        return (
+          <svg className="w-5 h-5 animate-spin text-[var(--cyan)]" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        );
+      case "complete":
+        return (
+          <svg className="w-5 h-5 text-[var(--status-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        );
+      case "conflict":
+        return (
+          <svg className="w-5 h-5 text-[var(--status-warning)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        );
+      case "failed":
+        return (
+          <svg className="w-5 h-5 text-[var(--status-danger)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const getStatusText = () => {
+    switch (mergeState.status) {
+      case "in_progress":
+        return mergeState.currentLane
+          ? `Auto-merging ${mergeState.currentLane}...`
+          : "Auto-merge in progress...";
+      case "complete":
+        return `Auto-merge complete. ${mergeState.mergedLanes.length} lane(s) merged to integration branch.`;
+      case "conflict":
+        return "Merge conflict detected. Manual resolution required.";
+      case "failed":
+        return `Auto-merge failed: ${mergeState.error || "Unknown error"}`;
+      default:
+        return "";
+    }
+  };
+
+  const getBorderColor = () => {
+    switch (mergeState.status) {
+      case "in_progress":
+        return "rgba(6, 182, 212, 0.3)";
+      case "complete":
+        return "rgba(34, 197, 94, 0.3)";
+      case "conflict":
+        return "rgba(234, 179, 8, 0.3)";
+      case "failed":
+        return "rgba(239, 68, 68, 0.3)";
+      default:
+        return "var(--border-default)";
+    }
+  };
+
+  const getBgColor = () => {
+    switch (mergeState.status) {
+      case "in_progress":
+        return "rgba(6, 182, 212, 0.08)";
+      case "complete":
+        return "rgba(34, 197, 94, 0.08)";
+      case "conflict":
+        return "rgba(234, 179, 8, 0.08)";
+      case "failed":
+        return "rgba(239, 68, 68, 0.08)";
+      default:
+        return "var(--panel)";
+    }
+  };
+
+  return (
+    <div
+      className="mb-5 p-5 rounded border"
+      style={{
+        borderColor: getBorderColor(),
+        backgroundColor: getBgColor(),
+      }}
+    >
+      <div className="flex items-start gap-3">
+        {getStatusIcon()}
+        <div className="flex-1">
+          <div className="font-medium text-[var(--text-primary)] mb-2">
+            Auto-Merge Status
+          </div>
+          <div className="text-sm text-[var(--text-secondary)] mb-3">
+            {getStatusText()}
+          </div>
+
+          {/* Show merged lanes */}
+          {mergeState.mergedLanes.length > 0 && (
+            <div className="mb-3">
+              <span className="text-xs text-[var(--text-ghost)] uppercase tracking-wider">
+                Merged lanes:
+              </span>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {mergeState.mergedLanes.map((laneId) => (
+                  <span key={laneId} className="badge badge-success text-[10px]">
+                    {laneId}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Conflict resolution UI */}
+          {mergeState.status === "conflict" && mergeState.conflictInfo && (
+            <div className="mt-4 p-4 rounded border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.08)]">
+              <div className="font-medium text-[var(--status-danger)] mb-2">
+                Conflict in lane: {mergeState.conflictInfo.laneId}
+              </div>
+              <div className="text-sm text-[var(--text-secondary)] mb-3">
+                Branch: <code className="font-mono text-xs">{mergeState.conflictInfo.branch}</code>
+              </div>
+              <div className="text-sm text-[var(--text-secondary)] mb-3">
+                Conflicting files:
+              </div>
+              <div className="bg-[rgba(239,68,68,0.1)] rounded p-3 mb-4 max-h-32 overflow-y-auto">
+                {mergeState.conflictInfo.conflictingFiles.map((file) => (
+                  <div key={file} className="text-xs font-mono text-[var(--status-danger)] py-0.5">
+                    {file}
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => onOpenInCursor(repoPath)}
+                  disabled={openingCursor}
+                  className="btn-danger"
+                >
+                  {openingCursor ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Opening...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      Open in Cursor to Resolve
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={onRefresh}
+                  className="btn-ghost text-sm"
+                >
+                  Refresh Status
+                </button>
+              </div>
+              <div className="mt-3 text-xs text-[var(--text-ghost)]">
+                Resolve the conflicts in Cursor, commit the changes, then click Refresh Status.
+              </div>
+            </div>
+          )}
+
+          {/* Complete state - show human gate message */}
+          {mergeState.status === "complete" && (
+            <div className="mt-4 p-4 rounded border border-[rgba(34,197,94,0.3)] bg-[rgba(34,197,94,0.08)]">
+              <div className="flex items-center gap-2 text-[var(--status-success)] mb-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium">Ready for human review</span>
+              </div>
+              <div className="text-sm text-[var(--text-secondary)]">
+                All lanes have been merged to the integration branch. Use the &quot;Launch Merge&quot; button below to merge to main (requires human confirmation).
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function MergeProposalDisplay({
   proposal,
@@ -891,6 +1155,139 @@ function MergeProposalDisplay({
         </div>
       </div>
 
+    </div>
+  );
+}
+
+// Auto-push options panel
+interface AutoPushOptionsPanelProps {
+  options: AutoPushOptions;
+  onChange: (options: AutoPushOptions) => void;
+  integrationBranchPushState?: PushState;
+}
+
+function AutoPushOptionsPanel({ options, onChange, integrationBranchPushState }: AutoPushOptionsPanelProps) {
+  return (
+    <div className="mb-5 pb-5 border-b border-[var(--border-subtle)]">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-6 h-6 rounded bg-[rgba(6,182,212,0.15)] border border-[rgba(6,182,212,0.3)] flex items-center justify-center">
+          <svg className="w-3.5 h-3.5 text-[var(--cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+        </div>
+        <span className="text-sm font-medium text-[var(--text-primary)]">Auto-Push Options</span>
+      </div>
+
+      <div className="space-y-3 ml-9">
+        {/* Push lane branches */}
+        <label className="flex items-center gap-3 cursor-pointer">
+          <button
+            type="button"
+            onClick={() => onChange({ ...options, pushLaneBranches: !options.pushLaneBranches })}
+            className={`toggle ${options.pushLaneBranches ? "active" : ""}`}
+            role="switch"
+            aria-checked={options.pushLaneBranches}
+          />
+          <div>
+            <span className="text-sm text-[var(--text-secondary)]">
+              Auto-push lane branches after commit
+            </span>
+            <div className="text-xs text-[var(--text-ghost)]">
+              Automatically push lane branches to origin after auto-commit
+            </div>
+          </div>
+        </label>
+
+        {/* Push integration branch */}
+        <label className="flex items-center gap-3 cursor-pointer">
+          <button
+            type="button"
+            onClick={() => onChange({ ...options, pushIntegrationBranch: !options.pushIntegrationBranch })}
+            className={`toggle ${options.pushIntegrationBranch ? "active" : ""}`}
+            role="switch"
+            aria-checked={options.pushIntegrationBranch}
+          />
+          <div>
+            <span className="text-sm text-[var(--text-secondary)]">
+              Auto-push integration branch after merge
+            </span>
+            <div className="text-xs text-[var(--text-ghost)]">
+              Automatically push integration branch to origin after lanes are merged
+            </div>
+          </div>
+        </label>
+      </div>
+
+      {/* Integration branch push status */}
+      {integrationBranchPushState && integrationBranchPushState.status !== "idle" && (
+        <div className="mt-3 ml-9">
+          <IntegrationBranchPushStatus pushState={integrationBranchPushState} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Integration branch push status display
+function IntegrationBranchPushStatus({ pushState }: { pushState: PushState }) {
+  const getStatusConfig = () => {
+    switch (pushState.status) {
+      case "pushing":
+        return {
+          color: "#06b6d4",
+          bgColor: "rgba(6, 182, 212, 0.08)",
+          borderColor: "rgba(6, 182, 212, 0.3)",
+          icon: (
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ),
+          text: "Pushing integration branch...",
+        };
+      case "success":
+        return {
+          color: "#22c55e",
+          bgColor: "rgba(34, 197, 94, 0.08)",
+          borderColor: "rgba(34, 197, 94, 0.3)",
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ),
+          text: `Integration branch pushed${pushState.lastPushedAt ? ` at ${new Date(pushState.lastPushedAt).toLocaleTimeString()}` : ""}`,
+        };
+      case "failed":
+        return {
+          color: "#ef4444",
+          bgColor: "rgba(239, 68, 68, 0.08)",
+          borderColor: "rgba(239, 68, 68, 0.3)",
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          ),
+          text: `Push failed: ${pushState.error || "Unknown error"}`,
+        };
+      default:
+        return null;
+    }
+  };
+
+  const config = getStatusConfig();
+  if (!config) return null;
+
+  return (
+    <div
+      className="p-3 rounded border flex items-center gap-2"
+      style={{
+        backgroundColor: config.bgColor,
+        borderColor: config.borderColor,
+        color: config.color,
+      }}
+    >
+      {config.icon}
+      <span className="text-sm">{config.text}</span>
     </div>
   );
 }

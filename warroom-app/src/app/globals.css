@@ -2014,3 +2014,19 @@ code, .code-inline {
     box-shadow: 0 0 20px 8px rgba(124, 58, 237, 0.2);
   }
 }
+
+/* -----------------------------------------------------------------------------
+   KEYBOARD SHORTCUT FOCUS HIGHLIGHT
+   ----------------------------------------------------------------------------- */
+.keyboard-focus-highlight {
+  animation: keyboard-focus 1s ease-out;
+}
+
+@keyframes keyboard-focus {
+  0% {
+    box-shadow: 0 0 0 2px var(--cyan), 0 0 15px 5px var(--cyan-glow);
+  }
+  100% {
+    box-shadow: none;
+  }
+}

@@ -4,7 +4,7 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { WarRoomPlan, StatusJson, LaneStatus } from "@/lib/plan-schema";
+import { WarRoomPlan, StatusJson, LaneStatus, MergeState, AutoPushOptions, PushState } from "@/lib/plan-schema";
 
 const execAsync = promisify(exec);
 
@@ -26,6 +26,10 @@ interface MergeInfoResponse {
   integrationBranch: string;
   lanes: LaneMergeInfo[];
   overlapMatrix: Record<string, string[]>; // laneId -> list of lanes it overlaps with
+  mergeState?: MergeState;
+  repoPath?: string;
+  autoPushOptions?: AutoPushOptions;
+  integrationBranchPushState?: PushState;
   error?: string;
 }
 
@@ -299,5 +303,9 @@ export async function GET(
     integrationBranch,
     lanes: lanesInfo,
     overlapMatrix,
+    mergeState: status?.mergeState,
+    repoPath: plan.repo.path,
+    autoPushOptions: status?.autoPushOptions,
+    integrationBranchPushState: status?.integrationBranchPushState,
   });
 }

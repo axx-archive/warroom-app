@@ -4,6 +4,8 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { logLaneLaunched, logLaneStatusChange } from "@/lib/history";
+import { LaneStatus } from "@/lib/plan-schema";
 
 const execAsync = promisify(exec);
 
@@ -14,6 +16,16 @@ async function branchExists(repoPath: string, branch: string): Promise<boolean> 
     return true;
   } catch {
     return false;
+  }
+}
+
+// Get the commit count for a worktree/branch
+async function getCommitCount(worktreePath: string): Promise<number> {
+  try {
+    const { stdout } = await execAsync("git rev-list --count HEAD", { cwd: worktreePath });
+    return parseInt(stdout.trim(), 10) || 0;
+  } catch {
+    return 0;
   }
 }
 
@@ -52,9 +64,73 @@ async function ensureWorktree(
   }
 }
 
+type LaunchMode = "cursor" | "terminal";
+
 interface LaunchRequest {
   laneId: string;
   skipPermissions?: boolean;
+  launchMode?: LaunchMode;
+}
+
+// Check if iTerm2 is installed
+async function hasIterm(): Promise<boolean> {
+  try {
+    await fs.access("/Applications/iTerm.app");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Spawn iTerm2 or Terminal.app with Claude Code
+async function spawnTerminal(
+  worktreePath: string,
+  laneId: string,
+  slug: string,
+  skipPermissions: boolean
+): Promise<{ success: boolean; terminal: string; error?: string }> {
+  try {
+    const claudeCmd = skipPermissions
+      ? "claude --dangerously-skip-permissions"
+      : "claude";
+
+    const useIterm = await hasIterm();
+
+    if (useIterm) {
+      // Open iTerm2 with Claude Code
+      const appleScript = `
+        tell application "iTerm"
+          activate
+          create window with default profile
+          tell current session of current window
+            write text "cd '${worktreePath.replace(/'/g, "'\\''")}' && ${claudeCmd}"
+          end tell
+          tell current window
+            set name to "Lane: ${laneId} (${slug})"
+          end tell
+        end tell
+      `;
+      await execAsync(`osascript -e '${appleScript.replace(/'/g, "'\\''")}'`);
+      return { success: true, terminal: "iTerm" };
+    } else {
+      // Fall back to Terminal.app
+      const appleScript = `
+        tell application "Terminal"
+          activate
+          do script "cd '${worktreePath.replace(/'/g, "'\\''")}' && ${claudeCmd}"
+          set custom title of front window to "Lane: ${laneId} (${slug})"
+        end tell
+      `;
+      await execAsync(`osascript -e '${appleScript.replace(/'/g, "'\\''")}'`);
+      return { success: true, terminal: "Terminal.app" };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      terminal: "unknown",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 // Common output file patterns to look for in completed lane worktrees
@@ -124,7 +200,7 @@ export async function POST(
   try {
     const { slug } = await params;
     const body: LaunchRequest = await request.json();
-    const { laneId, skipPermissions } = body;
+    const { laneId, skipPermissions, launchMode = "cursor" } = body;
 
     if (!laneId) {
       return NextResponse.json(
@@ -256,17 +332,42 @@ export async function POST(
       );
     }
 
-    // Open Cursor with -n flag for new window
+    // Always write the packet file to worktree before launching (for Terminal mode to read)
+    const packetDestPath = path.join(openPath, "WARROOM_PACKET.md");
     try {
-      await execAsync(`cursor -n "${openPath}"`);
-    } catch (error) {
-      console.error("Failed to open Cursor:", error);
-      // Don't fail the request - maybe Cursor isn't installed
-      // Return success anyway so clipboard copy still works
+      await fs.writeFile(packetDestPath, packetContent, "utf-8");
+    } catch (writeError) {
+      console.error("Failed to write packet to worktree:", writeError);
+    }
+
+    // Launch based on mode
+    let terminalResult: { success: boolean; terminal: string; error?: string } | undefined;
+
+    if (launchMode === "terminal") {
+      // Terminal mode: spawn iTerm2/Terminal.app with Claude Code
+      terminalResult = await spawnTerminal(
+        openPath,
+        laneId,
+        slug,
+        skipPermissions ?? false
+      );
+      if (!terminalResult.success) {
+        console.error("Failed to spawn terminal:", terminalResult.error);
+      }
+    } else {
+      // Cursor mode: open Cursor with -n flag for new window
+      try {
+        await execAsync(`cursor -n "${openPath}"`);
+      } catch (error) {
+        console.error("Failed to open Cursor:", error);
+        // Don't fail the request - maybe Cursor isn't installed
+        // Return success anyway so clipboard copy still works
+      }
     }
 
     // Update status.json to mark lane as staged and update run status
     const statusPath = path.join(runDir, "status.json");
+    let previousStatus: LaneStatus = "pending";
     try {
       let statusJson: Record<string, unknown> = {};
       try {
@@ -292,8 +393,18 @@ export async function POST(
         lanesObj[laneId] = {};
       }
       lanesObj[laneId].staged = true;
+
+      // Track previous status for history logging
+      previousStatus = (lanesObj[laneId].status as LaneStatus) || "pending";
+
       if (!lanesObj[laneId].status || lanesObj[laneId].status === "pending") {
         lanesObj[laneId].status = "in_progress";
+      }
+
+      // Track commits at launch (only if not already set)
+      if (openPath && lanesObj[laneId].commitsAtLaunch === undefined) {
+        const commitCount = await getCommitCount(openPath);
+        lanesObj[laneId].commitsAtLaunch = commitCount;
       }
 
       // Update overall run status to "staged" if it was "ready_to_stage"
@@ -304,6 +415,14 @@ export async function POST(
       statusJson.updatedAt = new Date().toISOString();
 
       await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
+
+      // Log lane launched event to history
+      logLaneLaunched(runDir, laneId, launchMode, skipPermissions ?? false);
+
+      // Log status change if status changed
+      if (previousStatus !== "in_progress") {
+        logLaneStatusChange(runDir, laneId, previousStatus, "in_progress", "lane launched");
+      }
     } catch (error) {
       console.error("Failed to update status.json:", error);
       // Non-fatal - continue
@@ -316,6 +435,8 @@ export async function POST(
       worktreeCreated,
       packetContent,
       statusUpdated: true,
+      launchMode,
+      terminal: terminalResult?.terminal,
     });
   } catch (error) {
     console.error("Launch error:", error);

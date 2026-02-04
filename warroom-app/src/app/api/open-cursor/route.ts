@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
+import path from "path";
+import os from "os";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 interface OpenCursorRequest {
   path: string;
@@ -34,8 +36,21 @@ export async function POST(
   }
 
   try {
-    // Open Cursor with the -n flag for a new window
-    await execAsync(`/usr/local/bin/cursor -n "${body.path}"`, {
+    const requestedPath = String(body.path);
+
+    // Basic hardening: ensure a real, absolute path and keep it within the user's home directory.
+    // (This is a local-only tool, but we still avoid arbitrary shell execution.)
+    const resolved = path.resolve(requestedPath);
+    const home = os.homedir();
+    if (!path.isAbsolute(resolved) || !resolved.startsWith(home + path.sep)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid path" },
+        { status: 400 }
+      );
+    }
+
+    // Open Cursor with the -n flag for a new window (no shell)
+    await execFileAsync("/usr/local/bin/cursor", ["-n", resolved], {
       timeout: 10000,
     });
 

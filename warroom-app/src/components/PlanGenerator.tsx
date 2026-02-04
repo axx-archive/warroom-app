@@ -1,16 +1,20 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { WarRoomPlan } from "@/lib/plan-schema";
+import { useState, useCallback, useEffect } from "react";
+import { WarRoomPlan, PlanTemplate } from "@/lib/plan-schema";
 
 interface PlanGeneratorProps {
   onPlanGenerated: (plan: WarRoomPlan, runDir: string) => void;
   defaultRepoPath?: string;
+  selectedTemplate?: PlanTemplate | null;
+  onClearTemplate?: () => void;
 }
 
 export function PlanGenerator({
   onPlanGenerated,
   defaultRepoPath = "",
+  selectedTemplate,
+  onClearTemplate,
 }: PlanGeneratorProps) {
   const [goal, setGoal] = useState("");
   const [repoPath, setRepoPath] = useState(defaultRepoPath);
@@ -23,6 +27,21 @@ export function PlanGenerator({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [maxLanes, setMaxLanes] = useState<number | undefined>(undefined);
   const [autonomy, setAutonomy] = useState(false);
+
+  // When template is selected, pre-fill the goal
+  useEffect(() => {
+    if (selectedTemplate) {
+      setGoal(selectedTemplate.description);
+      // Set max lanes to match template
+      setMaxLanes(selectedTemplate.lanes.length);
+      // Check if any lane has autonomy enabled
+      const hasAutonomy = selectedTemplate.lanes.some(
+        (lane) => lane.autonomy.dangerouslySkipPermissions
+      );
+      setAutonomy(hasAutonomy);
+      setShowAdvanced(true);
+    }
+  }, [selectedTemplate]);
 
   // Handle folder picker
   const handlePickFolder = useCallback(async () => {
@@ -131,6 +150,58 @@ export function PlanGenerator({
       </div>
 
       <div className="space-y-5">
+        {/* Template Banner */}
+        {selectedTemplate && (
+          <div className="p-3 rounded border border-[var(--amber-dim)] bg-[var(--amber-glow)]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <svg
+                  className="w-5 h-5 text-[var(--amber)]"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                  />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-[var(--amber)]">
+                    Using Template: {selectedTemplate.name}
+                  </p>
+                  <p className="text-xs text-[var(--text-ghost)]">
+                    {selectedTemplate.lanes.length} lanes pre-configured
+                  </p>
+                </div>
+              </div>
+              {onClearTemplate && (
+                <button
+                  onClick={onClearTemplate}
+                  className="btn-ghost p-1.5 text-[var(--text-ghost)] hover:text-[var(--amber)]"
+                  title="Clear template"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Repository Path */}
         <div>
           <label
