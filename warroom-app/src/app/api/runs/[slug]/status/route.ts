@@ -1,4 +1,5 @@
-// API route to update run status
+// API route to get and update run status
+// GET /api/runs/[slug]/status - returns status.json for polling
 // POST /api/runs/[slug]/status - updates status.json for a run
 
 import { NextRequest, NextResponse } from "next/server";
@@ -6,6 +7,62 @@ import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
 import { StatusJson, LaneStatus, RunStatus, LaneAutonomy } from "@/lib/plan-schema";
+
+// GET handler for polling status
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const { slug } = await params;
+
+    const runDir = path.join(
+      os.homedir(),
+      ".openclaw/workspace/warroom/runs",
+      slug
+    );
+    const statusPath = path.join(runDir, "status.json");
+
+    // Check if run directory exists
+    try {
+      await fs.access(runDir);
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Run not found" },
+        { status: 404 }
+      );
+    }
+
+    // Read current status or return default
+    let currentStatus: StatusJson;
+    try {
+      const content = await fs.readFile(statusPath, "utf-8");
+      currentStatus = JSON.parse(content);
+    } catch {
+      // No status.json exists, return a default
+      currentStatus = {
+        runId: slug,
+        status: "draft",
+        lanesCompleted: [],
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    return NextResponse.json({
+      success: true,
+      status: currentStatus,
+    });
+  } catch (error) {
+    console.error("Error reading status:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to read status",
+      },
+      { status: 500 }
+    );
+  }
+}
 
 interface UpdateStatusRequest {
   // Update lane completion status

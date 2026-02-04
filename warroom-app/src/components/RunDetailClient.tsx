@@ -1,15 +1,10 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
-import { Lane, LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { Lane, LaneStatus } from "@/lib/plan-schema";
 import { LanesManager } from "./LanesManager";
 import { MergeView } from "./MergeView";
-
-interface LaneState {
-  status: LaneStatus;
-  staged: boolean;
-  autonomy: LaneAutonomy;
-}
+import { useStatusPolling, LaneState } from "@/hooks/useStatusPolling";
 
 interface RunDetailClientProps {
   lanes: Lane[];
@@ -30,16 +25,38 @@ export function RunDetailClient({
   slug,
   initialStates,
 }: RunDetailClientProps) {
-  // Track lane states for progress calculation
-  const [laneStates, setLaneStates] = useState<Record<string, LaneState>>(initialStates);
+  // Use polling hook for real-time status updates
+  const {
+    laneStates,
+    isRefreshing,
+    updateLaneState,
+  } = useStatusPolling({
+    slug,
+    initialLaneStates: initialStates,
+    enabled: true,
+  });
 
   // Key to force MergeView refresh
   const [mergeViewKey, setMergeViewKey] = useState(0);
 
+  // Track previous lane states to detect changes for merge view refresh
+  const [prevLaneStates, setPrevLaneStates] = useState<Record<string, LaneState>>(initialStates);
+
+  // Refresh merge view when lane states change from polling
+  useEffect(() => {
+    const hasChanged = Object.keys(laneStates).some(
+      (laneId) => laneStates[laneId]?.status !== prevLaneStates[laneId]?.status
+    );
+    if (hasChanged) {
+      setMergeViewKey((prev) => prev + 1);
+      setPrevLaneStates(laneStates);
+    }
+  }, [laneStates, prevLaneStates]);
+
   // Commit all lanes state
   const [isCommittingAll, setIsCommittingAll] = useState(false);
   const [commitAllStatus, setCommitAllStatus] = useState<"idle" | "success" | "partial" | "error">("idle");
-  const [commitAllResults, setCommitAllResults] = useState<CommitAllResult[]>([]);
+  const [, setCommitAllResults] = useState<CommitAllResult[]>([]);
 
   // Calculate progress
   const progress = useMemo(() => {
@@ -51,17 +68,11 @@ export function RunDetailClient({
   }, [lanes, laneStates]);
 
   const handleStatusChange = useCallback((laneId: string, newStatus: LaneStatus) => {
-    // Update local state for progress tracking
-    setLaneStates((prev) => ({
-      ...prev,
-      [laneId]: {
-        ...prev[laneId],
-        status: newStatus,
-      },
-    }));
+    // Update local state optimistically for immediate UI feedback
+    updateLaneState(laneId, newStatus);
     // Increment key to force MergeView to refetch data
     setMergeViewKey((prev) => prev + 1);
-  }, []);
+  }, [updateLaneState]);
 
   const handleCommitAll = useCallback(async () => {
     setIsCommittingAll(true);
@@ -118,6 +129,16 @@ export function RunDetailClient({
             </h3>
           </div>
           <div className="flex items-center gap-3">
+            {/* Refreshing indicator */}
+            {isRefreshing && (
+              <span className="flex items-center gap-1.5 text-xs text-[var(--text-ghost)] font-mono">
+                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                refreshing...
+              </span>
+            )}
             {/* Commit All Button */}
             <button
               onClick={handleCommitAll}
@@ -187,7 +208,7 @@ export function RunDetailClient({
         <LanesManager
           lanes={lanes}
           slug={slug}
-          initialStates={initialStates}
+          laneStates={laneStates}
           onStatusChange={handleStatusChange}
         />
       </div>
