@@ -410,3 +410,20 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Confirmation dialog pattern: fixed inset-0 z-50 overlay with centered modal
   - Emit WebSocket event only when previous status differs from new status
 ---
+
+## 2026-02-04 - US-402: Add lane mid-run
+- Implemented ability to add new lanes to an in-progress run
+- Files changed:
+  - `src/app/api/runs/[slug]/add-lane/route.ts` - New API endpoint for adding lanes
+  - `src/components/AddLaneModal.tsx` - New modal component for lane configuration
+  - `src/components/RunDetailClient.tsx` - Added Add Lane button and modal integration, local lanes state
+- **Learnings for future iterations:**
+  - Use local state (`currentLanes`) to track lanes in client component for immediate UI updates without page reload
+  - Modal form pattern: validate inputs before enabling submit, show inline validation errors
+  - AGENT_TYPES array provides agent type options with labels and descriptions for dropdown
+  - Dependency selection uses checkbox list of existing lanes
+  - Generated branch name pattern: `warroom/${slug}/${laneId}`
+  - Worktree path pattern: `~/.openclaw/workspace/warroom/worktrees/${slug}/${laneId}`
+  - Lane ID validation: alphanumeric, dashes, underscores only (`/^[a-zA-Z0-9_-]+$/`)
+  - Move state declarations before their usage to avoid "used before declaration" TypeScript errors
+---
