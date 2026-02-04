@@ -171,6 +171,7 @@ export interface LaneStatusEntry {
   completionDetection?: CompletionDetection; // Auto-completion detection log
   retryState?: RetryState; // Auto-retry state for failed lanes
   pushState?: PushState; // Push state for tracking auto-push operations per lane
+  costTracking?: CostTracking; // Token usage and cost tracking
 }
 
 export interface StatusJson {
@@ -244,4 +245,32 @@ export interface LaneAgentStatus {
   updatedAt: string;
   // Optional: summary of recent work
   summary?: string;
+}
+
+// Token usage tracking for cost estimation
+export interface TokenUsage {
+  // Input tokens (prompt/context)
+  inputTokens: number;
+  // Output tokens (completion)
+  outputTokens: number;
+  // Cache read tokens (if using prompt caching)
+  cacheReadTokens: number;
+  // Cache write tokens (if using prompt caching)
+  cacheWriteTokens: number;
+  // Total tokens (input + output)
+  totalTokens: number;
+  // Timestamp of last update
+  updatedAt: string;
+}
+
+// Cost tracking per lane
+export interface CostTracking {
+  // Model used for the lane (e.g., "claude-sonnet-4-20250514")
+  model?: string;
+  // Token usage breakdown
+  tokenUsage: TokenUsage;
+  // Estimated cost in USD (calculated from tokens and model pricing)
+  estimatedCostUsd: number;
+  // Whether the cost is an estimate or exact (some outputs may not provide full details)
+  isEstimate: boolean;
 }

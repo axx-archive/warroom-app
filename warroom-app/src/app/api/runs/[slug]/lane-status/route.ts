@@ -8,9 +8,10 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { WarRoomPlan, Lane, StatusJson, CompletionDetection, LaunchMode, LaneAgentStatus, RetryState, PushState } from "@/lib/plan-schema";
+import { WarRoomPlan, Lane, StatusJson, CompletionDetection, LaunchMode, LaneAgentStatus, RetryState, PushState, CostTracking } from "@/lib/plan-schema";
 import { detectLaneCompletion } from "@/lib/completion-detector";
 import { emitLaneStatusChange } from "@/lib/websocket";
+import { getLaneCostTracking, getRunCostTracking } from "@/lib/orchestrator";
 
 const execAsync = promisify(exec);
 
@@ -51,11 +52,15 @@ interface LaneUncommittedStatus {
   retryState?: RetryState;
   // Push state for the lane branch
   pushState?: PushState;
+  // Cost tracking for the lane
+  costTracking?: CostTracking;
 }
 
 export interface LaneStatusResponse {
   success: boolean;
   lanes: Record<string, LaneUncommittedStatus>;
+  // Total cost tracking for the run
+  totalCostUsd?: number;
   error?: string;
 }
 
@@ -330,6 +335,12 @@ export async function GET(
           });
         }
 
+        // Get cost tracking from output buffer (if available) or from status.json
+        const liveCostTracking = getLaneCostTracking(slug, lane.laneId);
+        const savedCostTracking = laneStatusEntry?.costTracking;
+        // Prefer live cost tracking if available, otherwise use saved
+        const costTracking = liveCostTracking ?? savedCostTracking;
+
         laneStatuses[lane.laneId] = {
           laneId: lane.laneId,
           uncommittedCount: files.length,
@@ -347,6 +358,7 @@ export async function GET(
           agentStatus: agentStatus ?? undefined,
           retryState: laneStatusEntry?.retryState,
           pushState: laneStatusEntry?.pushState,
+          costTracking,
         };
       })
     );
@@ -357,9 +369,13 @@ export async function GET(
       await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
     }
 
+    // Get total run cost tracking
+    const runCosts = getRunCostTracking(slug);
+
     const response: LaneStatusResponse = {
       success: true,
       lanes: laneStatuses,
+      totalCostUsd: runCosts.totalCostUsd,
     };
 
     return NextResponse.json(response);

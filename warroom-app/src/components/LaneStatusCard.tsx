@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useCallback, useRef, useEffect } from "react";
-import { Lane, LaneStatus, LaneAutonomy, LaunchMode, RetryState, PushState } from "@/lib/plan-schema";
+import { Lane, LaneStatus, LaneAutonomy, LaunchMode, RetryState, PushState, CostTracking } from "@/lib/plan-schema";
 import { LaneUncommittedStatus, UncommittedFile } from "@/hooks/useStatusPolling";
 
 interface LaneStatusCardProps {
@@ -747,6 +747,8 @@ export function LaneStatusCard({
               )}
               {/* Push status badge */}
               {uncommittedStatus?.pushState && <PushStatusBadge pushState={uncommittedStatus.pushState} />}
+              {/* Cost tracking badge */}
+              {uncommittedStatus?.costTracking && <CostBadge costTracking={uncommittedStatus.costTracking} />}
             </div>
             <p className="mono small mt-1" style={{ color: "var(--muted)" }}>
               {lane.branch}
@@ -1227,6 +1229,68 @@ export function LaneStatusCard({
         </div>
       )}
     </div>
+  );
+}
+
+// Cost display badge component
+function CostBadge({ costTracking }: { costTracking: CostTracking }) {
+  // Don't show if no tokens have been used
+  if (costTracking.tokenUsage.totalTokens === 0) {
+    return null;
+  }
+
+  // Format cost display
+  const formatCost = (cost: number): string => {
+    if (cost < 0.001) {
+      return "<$0.001";
+    } else if (cost < 0.01) {
+      return `$${cost.toFixed(3)}`;
+    } else if (cost < 1) {
+      return `$${cost.toFixed(2)}`;
+    } else {
+      return `$${cost.toFixed(2)}`;
+    }
+  };
+
+  // Format token count
+  const formatTokens = (count: number): string => {
+    if (count >= 1_000_000) {
+      return `${(count / 1_000_000).toFixed(1)}M`;
+    } else if (count >= 1_000) {
+      return `${(count / 1_000).toFixed(1)}K`;
+    }
+    return count.toString();
+  };
+
+  const tokenDetails = [
+    `Input: ${formatTokens(costTracking.tokenUsage.inputTokens)}`,
+    `Output: ${formatTokens(costTracking.tokenUsage.outputTokens)}`,
+  ];
+  if (costTracking.tokenUsage.cacheReadTokens > 0) {
+    tokenDetails.push(`Cache read: ${formatTokens(costTracking.tokenUsage.cacheReadTokens)}`);
+  }
+  if (costTracking.tokenUsage.cacheWriteTokens > 0) {
+    tokenDetails.push(`Cache write: ${formatTokens(costTracking.tokenUsage.cacheWriteTokens)}`);
+  }
+  if (costTracking.model) {
+    tokenDetails.push(`Model: ${costTracking.model}`);
+  }
+
+  return (
+    <span
+      className="badge flex items-center gap-1"
+      style={{
+        backgroundColor: "rgba(168, 85, 247, 0.15)", // Purple for cost
+        color: "#a855f7",
+        borderColor: "rgba(168, 85, 247, 0.4)",
+      }}
+      title={`${tokenDetails.join("\n")}\nTotal: ${formatTokens(costTracking.tokenUsage.totalTokens)} tokens${costTracking.isEstimate ? " (estimated)" : ""}`}
+    >
+      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      {formatCost(costTracking.estimatedCostUsd)}
+    </span>
   );
 }
 

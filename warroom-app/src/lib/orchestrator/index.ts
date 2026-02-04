@@ -30,6 +30,8 @@ export {
   clearRunOutputs,
   hasLaneErrors,
   getLaneErrors,
+  getLaneCostTracking,
+  getRunCostTracking,
 } from "./output-buffer";
 
 export type {

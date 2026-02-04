@@ -1,7 +1,46 @@
 // OutputBuffer - Manages stdout/stderr capture for Claude Code processes
 // Stores the last MAX_LINES lines per lane and parses output for progress/errors
 
+import { TokenUsage, CostTracking } from "@/lib/plan-schema";
+
 const MAX_LINES = 1000;
+
+// Model pricing in USD per million tokens (as of 2025)
+// These are approximate prices - update as needed
+const MODEL_PRICING: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  "claude-sonnet-4-20250514": { input: 3.0, output: 15.0, cacheRead: 0.30, cacheWrite: 3.75 },
+  "claude-opus-4-20250514": { input: 15.0, output: 75.0, cacheRead: 1.50, cacheWrite: 18.75 },
+  "claude-3-5-sonnet-20241022": { input: 3.0, output: 15.0, cacheRead: 0.30, cacheWrite: 3.75 },
+  "claude-3-opus-20240229": { input: 15.0, output: 75.0, cacheRead: 1.50, cacheWrite: 18.75 },
+  "claude-3-5-haiku-20241022": { input: 0.80, output: 4.0, cacheRead: 0.08, cacheWrite: 1.0 },
+  // Default fallback for unknown models (using sonnet pricing)
+  "default": { input: 3.0, output: 15.0, cacheRead: 0.30, cacheWrite: 3.75 },
+};
+
+// Token usage patterns in Claude Code output
+// Claude Code outputs token info in various formats
+const TOKEN_PATTERNS = [
+  // Pattern: "Total tokens: 12,345" or "tokens: 12345"
+  /(?:total\s+)?tokens?:\s*([\d,]+)/i,
+  // Pattern: "Input: 1,000 tokens, Output: 500 tokens"
+  /input:\s*([\d,]+)\s*tokens?,?\s*output:\s*([\d,]+)\s*tokens?/i,
+  // Pattern: "Usage: 1000 input, 500 output"
+  /usage:\s*([\d,]+)\s*input,?\s*([\d,]+)\s*output/i,
+  // Pattern: "(12345 tokens)"
+  /\(([\d,]+)\s*tokens?\)/i,
+  // Pattern: "prompt tokens: 1000, completion tokens: 500"
+  /prompt\s*tokens?:\s*([\d,]+).*?completion\s*tokens?:\s*([\d,]+)/i,
+  // Pattern for cache tokens: "cache read: 1000, cache write: 500"
+  /cache\s*read(?:\s*tokens?)?:\s*([\d,]+)/i,
+  /cache\s*write(?:\s*tokens?)?:\s*([\d,]+)/i,
+];
+
+// Model detection patterns
+const MODEL_PATTERNS = [
+  /model[:\s]+([a-z0-9-]+)/i,
+  /using\s+([a-z0-9-]+)/i,
+  /(claude-[a-z0-9-]+)/i,
+];
 
 // Progress indicator patterns detected in Claude Code output
 const PROGRESS_PATTERNS = [
@@ -67,6 +106,9 @@ export interface LaneOutputState {
   warnings: string[];
   startedAt: string;
   lastActivityAt: string;
+  // Token/cost tracking
+  tokenUsage: TokenUsage;
+  costTracking: CostTracking;
 }
 
 // Buffer for a single lane
@@ -78,10 +120,22 @@ class LaneOutputBuffer {
   private warnings: string[] = [];
   private startedAt: string;
   private lastActivityAt: string;
+  // Token/cost tracking
+  private tokenUsage: TokenUsage;
+  private detectedModel?: string;
 
   constructor(private laneId: string) {
     this.startedAt = new Date().toISOString();
     this.lastActivityAt = this.startedAt;
+    // Initialize token usage with zeros
+    this.tokenUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 0,
+      updatedAt: this.startedAt,
+    };
   }
 
   // Add a line of output
@@ -162,6 +216,96 @@ class LaneOutputBuffer {
         break;
       }
     }
+
+    // Parse token usage information
+    this.parseTokenInfo(content);
+  }
+
+  // Parse token usage from output
+  private parseTokenInfo(content: string): void {
+    const lowerContent = content.toLowerCase();
+
+    // Skip if no token-related content
+    if (!lowerContent.includes("token") && !lowerContent.includes("usage") && !lowerContent.includes("cache")) {
+      return;
+    }
+
+    // Try to detect model
+    if (!this.detectedModel) {
+      for (const pattern of MODEL_PATTERNS) {
+        const modelMatch = content.match(pattern);
+        if (modelMatch && modelMatch[1]) {
+          this.detectedModel = modelMatch[1].toLowerCase();
+          break;
+        }
+      }
+    }
+
+    // Parse for input/output token patterns
+    for (const pattern of TOKEN_PATTERNS) {
+      const match = content.match(pattern);
+      if (match) {
+        // Check if this is an input/output combined pattern
+        if (match[2] !== undefined) {
+          // Pattern has both input and output
+          const inputTokens = parseInt(match[1].replace(/,/g, ""), 10);
+          const outputTokens = parseInt(match[2].replace(/,/g, ""), 10);
+          if (!isNaN(inputTokens)) {
+            this.tokenUsage.inputTokens += inputTokens;
+          }
+          if (!isNaN(outputTokens)) {
+            this.tokenUsage.outputTokens += outputTokens;
+          }
+        } else if (match[1]) {
+          // Single total or we need to determine context
+          const tokens = parseInt(match[1].replace(/,/g, ""), 10);
+          if (!isNaN(tokens)) {
+            // Check context to determine if this is input, output, cache, or total
+            if (lowerContent.includes("input") || lowerContent.includes("prompt")) {
+              this.tokenUsage.inputTokens += tokens;
+            } else if (lowerContent.includes("output") || lowerContent.includes("completion")) {
+              this.tokenUsage.outputTokens += tokens;
+            } else if (lowerContent.includes("cache read")) {
+              this.tokenUsage.cacheReadTokens += tokens;
+            } else if (lowerContent.includes("cache write")) {
+              this.tokenUsage.cacheWriteTokens += tokens;
+            } else if (lowerContent.includes("total")) {
+              // If we get a total and have no other info, estimate 80% input, 20% output
+              if (this.tokenUsage.inputTokens === 0 && this.tokenUsage.outputTokens === 0) {
+                this.tokenUsage.inputTokens = Math.floor(tokens * 0.8);
+                this.tokenUsage.outputTokens = Math.floor(tokens * 0.2);
+              }
+            }
+          }
+        }
+        break; // Only match once per line
+      }
+    }
+
+    // Update total tokens and timestamp
+    this.tokenUsage.totalTokens = this.tokenUsage.inputTokens + this.tokenUsage.outputTokens;
+    this.tokenUsage.updatedAt = this.lastActivityAt;
+  }
+
+  // Calculate cost from token usage
+  private calculateCost(): CostTracking {
+    const model = this.detectedModel || "default";
+    const pricing = MODEL_PRICING[model] || MODEL_PRICING["default"];
+
+    // Calculate cost in USD (pricing is per million tokens)
+    const inputCost = (this.tokenUsage.inputTokens / 1_000_000) * pricing.input;
+    const outputCost = (this.tokenUsage.outputTokens / 1_000_000) * pricing.output;
+    const cacheReadCost = (this.tokenUsage.cacheReadTokens / 1_000_000) * pricing.cacheRead;
+    const cacheWriteCost = (this.tokenUsage.cacheWriteTokens / 1_000_000) * pricing.cacheWrite;
+
+    const totalCost = inputCost + outputCost + cacheReadCost + cacheWriteCost;
+
+    return {
+      model: this.detectedModel,
+      tokenUsage: { ...this.tokenUsage },
+      estimatedCostUsd: Math.round(totalCost * 1000) / 1000, // Round to 3 decimal places
+      isEstimate: true, // Always an estimate since we're parsing output
+    };
   }
 
   // Get the current state
@@ -175,6 +319,8 @@ class LaneOutputBuffer {
       warnings: [...this.warnings],
       startedAt: this.startedAt,
       lastActivityAt: this.lastActivityAt,
+      tokenUsage: { ...this.tokenUsage },
+      costTracking: this.calculateCost(),
     };
   }
 
@@ -191,6 +337,21 @@ class LaneOutputBuffer {
     this.errors = [];
     this.warnings = [];
     this.lastActivityAt = new Date().toISOString();
+    // Reset token usage
+    this.tokenUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 0,
+      updatedAt: this.lastActivityAt,
+    };
+    this.detectedModel = undefined;
+  }
+
+  // Get cost tracking data
+  getCostTracking(): CostTracking {
+    return this.calculateCost();
   }
 }
 
@@ -287,6 +448,39 @@ class OutputBufferManager {
     const output = this.getLaneOutput(runSlug, laneId);
     return output?.errors ?? [];
   }
+
+  // Get cost tracking for a lane
+  getLaneCostTracking(runSlug: string, laneId: string): CostTracking | null {
+    const runBuffers = this.buffers.get(runSlug);
+    if (!runBuffers) return null;
+
+    const buffer = runBuffers.get(laneId);
+    if (!buffer) return null;
+
+    return buffer.getCostTracking();
+  }
+
+  // Get total cost tracking for a run (sum of all lanes)
+  getRunCostTracking(runSlug: string): { totalCostUsd: number; laneCosts: Record<string, CostTracking> } {
+    const runBuffers = this.buffers.get(runSlug);
+    if (!runBuffers) {
+      return { totalCostUsd: 0, laneCosts: {} };
+    }
+
+    const laneCosts: Record<string, CostTracking> = {};
+    let totalCostUsd = 0;
+
+    for (const [laneId, buffer] of runBuffers) {
+      const cost = buffer.getCostTracking();
+      laneCosts[laneId] = cost;
+      totalCostUsd += cost.estimatedCostUsd;
+    }
+
+    return {
+      totalCostUsd: Math.round(totalCostUsd * 1000) / 1000,
+      laneCosts,
+    };
+  }
 }
 
 // Export singleton getter
@@ -330,4 +524,12 @@ export function hasLaneErrors(runSlug: string, laneId: string): boolean {
 
 export function getLaneErrors(runSlug: string, laneId: string): DetectedError[] {
   return getOutputBufferManager().getRecentErrors(runSlug, laneId);
+}
+
+export function getLaneCostTracking(runSlug: string, laneId: string): CostTracking | null {
+  return getOutputBufferManager().getLaneCostTracking(runSlug, laneId);
+}
+
+export function getRunCostTracking(runSlug: string): { totalCostUsd: number; laneCosts: Record<string, CostTracking> } {
+  return getOutputBufferManager().getRunCostTracking(runSlug);
 }

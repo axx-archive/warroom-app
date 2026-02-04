@@ -74,6 +74,21 @@ interface MissionNotification {
   details?: string;
 }
 
+// Format cost for display
+function formatCost(cost: number): string {
+  if (cost === 0) {
+    return "$0.00";
+  } else if (cost < 0.001) {
+    return "<$0.001";
+  } else if (cost < 0.01) {
+    return `$${cost.toFixed(3)}`;
+  } else if (cost < 1) {
+    return `$${cost.toFixed(2)}`;
+  } else {
+    return `$${cost.toFixed(2)}`;
+  }
+}
+
 export function RunDetailClient({
   lanes,
   slug,
@@ -94,6 +109,7 @@ export function RunDetailClient({
   const {
     laneStates,
     laneUncommitted,
+    totalCostUsd,
     isRefreshing,
     updateLaneState,
     connectionStatus,
@@ -842,6 +858,24 @@ export function RunDetailClient({
               </svg>
               Add Lane
             </button>
+
+            {/* Total run cost */}
+            {totalCostUsd > 0 && (
+              <span
+                className="badge flex items-center gap-1.5"
+                style={{
+                  backgroundColor: "rgba(168, 85, 247, 0.15)",
+                  color: "#a855f7",
+                  borderColor: "rgba(168, 85, 247, 0.4)",
+                }}
+                title={`Estimated total API cost for this run`}
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Total: {formatCost(totalCostUsd)}
+              </span>
+            )}
 
             {/* Live progress counter */}
             <span

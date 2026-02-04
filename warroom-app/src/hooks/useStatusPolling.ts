@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode, LaneAgentStatus, RetryState, PushState } from "@/lib/plan-schema";
+import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode, LaneAgentStatus, RetryState, PushState, CostTracking } from "@/lib/plan-schema";
 
 const POLL_INTERVAL = 5000; // 5 seconds
 
@@ -38,6 +38,8 @@ export interface LaneUncommittedStatus {
   retryState?: RetryState;
   // Push state for the lane branch
   pushState?: PushState;
+  // Cost tracking for the lane
+  costTracking?: CostTracking;
 }
 
 export interface LaneState {
@@ -50,6 +52,7 @@ export interface PollingState {
   status: StatusJson | null;
   laneStates: Record<string, LaneState>;
   laneUncommitted: Record<string, LaneUncommittedStatus>;
+  totalCostUsd: number; // Total run cost
   isRefreshing: boolean;
   error: string | null;
   lastUpdated: Date | null;
@@ -70,6 +73,7 @@ export function useStatusPolling({
     status: null,
     laneStates: initialLaneStates,
     laneUncommitted: {},
+    totalCostUsd: 0,
     isRefreshing: false,
     error: null,
     lastUpdated: null,
@@ -126,9 +130,13 @@ export function useStatusPolling({
         }
       }
 
-      // Process uncommitted data (including commits info, completion suggestions, and agent status)
+      // Process uncommitted data (including commits info, completion suggestions, agent status, and cost tracking)
       const newLaneUncommitted: Record<string, LaneUncommittedStatus> = {};
+      let totalCostUsd = 0;
       if (uncommittedResponse.ok && uncommittedData.success && uncommittedData.lanes) {
+        // Get total cost from response
+        totalCostUsd = uncommittedData.totalCostUsd ?? 0;
+
         for (const [laneId, laneData] of Object.entries(uncommittedData.lanes)) {
           const data = laneData as {
             uncommittedCount: number;
@@ -144,6 +152,7 @@ export function useStatusPolling({
             agentStatus?: LaneAgentStatus;
             retryState?: RetryState;
             pushState?: PushState;
+            costTracking?: CostTracking;
           };
           newLaneUncommitted[laneId] = {
             uncommittedCount: data.uncommittedCount,
@@ -159,6 +168,7 @@ export function useStatusPolling({
             agentStatus: data.agentStatus,
             retryState: data.retryState,
             pushState: data.pushState,
+            costTracking: data.costTracking,
           };
         }
       }
@@ -167,6 +177,7 @@ export function useStatusPolling({
         status,
         laneStates: newLaneStates,
         laneUncommitted: newLaneUncommitted,
+        totalCostUsd,
         isRefreshing: false,
         error: null,
         lastUpdated: new Date(),

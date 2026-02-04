@@ -83,6 +83,7 @@ export async function GET(
         if (!output) {
           // No output captured yet - could be that process hasn't started
           // or is running in terminal mode (where we can't capture output)
+          const now = new Date().toISOString();
           response = {
             success: true,
             laneId,
@@ -93,8 +94,28 @@ export async function GET(
               totalLines: 0,
               errors: [],
               warnings: [],
-              startedAt: new Date().toISOString(),
-              lastActivityAt: new Date().toISOString(),
+              startedAt: now,
+              lastActivityAt: now,
+              tokenUsage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                cacheReadTokens: 0,
+                cacheWriteTokens: 0,
+                totalTokens: 0,
+                updatedAt: now,
+              },
+              costTracking: {
+                tokenUsage: {
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  cacheReadTokens: 0,
+                  cacheWriteTokens: 0,
+                  totalTokens: 0,
+                  updatedAt: now,
+                },
+                estimatedCostUsd: 0,
+                isEstimate: true,
+              },
             },
           };
         } else {
