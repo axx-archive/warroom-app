@@ -3,7 +3,9 @@
 This repository contains the War Room application under `./warroom-app/`.
 
 - App README: `warroom-app/README.md`
-- Architecture: `warroom-app/docs/ARCHITECTURE.md`
+- Architecture: `docs/ARCHITECTURE.md`
+- Design system: `docs/DESIGN_SYSTEM.md`
+- PRDs / planning: `docs/`
 
 ## Why is the repo structured this way?
 
