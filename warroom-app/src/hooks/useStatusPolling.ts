@@ -15,6 +15,11 @@ export interface LaneUncommittedStatus {
   uncommittedFiles: UncommittedFile[];
   worktreeExists: boolean;
   error?: string;
+  // Commits tracking
+  commitsSinceLaunch?: number;
+  commitsAtLaunch?: number;
+  currentCommits?: number;
+  branch?: string;
 }
 
 export interface LaneState {
@@ -103,7 +108,7 @@ export function useStatusPolling({
         }
       }
 
-      // Process uncommitted data
+      // Process uncommitted data (including commits info)
       const newLaneUncommitted: Record<string, LaneUncommittedStatus> = {};
       if (uncommittedResponse.ok && uncommittedData.success && uncommittedData.lanes) {
         for (const [laneId, laneData] of Object.entries(uncommittedData.lanes)) {
@@ -112,12 +117,20 @@ export function useStatusPolling({
             uncommittedFiles: UncommittedFile[];
             worktreeExists: boolean;
             error?: string;
+            commitsSinceLaunch?: number;
+            commitsAtLaunch?: number;
+            currentCommits?: number;
+            branch?: string;
           };
           newLaneUncommitted[laneId] = {
             uncommittedCount: data.uncommittedCount,
             uncommittedFiles: data.uncommittedFiles,
             worktreeExists: data.worktreeExists,
             error: data.error,
+            commitsSinceLaunch: data.commitsSinceLaunch,
+            commitsAtLaunch: data.commitsAtLaunch,
+            currentCommits: data.currentCommits,
+            branch: data.branch,
           };
         }
       }

@@ -87,6 +87,7 @@ export interface LaneStatusEntry {
   staged: boolean;
   status: LaneStatus;
   autonomy?: LaneAutonomy;
+  commitsAtLaunch?: number; // Track commit count when lane was launched
 }
 
 export interface StatusJson {

@@ -17,6 +17,16 @@ async function branchExists(repoPath: string, branch: string): Promise<boolean> 
   }
 }
 
+// Get the commit count for a worktree/branch
+async function getCommitCount(worktreePath: string): Promise<number> {
+  try {
+    const { stdout } = await execAsync("git rev-list --count HEAD", { cwd: worktreePath });
+    return parseInt(stdout.trim(), 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 // Create worktree for a lane if it doesn't exist
 async function ensureWorktree(
   repoPath: string,
@@ -294,6 +304,12 @@ export async function POST(
       lanesObj[laneId].staged = true;
       if (!lanesObj[laneId].status || lanesObj[laneId].status === "pending") {
         lanesObj[laneId].status = "in_progress";
+      }
+
+      // Track commits at launch (only if not already set)
+      if (openPath && lanesObj[laneId].commitsAtLaunch === undefined) {
+        const commitCount = await getCommitCount(openPath);
+        lanesObj[laneId].commitsAtLaunch = commitCount;
       }
 
       // Update overall run status to "staged" if it was "ready_to_stage"

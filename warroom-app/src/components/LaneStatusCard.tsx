@@ -178,6 +178,7 @@ export function LaneStatusCard({
   const isComplete = status === "complete";
   const config = STATUS_CONFIG[status];
   const hasUncommittedFiles = uncommittedStatus && uncommittedStatus.uncommittedCount > 0;
+  const hasNewCommits = uncommittedStatus && uncommittedStatus.commitsSinceLaunch && uncommittedStatus.commitsSinceLaunch > 0;
 
   // Check if all dependencies are complete
   const dependenciesMet = lane.dependsOn.length === 0 ||
@@ -345,6 +346,23 @@ export function LaneStatusCard({
     }
   }, [slug, lane.laneId]);
 
+  const handleViewGitLog = useCallback(async () => {
+    try {
+      // Call API to open git log in terminal
+      await fetch(`/api/runs/${slug}/git-log`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          laneId: lane.laneId,
+          worktreePath: lane.worktreePath,
+          commitCount: uncommittedStatus?.commitsSinceLaunch || 10,
+        }),
+      });
+    } catch (error) {
+      console.error("Error opening git log:", error);
+    }
+  }, [slug, lane.laneId, lane.worktreePath, uncommittedStatus?.commitsSinceLaunch]);
+
   return (
     <div
       className="task-card"
@@ -413,6 +431,21 @@ export function LaneStatusCard({
                     triggerRef={uncommittedBadgeRef}
                   />
                 </div>
+              )}
+              {/* New commits since launch badge */}
+              {hasNewCommits && (
+                <button
+                  onClick={handleViewGitLog}
+                  className="badge cursor-pointer hover:opacity-80 transition-opacity"
+                  style={{
+                    backgroundColor: "rgba(34, 197, 94, 0.15)",
+                    color: "#22c55e",
+                    borderColor: "rgba(34, 197, 94, 0.4)",
+                  }}
+                  title={`${uncommittedStatus!.commitsSinceLaunch} commit${uncommittedStatus!.commitsSinceLaunch === 1 ? "" : "s"} since launch - click to view git log`}
+                >
+                  +{uncommittedStatus!.commitsSinceLaunch} commit{uncommittedStatus!.commitsSinceLaunch === 1 ? "" : "s"}
+                </button>
               )}
             </div>
             <p className="mono small mt-1" style={{ color: "var(--muted)" }}>

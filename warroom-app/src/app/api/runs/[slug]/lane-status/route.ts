@@ -1,5 +1,5 @@
-// API route to get uncommitted changes per lane
-// GET /api/runs/[slug]/lane-status - returns uncommitted file counts and file lists per lane
+// API route to get uncommitted changes and commit counts per lane
+// GET /api/runs/[slug]/lane-status - returns uncommitted file counts, file lists, and commits since launch per lane
 
 import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
@@ -7,7 +7,7 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { WarRoomPlan, Lane } from "@/lib/plan-schema";
+import { WarRoomPlan, Lane, StatusJson } from "@/lib/plan-schema";
 
 const execAsync = promisify(exec);
 
@@ -22,6 +22,11 @@ interface LaneUncommittedStatus {
   uncommittedFiles: UncommittedFile[];
   worktreeExists: boolean;
   error?: string;
+  // New fields for commits tracking
+  commitsSinceLaunch?: number;
+  commitsAtLaunch?: number;
+  currentCommits?: number;
+  branch?: string;
 }
 
 export interface LaneStatusResponse {
@@ -57,6 +62,17 @@ async function getUncommittedFiles(worktreePath: string): Promise<{ files: Uncom
     return { files };
   } catch (error) {
     return { files: [], error: `Git error: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+// Get the current commit count for a worktree
+async function getCommitCount(worktreePath: string): Promise<number | null> {
+  try {
+    await fs.access(worktreePath);
+    const { stdout } = await execAsync("git rev-list --count HEAD", { cwd: worktreePath });
+    return parseInt(stdout.trim(), 10) || 0;
+  } catch {
+    return null;
   }
 }
 
@@ -98,12 +114,34 @@ export async function GET(
       );
     }
 
-    // Get uncommitted files for each lane
+    // Read status.json to get commitsAtLaunch values
+    let statusJson: StatusJson | null = null;
+    try {
+      const statusContent = await fs.readFile(
+        path.join(runDir, "status.json"),
+        "utf-8"
+      );
+      statusJson = JSON.parse(statusContent);
+    } catch {
+      // Status.json may not exist yet - that's okay
+    }
+
+    // Get uncommitted files and commit counts for each lane
     const laneStatuses: Record<string, LaneUncommittedStatus> = {};
 
     await Promise.all(
       plan.lanes.map(async (lane: Lane) => {
         const { files, error } = await getUncommittedFiles(lane.worktreePath);
+        const currentCommits = await getCommitCount(lane.worktreePath);
+
+        // Get commitsAtLaunch from status.json
+        const commitsAtLaunch = statusJson?.lanes?.[lane.laneId]?.commitsAtLaunch;
+
+        // Calculate commits since launch
+        let commitsSinceLaunch: number | undefined;
+        if (currentCommits !== null && commitsAtLaunch !== undefined) {
+          commitsSinceLaunch = Math.max(0, currentCommits - commitsAtLaunch);
+        }
 
         laneStatuses[lane.laneId] = {
           laneId: lane.laneId,
@@ -111,6 +149,10 @@ export async function GET(
           uncommittedFiles: files,
           worktreeExists: !error || !error.includes("does not exist"),
           error,
+          commitsSinceLaunch,
+          commitsAtLaunch,
+          currentCommits: currentCommits ?? undefined,
+          branch: lane.branch,
         };
       })
     );
