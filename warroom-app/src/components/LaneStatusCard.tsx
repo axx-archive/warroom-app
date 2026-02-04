@@ -664,6 +664,8 @@ export function LaneStatusCard({
   return (
     <div
       className="task-card"
+      data-lane-id={lane.laneId}
+      tabIndex={-1}
       style={{
         backgroundColor: config.bgColor,
         borderColor: config.borderColor,

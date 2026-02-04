@@ -17,6 +17,8 @@ import { TimelineView } from "./TimelineView";
 import { useNotifications } from "@/hooks/useNotifications";
 import { ToastNotifications } from "./ToastNotifications";
 import { NotificationCenter } from "./NotificationCenter";
+import { useKeyboardShortcuts, KeyboardShortcut, createLaneFocusAction } from "@/hooks/useKeyboardShortcuts";
+import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 
 interface RunDetailClientProps {
   lanes: Lane[];
@@ -154,6 +156,7 @@ export function RunDetailClient({
     connectionStatus,
     usingWebSocket,
     reconnect,
+    refresh,
   } = useRealtimeStatus({
     slug,
     initialLaneStates: initialStates,
@@ -227,6 +230,9 @@ export function RunDetailClient({
   const [missionNotification, setMissionNotification] = useState<MissionNotification | null>(null);
   const [isStartingMission, setIsStartingMission] = useState(false);
   const [isStoppingMission, setIsStoppingMission] = useState(false);
+
+  // Keyboard shortcuts modal state
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
 
   // Handle mission progress events from WebSocket
   const handleMissionProgress = useCallback((event: MissionProgressEvent) => {
@@ -734,6 +740,83 @@ export function RunDetailClient({
   // Count of ready lanes for the button
   const readyLanesCount = useMemo(() => getReadyLanes().length, [getReadyLanes]);
 
+  // Handler to generate merge proposal (for keyboard shortcut)
+  const handleGenerateMergeProposal = useCallback(async () => {
+    if (mergeViewRef.current) {
+      mergeViewRef.current.refreshProposal();
+    }
+    // Scroll to merge section
+    setTimeout(() => {
+      if (mergeSectionRef.current) {
+        mergeSectionRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      }
+    }, 100);
+  }, []);
+
+  // Handler to refresh status (for keyboard shortcut)
+  const handleRefreshStatus = useCallback(() => {
+    refresh();
+    setMergeViewKey((prev) => prev + 1);
+  }, [refresh]);
+
+  // Get lane IDs for focus shortcuts
+  const laneIds = useMemo(() => currentLanes.map((lane) => lane.laneId), [currentLanes]);
+
+  // Define keyboard shortcuts
+  const keyboardShortcuts: KeyboardShortcut[] = useMemo(() => [
+    // Action shortcuts with Cmd+Shift modifiers
+    {
+      key: "l",
+      modifiers: ["cmd", "shift"],
+      description: "Launch all ready lanes",
+      action: handleLaunchAllReady,
+      disabled: readyLanesCount === 0 || launchAllProgress.isLaunching,
+    },
+    {
+      key: "m",
+      modifiers: ["cmd", "shift"],
+      description: "Generate merge proposal",
+      action: handleGenerateMergeProposal,
+    },
+    {
+      key: "r",
+      modifiers: ["cmd", "shift"],
+      description: "Refresh status",
+      action: handleRefreshStatus,
+      disabled: isRefreshing,
+    },
+    // Lane focus shortcuts (1-9)
+    ...Array.from({ length: 9 }, (_, i) => ({
+      key: String(i + 1),
+      description: `Focus lane ${i + 1}`,
+      action: createLaneFocusAction(laneIds, i),
+      disabled: i >= laneIds.length,
+    })),
+    // Help shortcut
+    {
+      key: "?",
+      description: "Show keyboard shortcuts",
+      action: () => setShowKeyboardShortcuts(true),
+    },
+  ], [
+    handleLaunchAllReady,
+    readyLanesCount,
+    launchAllProgress.isLaunching,
+    handleGenerateMergeProposal,
+    handleRefreshStatus,
+    isRefreshing,
+    laneIds,
+  ]);
+
+  // Register keyboard shortcuts
+  useKeyboardShortcuts({
+    shortcuts: keyboardShortcuts,
+    enabled: !showKeyboardShortcuts && !showAddLaneModal && !previewLaneId, // Disable when modals are open
+  });
+
   return (
     <>
       {/* Agent Lanes */}
@@ -861,7 +944,7 @@ export function RunDetailClient({
                 title={
                   readyLanesCount === 0
                     ? "No lanes are ready to launch"
-                    : `Launch ${readyLanesCount} ready lane${readyLanesCount !== 1 ? "s" : ""}`
+                    : `Launch ${readyLanesCount} ready lane${readyLanesCount !== 1 ? "s" : ""} (⌘⇧L)`
                 }
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -934,6 +1017,18 @@ export function RunDetailClient({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Add Lane
+            </button>
+
+            {/* Keyboard Shortcuts Help Button */}
+            <button
+              onClick={() => setShowKeyboardShortcuts(true)}
+              className="btn btn--sm btn--ghost"
+              title="Keyboard shortcuts (?)"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+              </svg>
+              <span className="text-[var(--text-ghost)] font-mono">?</span>
             </button>
 
             {/* Total run cost */}
@@ -1220,6 +1315,14 @@ export function RunDetailClient({
 
       {/* Toast notifications */}
       <ToastNotifications toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Keyboard shortcuts modal */}
+      {showKeyboardShortcuts && (
+        <KeyboardShortcutsModal
+          shortcuts={keyboardShortcuts}
+          onClose={() => setShowKeyboardShortcuts(false)}
+        />
+      )}
     </>
   );
 }
