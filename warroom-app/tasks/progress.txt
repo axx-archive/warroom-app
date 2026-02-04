@@ -12,6 +12,7 @@ Started: Wed Feb  4 08:01:43 PST 2026
 - Use `useRef` for popover triggers to handle click-outside detection properly
 - Use `getFileWatcher(runSlug)` from `@/lib/file-watcher` to get/create watchers - singleton per run
 - Use `detectLaneCompletion()` from `@/lib/completion-detector` for auto-completion detection (checks marker files, commits, inactivity)
+- Use `getOrchestrator()` from `@/lib/orchestrator` for agent process management - singleton per app instance
 
 ---
 
@@ -212,4 +213,21 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Claude Code command: `claude --dangerously-skip-permissions` for autonomous mode
   - Default launch mode should reflect autonomy setting: terminal when skip permissions enabled
   - Add "launched" status to launchStatus state to show feedback for terminal mode launches
+---
+
+## 2026-02-04 - US-301: AgentOrchestrator class
+- Implemented singleton AgentOrchestrator for managing Claude Code agent processes
+- Files changed:
+  - `src/lib/orchestrator/agent-orchestrator.ts` - New singleton orchestrator class with full lifecycle management
+  - `src/lib/orchestrator/index.ts` - Module exports for orchestrator functions and types
+- **Learnings for future iterations:**
+  - Use singleton pattern: private constructor + static getInstance() for process-wide orchestration
+  - LaneProcessState tracks: process handle, status, timing, exit codes, errors
+  - RunOrchestrationState uses Map<laneId, LaneProcessState> for lane tracking
+  - SIGTERM/SIGINT handlers with graceful shutdown (SIGTERM to processes, SIGKILL after 5s timeout)
+  - SIGSTOP/SIGCONT signals for pause/resume functionality on Unix systems
+  - spawn() with stdio: ["pipe", "pipe", "pipe"] for later stdout capture (US-303)
+  - Process env variables (CLAUDE_LANE_ID, CLAUDE_RUN_SLUG) for identification
+  - Dependency-ordered lane starting: check completedLanes set before starting each lane
+  - Auto-start next lanes when a lane completes successfully
 ---
