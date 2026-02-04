@@ -531,3 +531,21 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - LaneStatusChangeEvent from websocket/types.ts includes runSlug and timestamp fields
   - Use notification helper methods (notifyLaneComplete, etc.) for consistent notification creation
 ---
+
+## 2026-02-04 - US-408: Keyboard shortcuts
+- Implemented keyboard shortcuts for common actions with help modal
+- Files changed:
+  - `src/hooks/useKeyboardShortcuts.ts` - New hook for registering and handling keyboard shortcuts
+  - `src/components/KeyboardShortcutsModal.tsx` - New modal showing all available shortcuts
+  - `src/components/RunDetailClient.tsx` - Integrated keyboard shortcuts, added help button
+  - `src/components/LaneStatusCard.tsx` - Added data-lane-id and tabIndex for focus functionality
+  - `src/app/globals.css` - Added keyboard-focus-highlight animation
+- **Learnings for future iterations:**
+  - Use `useRef` with `useEffect` for keeping shortcut actions up-to-date, not direct ref assignment during render (causes lint error)
+  - Keyboard shortcuts should be disabled when modals are open to prevent conflicts
+  - Use `data-lane-id` attribute on lane cards for keyboard-driven focus navigation
+  - Check for input/textarea focus before triggering shortcuts to avoid intercepting typing
+  - Format shortcuts for display: ⌘ for Cmd, ⇧ for Shift, ⌥ for Alt
+  - Modal disabling: pass `enabled` prop to keyboard shortcuts hook, set to `false` when any modal is open
+  - Focus highlighting: use CSS animation with box-shadow for visual feedback, auto-remove class after animation
+---
