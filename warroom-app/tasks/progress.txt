@@ -329,3 +329,27 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - If auto-commit fails, still mark lane as complete since the agent's work succeeded
   - Emit "commit" type lane activity event with commit details via WebSocket
 ---
+
+## 2026-02-04 - US-307: Auto-merge with human gates
+- Implemented auto-merge when all lanes complete, with conflict detection and human gates
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added "conflict" to LaneStatus, added MergeState interface and mergeState to StatusJson
+  - `src/lib/orchestrator/git-operations.ts` - Added autoMergeLanes(), mergeLaneBranch(), topologicalSort(), abortAutoMerge() functions
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added startAutoMerge(), updateMergeStateInStatusJson(), updateLaneStatusInStatusJson() methods
+  - `src/lib/orchestrator/index.ts` - Exported new merge functions and types
+  - `src/lib/websocket/types.ts` - Added MergeProgressEvent interface
+  - `src/lib/websocket/server.ts` - Added emitMergeProgress() function
+  - `src/hooks/useWebSocket.ts` - Added onMergeProgress callback and merge-progress event handling
+  - `src/app/api/runs/[slug]/merge-info/route.ts` - Added mergeState and repoPath to response
+  - `src/components/MergeView.tsx` - Added AutoMergeStatusDisplay component for merge status and conflict resolution UI
+  - `src/components/LaneStatusCard.tsx` - Added "conflict" status config
+- **Learnings for future iterations:**
+  - Merge lanes in dependency order using topological sort to respect lane relationships
+  - Use `git diff --name-only --diff-filter=U` to detect conflicting files
+  - MergeState tracks: status (idle/in_progress/complete/conflict/failed), currentLane, mergedLanes[], conflictInfo, error
+  - Conflict status is distinct from failed - indicates manual resolution required
+  - Auto-merge emits events: "started", "merging", "complete", "conflict", "failed"
+  - Human gate for main branch merge is enforced via UI - "Launch Merge" requires confirmation checkbox
+  - Open in Cursor button allows human resolution of conflicts
+  - The orchestrator's onLaneComplete() method triggers auto-merge when all lanes are successfully complete
+---
