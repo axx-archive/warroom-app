@@ -291,3 +291,24 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - WebSocket event flow: FileWatcher -> emitLaneProgress() -> client onLaneProgress callback
   - API endpoint reads LANE_STATUS.json from worktree root, returns null if not exists or invalid
 ---
+
+## 2026-02-04 - US-305: Auto-retry with exponential backoff
+- Implemented automatic retry functionality for failed lanes with exponential backoff
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `RetryState` and `RetryAttempt` interfaces, extended `LaneStatusEntry`
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added retry constants, `handleLaneFailure()`, `markLaneAsFailed()`, `updateStatusJsonRetryState()` methods
+  - `src/lib/websocket/types.ts` - Extended `LaneActivityEvent` with "retry" and "status" types, added retry details fields
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Added `retryState` to response
+  - `src/hooks/useRealtimeStatus.ts` - Extended `LaneUncommittedStatus` with `retryState`
+  - `src/hooks/useStatusPolling.ts` - Extended `LaneUncommittedStatus` with `retryState`
+  - `src/hooks/useActivityFeed.ts` - Extended `ActivityEvent` type with retry event types
+  - `src/components/LaneStatusCard.tsx` - Added `RetryCountdown` and `RetryExhaustedBanner` components
+- **Learnings for future iterations:**
+  - Retry backoff delays: 30s, 2min (120s), 10min (600s) - stored in `RETRY_BACKOFF_SECONDS` array
+  - `RetryState` interface: attempt, maxAttempts, nextRetryAt (ISO-8601), history[], status (waiting/retrying/exhausted)
+  - Use `setTimeout` for retry scheduling, store timer handle in `laneState.retryTimer` for cleanup
+  - Clear retry timers in `stopRun()` to prevent orphaned retries
+  - For countdown timers, calculate initial value synchronously to avoid ESLint "setState in effect" warning
+  - Emit "status" type lane activity events with retry details for real-time WebSocket updates
+  - Orange color (#f97316) for retry status UI, red (--status-error) for exhausted state
+---
