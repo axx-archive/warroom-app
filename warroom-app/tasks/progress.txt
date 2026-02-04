@@ -193,3 +193,23 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Collapsible panel pattern: header is clickable toggle, stopPropagation for interactive elements inside header
   - Event type icons use different colors for visual distinction: green (created), orange (modified), red (deleted), cyan (commit), magenta (status)
 ---
+
+## 2026-02-04 - US-206: Launch mode selector per lane
+- Implemented launch mode selector for choosing between Cursor (supervised) and Terminal (autonomous) launch
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `LaunchMode` type and `launchMode` field to `LaneStatusEntry`
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Return `launchMode` from status.json in response
+  - `src/app/api/runs/[slug]/status/route.ts` - Added handler to persist `launchMode` changes
+  - `src/app/api/runs/[slug]/launch/route.ts` - Added Terminal mode spawning via AppleScript (iTerm2 preferred, Terminal.app fallback)
+  - `src/hooks/useRealtimeStatus.ts` - Extended `LaneUncommittedStatus` interface with `launchMode`
+  - `src/hooks/useStatusPolling.ts` - Extended `LaneUncommittedStatus` interface with `launchMode`
+  - `src/components/LaneStatusCard.tsx` - Added launch mode dropdown, state, and handlers
+  - `src/components/LanesManager.tsx` - Pass `initialLaunchMode` to LaneStatusCard
+- **Learnings for future iterations:**
+  - Use AppleScript via `osascript` to spawn iTerm2/Terminal.app windows with custom commands
+  - Check for iTerm2 at `/Applications/iTerm.app` before falling back to Terminal.app
+  - Escape single quotes in AppleScript: `replace(/'/g, "'\\''")`
+  - Claude Code command: `claude --dangerously-skip-permissions` for autonomous mode
+  - Default launch mode should reflect autonomy setting: terminal when skip permissions enabled
+  - Add "launched" status to launchStatus state to show feedback for terminal mode launches
+---
