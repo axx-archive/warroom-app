@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# War Room App
 
-## Getting Started
+War Room is a **local mission-control UI** for orchestrating multi-lane Claude Code runs against a repo (launch lanes, watch progress, auto-commit, merge, and push), with an audit/history trail.
 
-First, run the development server:
+This repo is intentionally **workstation-oriented** (it shells out to git/terminal tooling and reads/writes under your home directory). Treat it as **local-only software** unless/until the security hardening + auth model is completed.
+
+## Quick start
+
+### Requirements
+- Node.js **20+**
+- `git` available in PATH
+- macOS recommended (some features integrate with iTerm/Terminal via AppleScript)
+
+### Install + run
 
 ```bash
+cd warroom-app
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open: http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Build / checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cd warroom-app
+npm run typecheck
+npm run lint
+npm run build
+```
 
-## Learn More
+## Architecture docs
 
-To learn more about Next.js, take a look at the following resources:
+- **System architecture:** `docs/ARCHITECTURE.md`
+- **UI design system:** `docs/DESIGN_SYSTEM.md`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Ports
+- App: `3000`
+- WebSocket: `WS_PORT` env var (default `3001`)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Data model (on disk)
 
-## Deploy on Vercel
+Runs are stored under:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `~/.openclaw/workspace/warroom/runs/<runSlug>/`
+  - `plan.json` — run plan (lanes, branches, worktrees, settings)
+  - `status.json` — aggregated lane/run state used by the UI
+  - `history.jsonl` — append-only audit log
+  - lane worktrees / lane artifacts (e.g. `LANE_STATUS.json`)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> The API routes read/write these files and shell out to `git` to compute status/diffs.
+
+## Security note (important)
+
+War Room currently assumes a trusted local environment.
+
+If you expose it beyond localhost (or run it on a shared machine), you must first:
+- enforce **localhost-only binding** (including WebSocket server)
+- add auth/CSRF protections
+- validate all slugs/paths and avoid shell interpolation in command execution
+
+See `docs/ARCHITECTURE.md` for the hardening checklist.
