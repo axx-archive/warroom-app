@@ -1,0 +1,432 @@
+"use client";
+
+import { useState, useTransition, useCallback } from "react";
+import { Lane, LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
+
+interface LaneStatusCardProps {
+  lane: Lane;
+  slug: string;
+  initialStatus: LaneStatus;
+  initialStaged: boolean;
+  initialAutonomy: LaneAutonomy;
+  completedLanes?: string[]; // List of completed lane IDs to check dependencies
+  onStatusChange?: (laneId: string, newStatus: LaneStatus) => void; // Callback when status changes
+}
+
+const STATUS_CONFIG: Record<LaneStatus, { color: string; bgColor: string; borderColor: string; label: string }> = {
+  pending: {
+    color: "var(--muted)",
+    bgColor: "transparent",
+    borderColor: "var(--border)",
+    label: "Pending",
+  },
+  in_progress: {
+    color: "var(--accent)",
+    bgColor: "rgba(124, 58, 237, 0.08)",
+    borderColor: "rgba(124, 58, 237, 0.3)",
+    label: "In Progress",
+  },
+  complete: {
+    color: "var(--status-success)",
+    bgColor: "rgba(34, 197, 94, 0.08)",
+    borderColor: "rgba(34, 197, 94, 0.3)",
+    label: "Complete",
+  },
+  failed: {
+    color: "var(--status-error)",
+    bgColor: "rgba(239, 68, 68, 0.08)",
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    label: "Failed",
+  },
+};
+
+export function LaneStatusCard({
+  lane,
+  slug,
+  initialStatus,
+  initialStaged,
+  initialAutonomy,
+  completedLanes = [],
+  onStatusChange,
+}: LaneStatusCardProps) {
+  const [status, setStatus] = useState<LaneStatus>(initialStatus);
+  const [staged] = useState(initialStaged);
+  const [autonomy, setAutonomy] = useState<LaneAutonomy>(initialAutonomy);
+  const [isPending, startTransition] = useTransition();
+  const [isLaunching, setIsLaunching] = useState(false);
+  const [launchStatus, setLaunchStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [commitStatus, setCommitStatus] = useState<"idle" | "success" | "nochanges" | "error">("idle");
+
+  const isComplete = status === "complete";
+  const config = STATUS_CONFIG[status];
+
+  // Check if all dependencies are complete
+  const dependenciesMet = lane.dependsOn.length === 0 ||
+    lane.dependsOn.every(depId => completedLanes.includes(depId));
+  const isBlocked = !dependenciesMet && !isComplete;
+  const blockedByLanes = isBlocked
+    ? lane.dependsOn.filter(depId => !completedLanes.includes(depId))
+    : [];
+
+  const handleLaunch = useCallback(async () => {
+    setIsLaunching(true);
+    setLaunchStatus("idle");
+
+    try {
+      const response = await fetch(`/api/runs/${slug}/launch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          laneId: lane.laneId,
+          skipPermissions: autonomy.dangerouslySkipPermissions,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Launch API error:", errorData);
+        throw new Error(errorData.error || "Failed to launch");
+      }
+
+      const data = await response.json();
+      console.log("Launch response:", {
+        success: data.success,
+        hasPacket: !!data.packetContent,
+        packetLength: data.packetContent?.length
+      });
+
+      // Update local status to in_progress
+      if (status === "pending") {
+        setStatus("in_progress");
+        onStatusChange?.(lane.laneId, "in_progress");
+      }
+
+      // Copy packet content to clipboard
+      if (data.packetContent) {
+        try {
+          await navigator.clipboard.writeText(data.packetContent);
+          setLaunchStatus("copied");
+          console.log("Copied to clipboard successfully");
+        } catch (clipboardError) {
+          console.error("Clipboard error:", clipboardError);
+          // Fallback: open a prompt with the content
+          // This ensures user can still get the content even if clipboard fails
+          const textarea = document.createElement("textarea");
+          textarea.value = data.packetContent;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textarea);
+          setLaunchStatus("copied");
+          console.log("Copied using fallback method");
+        }
+        // Reset status after 3 seconds
+        setTimeout(() => setLaunchStatus("idle"), 3000);
+      } else {
+        console.warn("No packet content in response");
+        setLaunchStatus("error");
+        setTimeout(() => setLaunchStatus("idle"), 3000);
+      }
+    } catch (error) {
+      console.error("Launch error:", error);
+      setLaunchStatus("error");
+      setTimeout(() => setLaunchStatus("idle"), 3000);
+    } finally {
+      setIsLaunching(false);
+    }
+  }, [slug, lane.laneId, autonomy.dangerouslySkipPermissions]);
+
+  const handleToggleComplete = () => {
+    const newStatus: LaneStatus = isComplete ? "pending" : "complete";
+
+    startTransition(async () => {
+      try {
+        const response = await fetch(`/api/runs/${slug}/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            laneId: lane.laneId,
+            laneStatus: newStatus,
+          }),
+        });
+
+        if (response.ok) {
+          setStatus(newStatus);
+          // Notify parent of status change
+          onStatusChange?.(lane.laneId, newStatus);
+        } else {
+          console.error("Failed to update lane status");
+        }
+      } catch (error) {
+        console.error("Error updating lane status:", error);
+      }
+    });
+  };
+
+  const handleToggleAutonomy = () => {
+    const newAutonomy: LaneAutonomy = {
+      dangerouslySkipPermissions: !autonomy.dangerouslySkipPermissions,
+    };
+
+    startTransition(async () => {
+      try {
+        const response = await fetch(`/api/runs/${slug}/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            laneId: lane.laneId,
+            autonomy: newAutonomy,
+          }),
+        });
+
+        if (response.ok) {
+          setAutonomy(newAutonomy);
+        } else {
+          console.error("Failed to update lane autonomy");
+        }
+      } catch (error) {
+        console.error("Error updating lane autonomy:", error);
+      }
+    });
+  };
+
+  const handleCommit = useCallback(async () => {
+    setIsCommitting(true);
+    setCommitStatus("idle");
+
+    try {
+      const response = await fetch(`/api/runs/${slug}/commit-lane`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ laneId: lane.laneId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to commit");
+      }
+
+      if (data.committed) {
+        setCommitStatus("success");
+        console.log("Committed:", data.commitHash, data.changedFiles);
+      } else {
+        setCommitStatus("nochanges");
+      }
+
+      setTimeout(() => setCommitStatus("idle"), 3000);
+    } catch (error) {
+      console.error("Commit error:", error);
+      setCommitStatus("error");
+      setTimeout(() => setCommitStatus("idle"), 3000);
+    } finally {
+      setIsCommitting(false);
+    }
+  }, [slug, lane.laneId]);
+
+  return (
+    <div
+      className="task-card"
+      style={{
+        backgroundColor: config.bgColor,
+        borderColor: config.borderColor,
+        borderLeftWidth: "3px",
+        borderLeftColor: config.color,
+      }}
+    >
+      <div className="flex items-start justify-between w-full">
+        <div className="flex items-start gap-3">
+          {/* Completion Checkbox */}
+          <button
+            onClick={handleToggleComplete}
+            disabled={isPending}
+            className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+              isPending ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+            }`}
+            style={{
+              borderColor: isComplete ? "var(--status-success)" : "var(--border)",
+              backgroundColor: isComplete ? "var(--status-success)" : "transparent",
+            }}
+            title={isComplete ? "Mark as incomplete" : "Mark as complete"}
+          >
+            {isComplete && (
+              <svg className="w-3 h-3" style={{ color: "var(--bg)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </button>
+
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium" style={{ color: "var(--text)" }}>
+                {lane.laneId}
+              </span>
+              <span className="badge badge--idle">
+                {lane.agent}
+              </span>
+              {staged && !isComplete && (
+                <span className="badge badge--running">
+                  staged
+                </span>
+              )}
+            </div>
+            <p className="mono small mt-1" style={{ color: "var(--muted)" }}>
+              {lane.branch}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleLaunch}
+            disabled={isLaunching || isComplete || isBlocked}
+            className={`btn btn--primary btn--sm ${
+              isLaunching ? "opacity-50 cursor-wait" : ""
+            } ${isComplete || isBlocked ? "opacity-30 cursor-not-allowed" : ""}`}
+            title={
+              isComplete
+                ? "Lane is complete"
+                : isBlocked
+                ? `Blocked by: ${blockedByLanes.join(", ")}`
+                : "Open in Cursor & copy packet"
+            }
+          >
+            {isLaunching ? (
+              <>
+                <svg className="w-3 h-3 spinner" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Launching...
+              </>
+            ) : launchStatus === "copied" ? (
+              <>
+                <svg className="w-3 h-3" style={{ color: "var(--status-success)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Copied!
+              </>
+            ) : launchStatus === "error" ? (
+              <>
+                <svg className="w-3 h-3" style={{ color: "var(--status-error)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Error
+              </>
+            ) : isBlocked ? (
+              <>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                Blocked
+              </>
+            ) : (
+              <>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Launch
+              </>
+            )}
+          </button>
+          {/* Commit Button - show when lane is in progress or staged */}
+          {(status === "in_progress" || staged) && !isComplete && (
+            <button
+              onClick={handleCommit}
+              disabled={isCommitting}
+              className={`btn btn--sm ${
+                commitStatus === "success" ? "btn--success" :
+                commitStatus === "error" ? "btn--danger" :
+                "btn--secondary"
+              } ${isCommitting ? "opacity-50 cursor-wait" : ""}`}
+              title="Commit uncommitted changes in worktree"
+            >
+              {isCommitting ? (
+                <>
+                  <svg className="w-3 h-3 spinner" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Committing...
+                </>
+              ) : commitStatus === "success" ? (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Committed!
+                </>
+              ) : commitStatus === "nochanges" ? (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  No Changes
+                </>
+              ) : commitStatus === "error" ? (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Error
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={2} fill="none" />
+                  </svg>
+                  Commit
+                </>
+              )}
+            </button>
+          )}
+          <span
+            className="label"
+            style={{ color: config.color }}
+          >
+            {config.label}
+          </span>
+        </div>
+      </div>
+
+      {lane.dependsOn.length > 0 && (
+        <div className="mt-2 ml-8 small" style={{ color: "var(--muted)" }}>
+          Depends on: {lane.dependsOn.join(", ")}
+        </div>
+      )}
+
+      {/* Autonomy Toggle */}
+      <div className="mt-3 ml-8 flex items-center gap-2">
+        <button
+          onClick={handleToggleAutonomy}
+          disabled={isPending}
+          className={`toggle ${autonomy.dangerouslySkipPermissions ? "active" : ""} ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}
+          role="switch"
+          aria-checked={autonomy.dangerouslySkipPermissions}
+          title={
+            autonomy.dangerouslySkipPermissions
+              ? "Disable skip permissions mode"
+              : "Enable skip permissions mode"
+          }
+          style={{
+            width: "32px",
+            height: "18px",
+          }}
+        />
+        <span className="small" style={{ color: "var(--muted)" }}>
+          Skip permissions
+          {autonomy.dangerouslySkipPermissions && (
+            <span className="ml-1.5 font-medium" style={{ color: "var(--accent)" }}>
+              (enabled)
+            </span>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}

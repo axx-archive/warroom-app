@@ -35,6 +35,69 @@ const DEFAULT_VERIFY_COMMANDS = [
   "npm run build",
 ];
 
+// Foundation/scaffolding keywords that indicate lane-1 should be a foundation lane
+const FOUNDATION_KEYWORDS = [
+  "scaffold",
+  "scaffolding",
+  "foundation",
+  "setup",
+  "initialize",
+  "init",
+  "create app",
+  "create project",
+  "new app",
+  "new project",
+  "boilerplate",
+  "starter",
+  "bootstrap",
+  "from scratch",
+  "greenfield",
+  "restructure",
+  "reorganize",
+  "migration",
+  "refactor architecture",
+  "new architecture",
+];
+
+// Default allowed paths by agent type - these define guardrails for each role
+// Non-overlapping paths help prevent merge conflicts when lanes run in parallel
+const AGENT_ALLOWED_PATHS: Record<AgentType, string[]> = {
+  "product-owner": ["docs/", "*.md", "tasks/", "specs/"],
+  architect: [
+    "docs/architecture/",
+    "src/lib/",
+    "src/types/",
+    "*.config.*",
+    "tsconfig*.json",
+  ],
+  developer: ["src/"], // Generic - will be subdivided for parallel developers
+  "staff-engineer-reviewer": ["**/*"], // Reviewers need to see everything
+  "doc-updater": ["docs/", "*.md", "README*", "CHANGELOG*"],
+  techdebt: ["src/", "tests/", "*.config.*"],
+  "visual-qa": ["src/app/", "src/components/", "src/styles/", "*.css"],
+  "qa-tester": ["tests/", "src/__tests__/", "*.test.*", "*.spec.*"],
+  "security-reviewer": ["src/", "package.json", "package-lock.json", ".env*"],
+};
+
+// Subdivided paths for parallel developer lanes to avoid conflicts
+const DEVELOPER_PATH_SUBDIVISIONS = [
+  ["src/app/", "src/pages/"], // Routes and pages
+  ["src/components/", "src/ui/"], // UI components
+  ["src/lib/", "src/utils/", "src/helpers/"], // Library code
+  ["src/hooks/", "src/context/"], // React hooks and context
+  ["src/api/", "src/services/"], // API and services
+  ["src/types/", "src/interfaces/"], // Type definitions
+];
+
+/**
+ * Detects if a goal involves scaffolding/foundation changes
+ * that require lane-1 to complete before parallel lanes can start
+ */
+function needsFoundationLane(goal: string): boolean {
+  const lowerGoal = goal.toLowerCase();
+  return FOUNDATION_KEYWORDS.some((kw) => lowerGoal.includes(kw));
+}
+
 interface PlanGeneratorConfig {
   workspacePath: string;
   worktreesPath: string;
@@ -103,14 +166,16 @@ function createLane(
   repoPath: string,
   worktreesPath: string,
   dependsOn: string[],
-  autonomy: boolean
+  autonomy: boolean,
+  foundation: boolean = false,
+  allowedPaths?: string[]
 ): Lane {
   const laneId = `lane-${index + 1}`;
   const branchName = `warroom/${slug}/${agent}${
     index > 0 && agent === "developer" ? `-${index}` : ""
   }`;
 
-  return {
+  const lane: Lane = {
     laneId,
     agent,
     branch: branchName,
@@ -124,7 +189,14 @@ function createLane(
       commands: [...DEFAULT_VERIFY_COMMANDS],
       required: true,
     },
+    allowedPaths: allowedPaths ?? AGENT_ALLOWED_PATHS[agent],
   };
+
+  if (foundation) {
+    lane.foundation = true;
+  }
+
+  return lane;
 }
 
 export function generatePlan(
@@ -138,26 +210,71 @@ export function generatePlan(
 
   const agentChain = selectAgentChain(request.goal, request.maxLanes);
 
+  // Detect if this goal involves scaffolding/foundation changes
+  const hasFoundation = needsFoundationLane(request.goal);
+
   // Build lanes with dependencies
   // For MVP: simple linear dependencies
   // Future: AI-powered dependency analysis
+
+  // Track developer index for path subdivision
+  let developerIndex = 0;
+
   const lanes: Lane[] = agentChain.map((agent, index) => {
     // Developers can run in parallel, others depend on previous
     let dependsOn: string[] = [];
 
+    // First lane (lane-1) is the foundation lane if scaffolding is needed
+    const isFoundationLane = hasFoundation && index === 0;
+
+    // Assign non-overlapping paths for parallel developer lanes
+    let allowedPaths: string[] | undefined;
+    if (agent === "developer") {
+      // Count how many developers are in the chain
+      const developerCount = agentChain.filter((a) => a === "developer").length;
+
+      if (developerCount > 1) {
+        // Multiple developers - assign subdivided paths to avoid conflicts
+        const subdivisionIndex =
+          developerIndex % DEVELOPER_PATH_SUBDIVISIONS.length;
+        allowedPaths = DEVELOPER_PATH_SUBDIVISIONS[subdivisionIndex];
+      }
+      // else: single developer gets default AGENT_ALLOWED_PATHS["developer"]
+
+      developerIndex++;
+    }
+
     if (index > 0) {
-      // If previous agent was also a developer, they can run in parallel
-      const prevAgent = agentChain[index - 1];
-      if (agent === "developer" && prevAgent === "developer") {
-        // Find the last non-developer lane to depend on
-        for (let i = index - 1; i >= 0; i--) {
-          if (agentChain[i] !== "developer") {
-            dependsOn = [`lane-${i + 1}`];
-            break;
-          }
+      // If we have a foundation lane, ALL other lanes must depend on lane-1
+      if (hasFoundation) {
+        // Always include lane-1 (foundation) in dependencies
+        dependsOn = ["lane-1"];
+
+        // Additionally, maintain other sequential dependencies
+        // If previous agent was also a developer, they can run in parallel after foundation
+        const prevAgent = agentChain[index - 1];
+        if (agent === "developer" && prevAgent === "developer" && index > 1) {
+          // Parallel developers only depend on foundation, not each other
+          // dependsOn already has lane-1
+        } else if (index > 1) {
+          // Non-parallel lanes also depend on their predecessor
+          dependsOn.push(`lane-${index}`);
         }
       } else {
-        dependsOn = [`lane-${index}`];
+        // No foundation - use original logic
+        // If previous agent was also a developer, they can run in parallel
+        const prevAgent = agentChain[index - 1];
+        if (agent === "developer" && prevAgent === "developer") {
+          // Find the last non-developer lane to depend on
+          for (let i = index - 1; i >= 0; i--) {
+            if (agentChain[i] !== "developer") {
+              dependsOn = [`lane-${i + 1}`];
+              break;
+            }
+          }
+        } else {
+          dependsOn = [`lane-${index}`];
+        }
       }
     }
 
@@ -168,7 +285,9 @@ export function generatePlan(
       request.repoPath,
       config.worktreesPath,
       dependsOn,
-      request.autonomy ?? false
+      request.autonomy ?? false,
+      isFoundationLane,
+      allowedPaths
     );
   });
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { GeneratePlanRequest, WarRoomPlan } from "@/lib/plan-schema";
+import { useState, useCallback } from "react";
+import { WarRoomPlan } from "@/lib/plan-schema";
 
 interface PlanGeneratorProps {
   onPlanGenerated: (plan: WarRoomPlan, runDir: string) => void;
@@ -15,97 +15,178 @@ export function PlanGenerator({
   const [goal, setGoal] = useState("");
   const [repoPath, setRepoPath] = useState(defaultRepoPath);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPickingFolder, setIsPickingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Advanced options
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [maxLanes, setMaxLanes] = useState<number | undefined>(undefined);
   const [autonomy, setAutonomy] = useState(false);
 
-  const handleGenerate = async () => {
+  // Handle folder picker
+  const handlePickFolder = useCallback(async () => {
+    setIsPickingFolder(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/folder-picker", {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (data.error === "cancelled") {
+        // User cancelled - not an error
+        return;
+      }
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to select folder");
+      }
+
+      setRepoPath(data.path);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to open folder picker");
+    } finally {
+      setIsPickingFolder(false);
+    }
+  }, []);
+
+  // Handle Initialize Mission - opens Cursor and copies PM prompt
+  const handleInitialize = useCallback(async () => {
     if (!goal.trim() || !repoPath.trim()) {
-      setError("Please provide both a goal and repository path");
+      setError("Please provide both a mission objective and repository path");
       return;
     }
 
     setIsGenerating(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
-      const request: GeneratePlanRequest = {
-        goal: goal.trim(),
-        repoPath: repoPath.trim(),
-        maxLanes,
-        autonomy,
-      };
-
-      const response = await fetch("/api/generate-plan", {
+      const response = await fetch("/api/initialize-mission", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(request),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          goal: goal.trim(),
+          repoPath: repoPath.trim(),
+          maxLanes,
+          autonomy,
+        }),
       });
 
       const data = await response.json();
 
-      if (!data.success) {
-        throw new Error(data.error || "Failed to generate plan");
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to initialize mission");
       }
 
-      onPlanGenerated(data.plan, data.runDir);
+      // Copy prompt to clipboard
+      try {
+        await navigator.clipboard.writeText(data.prompt);
+        setSuccessMessage("Cursor opened! PM prompt copied to clipboard. Paste it into Claude Code.");
+      } catch {
+        // Fallback clipboard method
+        const textarea = document.createElement("textarea");
+        textarea.value = data.prompt;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+        setSuccessMessage("Cursor opened! PM prompt copied to clipboard. Paste it into Claude Code.");
+      }
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccessMessage(null), 5000);
+
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate plan");
+      setError(err instanceof Error ? err.message : "Mission initialization failed");
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [goal, repoPath, maxLanes, autonomy]);
+
+  // Keep the old generate function for backward compatibility (if needed)
+  void onPlanGenerated; // Suppress unused warning - keeping prop for future use
 
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-6">
-      <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-        Generate Plan
-      </h2>
+    <div className="card--static p-6" style={{ border: "1px solid var(--border-accent)" }}>
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded flex items-center justify-center" style={{ background: "rgba(124, 58, 237, 0.15)", border: "1px solid rgba(124, 58, 237, 0.3)" }}>
+          <svg className="w-5 h-5" style={{ color: "var(--accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+          </svg>
+        </div>
+        <div>
+          <h2 className="h3" style={{ color: "var(--text)" }}>
+            Mission Parameters
+          </h2>
+          <p className="label">
+            Configure agent deployment
+          </p>
+        </div>
+      </div>
 
-      <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
-        War Room will generate a plan with agent lanes and run packets. You can
-        then stage lanes to open Cursor windows.
-      </p>
-
-      <div className="space-y-4">
+      <div className="space-y-5">
         {/* Repository Path */}
         <div>
           <label
             htmlFor="repoPath"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1"
+            className="label block mb-2"
+            style={{ color: "var(--accent)" }}
           >
-            Repository Path
+            Target Repository Path
           </label>
-          <input
-            id="repoPath"
-            type="text"
-            value={repoPath}
-            onChange={(e) => setRepoPath(e.target.value)}
-            placeholder="/Users/ajhart/Desktop/MyProject"
-            className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+          <div className="input-with-action">
+            <input
+              id="repoPath"
+              type="text"
+              value={repoPath}
+              onChange={(e) => setRepoPath(e.target.value)}
+              placeholder="/Users/operator/workspace/project"
+              className="input"
+            />
+            <button
+              type="button"
+              onClick={handlePickFolder}
+              disabled={isPickingFolder}
+              className="btn btn--icon"
+              style={{ border: "1px solid var(--border)", borderRadius: "3px", width: "44px", height: "44px" }}
+              title="Browse for folder"
+            >
+              {isPickingFolder ? (
+                <svg className="w-4 h-4 spinner" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Goal Input */}
         <div>
           <label
             htmlFor="goal"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1"
+            className="label block mb-2"
+            style={{ color: "var(--accent)" }}
           >
-            What do you want to build?
+            Mission Objective
           </label>
           <textarea
             id="goal"
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
-            placeholder="Describe what you want to accomplish..."
-            rows={3}
-            className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+            placeholder="Describe the mission parameters and objectives..."
+            rows={4}
+            className="textarea"
           />
         </div>
 
@@ -113,23 +194,29 @@ export function PlanGenerator({
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 flex items-center gap-1"
+          className="flex items-center gap-2 small hover:text-[var(--text)] transition-colors"
+          style={{ color: "var(--muted)" }}
         >
-          <span className={`transform transition-transform ${showAdvanced ? "rotate-90" : ""}`}>
-            ▶
-          </span>
-          Advanced Options
+          <svg
+            className={`w-3.5 h-3.5 transition-transform duration-200 ${showAdvanced ? "rotate-90" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="label">Advanced Parameters</span>
         </button>
 
         {/* Advanced Options */}
         {showAdvanced && (
-          <div className="pl-4 border-l-2 border-zinc-200 dark:border-zinc-700 space-y-3">
+          <div className="pl-5 space-y-4 reveal" style={{ borderLeft: "2px solid var(--border)" }}>
             <div>
               <label
                 htmlFor="maxLanes"
-                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1"
+                className="label block mb-2"
               >
-                Max Lanes (optional)
+                Max Agent Lanes
               </label>
               <input
                 id="maxLanes"
@@ -142,49 +229,82 @@ export function PlanGenerator({
                     e.target.value ? parseInt(e.target.value, 10) : undefined
                   )
                 }
-                placeholder="Auto"
-                className="w-32 px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Auto-detect"
+                className="input input--sm w-40"
               />
             </div>
 
-            <div className="flex items-center gap-2">
-              <input
-                id="autonomy"
-                type="checkbox"
-                checked={autonomy}
-                onChange={(e) => setAutonomy(e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-zinc-300 rounded focus:ring-blue-500"
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setAutonomy(!autonomy)}
+                className={`toggle ${autonomy ? "active" : ""}`}
+                role="switch"
+                aria-checked={autonomy}
               />
-              <label
-                htmlFor="autonomy"
-                className="text-sm text-zinc-700 dark:text-zinc-300"
-              >
-                Skip permissions (autonomous mode)
-              </label>
+              <div>
+                <span className="small" style={{ color: "var(--muted)" }}>
+                  Skip permissions
+                </span>
+                {autonomy && (
+                  <span className="ml-2 badge badge--warning">
+                    Autonomous
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success Message */}
+        {successMessage && (
+          <div className="card--static p-4" style={{ borderColor: "rgba(34, 197, 94, 0.3)", background: "rgba(34, 197, 94, 0.08)" }}>
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "var(--status-success)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <div>
+                <p className="small font-medium" style={{ color: "var(--status-success)" }}>Mission Initialized</p>
+                <p className="small mt-0.5" style={{ color: "var(--muted)" }}>{successMessage}</p>
+              </div>
             </div>
           </div>
         )}
 
         {/* Error Display */}
         {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <div className="card--static p-4" style={{ borderColor: "rgba(239, 68, 68, 0.3)", background: "rgba(239, 68, 68, 0.08)" }}>
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "var(--status-error)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <p className="small font-medium" style={{ color: "var(--status-error)" }}>Mission Error</p>
+                <p className="small mt-0.5" style={{ color: "var(--muted)" }}>{error}</p>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Generate Button */}
+        {/* Initialize Button */}
         <button
-          onClick={handleGenerate}
+          onClick={handleInitialize}
           disabled={isGenerating || !goal.trim() || !repoPath.trim()}
-          className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-400 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors flex items-center justify-center gap-2"
+          className="btn btn--primary w-full"
+          style={{ padding: "14px 20px", fontSize: "16px" }}
         >
           {isGenerating ? (
-            <>
-              <span className="animate-spin">⟳</span>
-              Generating...
-            </>
+            <span className="flex items-center justify-center gap-3">
+              <span className="spinner" />
+              <span>Generating Mission Plan...</span>
+            </span>
           ) : (
-            "Generate Plan"
+            <span className="flex items-center justify-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Initialize Mission
+            </span>
           )}
         </button>
       </div>

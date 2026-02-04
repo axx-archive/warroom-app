@@ -129,15 +129,34 @@ const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
   },
 };
 
-export function generatePacketMarkdown(lane: Lane, plan: WarRoomPlan): string {
+export function generatePacketMarkdown(
+  lane: Lane,
+  plan: WarRoomPlan,
+  options?: { dangerouslySkipPermissions?: boolean }
+): string {
   const config = AGENT_CONFIGS[lane.agent];
   const dependsOnText =
     lane.dependsOn.length > 0
       ? `Depends on: ${lane.dependsOn.join(", ")}`
       : "None (can start immediately)";
 
-  return `# WAR ROOM PACKET
+  // Use options override, or fall back to lane autonomy setting
+  const skipPermissions =
+    options?.dangerouslySkipPermissions ?? lane.autonomy.dangerouslySkipPermissions;
 
+  const autonomySection = skipPermissions
+    ? `
+## How to Start
+**IMPORTANT:** This lane has autonomy mode enabled. Run Claude Code with:
+\`\`\`bash
+claude --dangerously-skip-permissions
+\`\`\`
+This skips permission prompts for faster autonomous execution. Use with caution.
+`
+    : "";
+
+  return `# WAR ROOM PACKET
+${autonomySection}
 ## Lane
 - laneId: ${lane.laneId}
 - agent: ${lane.agent}
@@ -153,8 +172,10 @@ ${config.defaultScope.map((s) => `- ${s}`).join("\n")}
 
 ### DO NOT:
 - Make changes outside your designated scope
+- Make changes outside your Allowed Paths (see below)
 - Commit directly to main or integration branch
 - Skip verification commands
+- **Never commit \`.next/\`, \`node_modules/\`, \`dist/\`, or other generated artifacts** - these should be in .gitignore
 
 ## Inputs
 - Repo: ${plan.repo.path}
@@ -165,6 +186,23 @@ ${plan.workstream.prdPath ? `- PRD: ${plan.workstream.prdPath}` : ""}
 \`\`\`
 (Context-specific files will be identified during execution)
 \`\`\`
+
+## Allowed Paths
+**IMPORTANT:** Your changes MUST stay within these paths. Before committing, verify:
+\`\`\`bash
+git diff --stat
+\`\`\`
+All modified files must match one of these patterns:
+${
+  lane.allowedPaths && lane.allowedPaths.length > 0
+    ? lane.allowedPaths.map((p) => `- \`${p}\``).join("\n")
+    : "- `**/*` (unrestricted - use good judgment)"
+}
+
+**Guardrail Rule:** If \`git diff --stat\` shows files outside your allowed paths, you MUST:
+1. Stash or revert those changes
+2. Document why you needed to touch them
+3. Request path expansion from War Room operator
 
 ## Verification
 Run these commands before marking complete:
@@ -179,6 +217,26 @@ ${config.defaultStopConditions.map((s) => `- ${s}`).join("\n")}
 ## Dependencies
 - ${dependsOnText}
 
+## Completion Checklist
+**IMPORTANT:** When your work is complete, you MUST:
+
+1. **Run verification commands** (see Verification section above)
+2. **Stage and commit your changes:**
+   \`\`\`bash
+   git add -A
+   git status  # Verify only your files are staged
+   git commit -m "feat(${lane.laneId}): <brief description of work done>"
+   \`\`\`
+3. **Create an output summary** (if applicable):
+   - For reviews: Create \`REVIEW.md\` with findings
+   - For implementations: Document key changes made
+   - For QA: Create \`FINDINGS.md\` with test results
+
+**DO NOT:**
+- Leave uncommitted changes
+- Commit to main or integration branch
+- Commit node_modules, .next, or generated files
+
 ## Notes
 - Run ID: ${plan.runId}
 - Created: ${plan.createdAt}
@@ -187,12 +245,14 @@ ${config.defaultStopConditions.map((s) => `- ${s}`).join("\n")}
 }
 
 export function generateAllPackets(
-  plan: WarRoomPlan
+  plan: WarRoomPlan,
+  autonomyOverrides?: Record<string, { dangerouslySkipPermissions: boolean }>
 ): Map<string, { filename: string; content: string }> {
   const packets = new Map<string, { filename: string; content: string }>();
 
   for (const lane of plan.lanes) {
-    const content = generatePacketMarkdown(lane, plan);
+    const autonomyOption = autonomyOverrides?.[lane.laneId];
+    const content = generatePacketMarkdown(lane, plan, autonomyOption);
     packets.set(lane.laneId, {
       filename: `${lane.laneId}.md`,
       content,

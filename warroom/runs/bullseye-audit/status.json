@@ -1,0 +1,50 @@
+{
+  "runId": "bullseye-audit-001",
+  "status": "staged",
+  "currentLane": null,
+  "lanesCompleted": [
+    "lane-1-review",
+    "lane-2-reliability",
+    "lane-3-sse",
+    "lane-4-ux",
+    "lane-5-qa"
+  ],
+  "lanes": {
+    "lane-1-review": {
+      "staged": false,
+      "status": "complete",
+      "autonomy": {
+        "dangerouslySkipPermissions": true
+      }
+    },
+    "lane-2-reliability": {
+      "staged": false,
+      "status": "complete",
+      "autonomy": {
+        "dangerouslySkipPermissions": true
+      }
+    },
+    "lane-3-sse": {
+      "staged": true,
+      "status": "complete",
+      "autonomy": {
+        "dangerouslySkipPermissions": true
+      }
+    },
+    "lane-4-ux": {
+      "staged": true,
+      "status": "complete",
+      "autonomy": {
+        "dangerouslySkipPermissions": true
+      }
+    },
+    "lane-5-qa": {
+      "staged": true,
+      "status": "complete",
+      "autonomy": {
+        "dangerouslySkipPermissions": false
+      }
+    }
+  },
+  "updatedAt": "2026-02-04T03:58:38.153Z"
+}

@@ -56,6 +56,8 @@ export interface Lane {
   dependsOn: string[];
   autonomy: LaneAutonomy;
   verify: LaneVerify;
+  foundation?: boolean; // True if this lane handles scaffolding/foundation setup
+  allowedPaths?: string[]; // Directories/files this lane may modify (guardrail)
 }
 
 export interface MergeConfig {
@@ -79,11 +81,20 @@ export interface WarRoomPlan {
   merge: MergeConfig;
 }
 
+export type LaneStatus = "pending" | "in_progress" | "complete" | "failed";
+
+export interface LaneStatusEntry {
+  staged: boolean;
+  status: LaneStatus;
+  autonomy?: LaneAutonomy;
+}
+
 export interface StatusJson {
   runId: string;
   status: RunStatus;
   currentLane?: string;
-  lanesCompleted: string[];
+  lanesCompleted?: string[];
+  lanes?: Record<string, LaneStatusEntry>;
   updatedAt: string;
 }
 
@@ -103,4 +114,28 @@ export interface GeneratePlanResponse {
   plan?: WarRoomPlan;
   runDir?: string;
   error?: string;
+}
+
+// Merge proposal types
+export interface MergeProposalLane {
+  laneId: string;
+  branch: string;
+  order: number;
+  method: MergeMethod;
+  dependsOn: string[];
+  commitsAhead: number;
+  conflictRisk: "none" | "low" | "medium" | "high";
+  overlappingLanes: string[];
+  notes: string;
+}
+
+export interface MergeProposal {
+  runId: string;
+  runSlug: string;
+  createdAt: string;
+  integrationBranch: string;
+  mergeOrder: MergeProposalLane[];
+  defaultMethod: MergeMethod;
+  warnings: string[];
+  pmPrompt: string;
 }

@@ -1,0 +1,420 @@
+# Ralph Progress Log
+# Project: War Room (Hybrid Mission Control)
+# Branch: ralph/war-room-hybrid-mission-control
+# Started: 2026-02-02
+
+## Codebase Patterns
+- Use `npm run typecheck` for TypeScript validation (tsc --noEmit)
+- Use `npm run lint` for ESLint
+- Use `npm run build` for production build verification
+- warroom-app/ is the canonical Next.js app directory
+- Next.js 16.1.6 with Turbopack, React 19, TypeScript 5
+- Use `export const dynamic = "force-dynamic"` for pages that read from disk at request time
+- Next.js 16 async params: `const { slug } = await params` in page components
+- Run folder path: ~/.openclaw/workspace/warroom/runs/<runSlug>/
+- StatusJson has two formats: `lanes` object (per-lane status) OR `lanesCompleted` array - always support both
+
+---
+
+## 2026-02-02 - WR-001
+- What was implemented: Verification story - confirmed existing app structure and build hygiene
+- Files changed: None (verification only)
+- All acceptance criteria verified:
+  - warroom-app/ is the canonical Next.js app ✓
+  - npm run dev works ✓
+  - npm run typecheck passes ✓
+  - npm run lint passes ✓
+  - npm run build passes ✓
+- **Learnings for future iterations:**
+  - The app uses Next.js 16.1.6 with Turbopack for fast builds
+  - Build output shows routes in app/ directory pattern
+  - Port 3000 may be in use; dev server auto-selects available port (3001)
+  - TypeScript and ESLint are already configured and passing
+---
+
+## 2026-02-02 - WR-002
+- What was implemented: Node/bin-link reliability via version pinning
+- Files changed:
+  - .nvmrc (new) - pins Node version 25
+  - package.json - added engines field requiring Node >=20
+  - package-lock.json (regenerated)
+- All acceptance criteria verified:
+  - Fresh npm install works ✓
+  - npm run typecheck passes ✓
+  - npm run lint passes ✓
+  - npm run build passes ✓
+  - .nvmrc exists ✓
+- **Learnings for future iterations:**
+  - Node 25.4.0 is the current version used in this environment
+  - npm 11.7.0 is the current version
+  - The engines field in package.json provides additional enforcement
+  - .nvmrc uses just the major version (25) for flexibility
+---
+
+## 2026-02-02 - WR-003
+- What was implemented: Added missing gitignore entries for dist/ and logs
+- Files changed:
+  - .gitignore - added /dist and /logs + *.log patterns
+- All acceptance criteria verified:
+  - .gitignore includes .next/ ✓ (was already present)
+  - .gitignore includes node_modules/ ✓ (was already present)
+  - .gitignore includes dist/ ✓ (added)
+  - .gitignore includes logs ✓ (added)
+  - No tracked .next/ or node_modules/ files in repo ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - The default Next.js .gitignore template includes most common patterns already
+  - Use `git ls-files --cached | grep` to check for accidentally tracked files
+  - Adding *.log catches individual log files anywhere in the tree
+---
+
+## 2026-02-03 - WR-010
+- What was implemented: Runs dashboard that lists run folders and navigates to detail view
+- Files changed:
+  - src/app/api/runs/route.ts (new) - GET endpoint to list runs from disk
+  - src/app/runs/page.tsx (new) - Runs dashboard page with SSR
+  - src/app/runs/[slug]/page.tsx (new) - Run detail page showing plan and status
+  - src/components/RunsList.tsx (new) - Client component for runs list display
+  - src/app/page.tsx (modified) - Added "View Runs" navigation link
+- All acceptance criteria verified:
+  - UI shows list of runs with slug, status, startMode, updatedAt ✓
+  - Clicking a run navigates to run detail view ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - The run-manager.ts already had a listRuns function that reads from disk
+  - StatusJson in the wild may have different schema than plan-schema.ts (e.g., lanes as object vs lanesCompleted array)
+  - Use `export const dynamic = "force-dynamic"` for pages that read from disk at request time
+  - Next.js 16 async params: await params before destructuring in page components
+---
+
+## 2026-02-03 - WR-011
+- What was implemented: Enhanced plan/status rendering with proper lane status display
+- Files changed:
+  - src/lib/plan-schema.ts - Added LaneStatus type and LaneStatusEntry interface, updated StatusJson to support both formats
+  - src/app/runs/[slug]/page.tsx - Added getLaneStatus helper, LaneStatusBadge component, enhanced lane rendering
+- All acceptance criteria verified:
+  - UI reads plan.json from disk (server-side) and renders plan summary ✓
+  - UI reads status.json from disk and renders lane completion status ✓
+  - Lane list shows each lane with its status ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Real-world status.json has TWO formats in the wild:
+    1. `lanes` object: `{ "lane-1": { "staged": false, "status": "pending" } }` (mvp-build-001 style)
+    2. `lanesCompleted` array: `["lane-1", "lane-2"]` (openclaw generated style)
+  - Always design schemas to gracefully handle multiple formats when reading existing data
+  - LaneStatus values: "pending" | "in_progress" | "complete" | "failed"
+---
+
+## 2026-02-03 - WR-012
+- What was implemented: Status update API for lane completion with UI toggle
+- Files changed:
+  - src/app/api/runs/[slug]/status/route.ts (new) - POST endpoint to update status.json
+  - src/components/LaneStatusCard.tsx (new) - Client component with completion checkbox
+  - src/app/runs/[slug]/page.tsx - Integrated LaneStatusCard, removed inline lane rendering
+- All acceptance criteria verified:
+  - API endpoint POST /api/runs/[slug]/status updates status.json ✓
+  - API updates lanesCompleted array, status field, and updatedAt timestamp ✓
+  - UI can toggle lane complete via checkbox ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Use `useTransition` for non-blocking optimistic updates in React 19
+  - The status API updates BOTH formats (lanes object and lanesCompleted array) for backwards compatibility
+  - Client components in /components folder can use fetch to call API routes
+  - Server components pass initial data to client components as props for SSR
+---
+
+## 2026-02-03 - WR-020
+- What was implemented: Verification story - confirmed existing plan generation implementation
+- Files already in place:
+  - src/app/api/generate-plan/route.ts - POST endpoint accepting {goal, repoPath}, returns {success, plan, runDir}
+  - src/lib/plan-generator.ts - Generates WarRoomPlan with lanes, agent chain selection, dependencies
+  - src/lib/run-manager.ts - initializeRun() creates directory structure, writes plan.json and status.json
+  - src/lib/packet-templates.ts - generateAllPackets() creates lane-N.md files with role, scope, verification
+  - src/lib/plan-schema.ts - TypeScript interfaces for WarRoomPlan, Lane, StatusJson, etc.
+- All acceptance criteria verified:
+  - POST /api/generate-plan accepts goal and returns {plan, runDir} ✓
+  - Run folder created at ~/.openclaw/workspace/warroom/runs/<runSlug>/ ✓
+  - plan.json written with correct schema ✓
+  - packets/*.md generated for each lane ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - Plan generation uses a template-based approach with agent chain selection based on goal keywords
+  - DEFAULT_AGENT_CHAIN is: architect → developer → qa-tester
+  - Quick tasks (fix, bug, typo) use just developer
+  - Security/doc keywords add security-reviewer or doc-updater lanes
+  - runSlug format: `<slugified-goal>-<base36-timestamp>` (e.g., test-run-creation-ml6abc)
+  - Packet files are named lane-1.md, lane-2.md, etc. in the packets/ directory
+---
+
+## 2026-02-03 - WR-021
+- What was implemented: Copy PM Prompt button for manual planning kickoff
+- Files changed:
+  - src/components/PlanViewer.tsx - Added generatePMPrompt function and Copy PM Prompt button with clipboard integration
+- All acceptance criteria verified:
+  - UI shows 'Copy PM Prompt' button on plan creation screen ✓
+  - Prompt includes /warroom-plan command reference ✓
+  - Prompt includes repoPath, goal, and constraints ✓
+  - Copy button copies text to clipboard ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Use `navigator.clipboard.writeText()` for clipboard access in browser
+  - useCallback helps prevent unnecessary re-renders for event handlers
+  - Visual feedback (idle/copied state) improves UX for copy actions
+  - PM prompts should include structured context: repo info, goal, constraints, run context, and clear instructions
+---
+
+## 2026-02-03 - WR-022
+- What was implemented: Import plan.json via paste functionality
+- Files changed:
+  - src/app/api/import-plan/route.ts (new) - POST endpoint accepting planJson string, validates and normalizes plan
+  - src/components/ImportPlanModal.tsx (new) - Modal with textarea, JSON validation, error display
+  - src/app/page.tsx - Added Import Plan button in header and info section, integrated ImportPlanModal
+- All acceptance criteria verified:
+  - UI has 'Import Plan' button that opens a modal with textarea ✓
+  - Import accepts valid JSON and writes to new run folder ✓
+  - Packets auto-generated if not provided in JSON ✓
+  - Validation errors shown for invalid JSON ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Import API should normalize incomplete plans by providing sensible defaults (runId, runSlug, runDir, lanes)
+  - Minimal required fields for import: goal and repo.path - everything else can be auto-generated
+  - Local JSON.parse() before API call gives immediate user feedback for syntax errors
+  - Modal patterns: fixed positioning with backdrop click to close, escape key support
+  - startMode "claude_code_import" distinguishes imported plans from "openclaw" generated ones
+---
+
+## 2026-02-03 - WR-023
+- What was implemented: Import run folder by path functionality
+- Files changed:
+  - src/app/api/import-run-folder/route.ts (new) - POST endpoint validates path, reads plan.json and status.json
+  - src/components/ImportRunFolderModal.tsx (new) - Modal with path input, validation, error display
+  - src/app/page.tsx - Added "Open Folder" button in header and info section, integrated ImportRunFolderModal
+- All acceptance criteria verified:
+  - UI can open an existing runDir via path input ✓
+  - Existing plan.json and status.json are read and rendered ✓
+  - Error shown if path invalid or missing required files ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Use useRouter from next/navigation for client-side navigation in app directory
+  - Extract slug from runDir path (last segment) to navigate to /runs/[slug]
+  - Path expansion supports ~ for home directory via process.env.HOME
+  - API validates: path exists, is directory, has plan.json; status.json is optional
+  - Grid layout md:grid-cols-2 provides better balance with 4 info cards
+---
+
+## 2026-02-03 - WR-030
+- What was implemented: Stage lanes API that creates git worktrees for each lane
+- Files changed:
+  - src/app/api/runs/[slug]/stage/route.ts (new) - POST endpoint creates worktrees and branches
+- All acceptance criteria verified:
+  - API endpoint POST /api/runs/[slug]/stage creates worktrees ✓
+  - Worktrees created at lane.worktreePath for each lane ✓
+  - Branches created per lane if they don't exist ✓
+  - Errors handled and surfaced in API response ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Use `promisify(exec)` for async/await shell command execution
+  - Git worktree creation: `git worktree add <path> <branch>` creates worktree at path on branch
+  - Branch existence check: `git show-ref --verify --quiet refs/heads/<branch>` (local) or `refs/remotes/origin/<branch>` (remote)
+  - Create parent dirs with `fs.mkdir(parentDir, { recursive: true })` before worktree creation
+  - Worktree paths from plan.json are in ~/.openclaw/worktrees/ directory
+  - Status.json lanes object tracks `staged: boolean` per lane
+  - HTTP 207 Multi-Status is appropriate for partial success responses
+---
+
+## 2026-02-03 - WR-031
+- What was implemented: Stage API opens Cursor windows for each lane worktree
+- Files changed:
+  - src/app/api/runs/[slug]/stage/route.ts - Added openCursorWindow function, CursorResult interface, cursorOpened/cursorErrors in response
+- All acceptance criteria verified:
+  - Stage API runs /usr/local/bin/cursor -n <worktreePath> for each lane ✓
+  - UI shows 'staged' status after successful staging ✓ (existing behavior from WR-030)
+  - Errors from cursor command surfaced appropriately ✓ (cursorErrors array in response)
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Use timeout option with execAsync for external commands that may hang (10s for cursor)
+  - Cursor errors are non-fatal - worktree creation success is independent of Cursor launch
+  - StageResponse now includes: staged, errors (for worktrees), cursorOpened, cursorErrors (for Cursor windows)
+  - HTTP 207 returned when either worktree OR cursor errors exist
+---
+
+## 2026-02-03 - WR-032
+- What was implemented: Stage API writes WARROOM_PACKET.md to each worktree during staging
+- Files changed:
+  - src/app/api/runs/[slug]/stage/route.ts - Added writePacketToWorktree function, packetWritten field in StageResult
+- All acceptance criteria verified:
+  - WARROOM_PACKET.md written to root of each worktree ✓
+  - Content matches corresponding packet in run folder packets/ ✓
+  - File written during stage operation ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Packet files in run folders are named `<laneId>.md` (e.g., lane-1.md) in the packets/ directory
+  - writePacketToWorktree reads from runDir/packets/<laneId>.md and writes to worktreePath/WARROOM_PACKET.md
+  - Packet write failures are non-fatal: worktree staging succeeds, error is appended to result
+  - StageResult now includes packetWritten: boolean to track if packet was written successfully
+---
+
+## 2026-02-03 - WR-033
+- What was implemented: Optional autonomy toggle for skip-permissions mode
+- Files changed:
+  - src/lib/plan-schema.ts - Added autonomy field to LaneStatusEntry
+  - src/app/api/runs/[slug]/status/route.ts - Added autonomy handling to status API
+  - src/components/LaneStatusCard.tsx - Added autonomy toggle switch UI
+  - src/app/runs/[slug]/page.tsx - Updated getLaneStatus to return autonomy, pass to LaneStatusCard
+  - src/lib/packet-templates.ts - Added skip-permissions instruction section when autonomy enabled
+  - src/app/api/runs/[slug]/stage/route.ts - Reads autonomy from status.json, regenerates packets with current settings
+- All acceptance criteria verified:
+  - UI toggle for autonomy mode on run/lane view ✓
+  - Toggle sets lane.autonomy.dangerouslySkipPermissions in status ✓
+  - Packets include instruction to run claude --dangerously-skip-permissions when enabled ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - Autonomy is stored per-lane in status.json at `lanes[laneId].autonomy`
+  - Packet generation now accepts optional autonomy override parameter
+  - Stage API regenerates packets with current autonomy settings from status.json (not just plan.json)
+  - Toggle switch UI uses `role="switch"` and `aria-checked` for accessibility
+  - Amber color (#f59e0b) used for warning-level toggles like skip-permissions
+---
+
+## 2026-02-03 - WR-040
+- What was implemented: Foundation lane enforcement in plan generation
+- Files changed:
+  - src/lib/plan-schema.ts - Added optional `foundation` boolean field to Lane interface
+  - src/lib/plan-generator.ts - Added FOUNDATION_KEYWORDS array, needsFoundationLane() function, updated createLane and generatePlan to enforce foundation dependencies
+- All acceptance criteria verified:
+  - Plan generator detects if goal involves scaffolding/foundation changes ✓
+  - If scaffolding needed, lane-1 is marked as foundation lane ✓
+  - Non-foundation lanes include dependency on foundation lane ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - FOUNDATION_KEYWORDS includes: scaffold, foundation, setup, init, create app/project, bootstrap, from scratch, greenfield, migration, restructure
+  - When hasFoundation is true, ALL lanes except lane-1 get "lane-1" added to their dependsOn array
+  - Lane.foundation is optional boolean - only set to true when it's a foundation lane
+  - The foundation detection is keyword-based for MVP; future: AI-powered detection
+---
+
+## 2026-02-03 - WR-041
+- What was implemented: Allowed paths in packets for lane guardrails
+- Files changed:
+  - src/lib/plan-schema.ts - Added optional `allowedPaths?: string[]` field to Lane interface
+  - src/lib/plan-generator.ts - Added AGENT_ALLOWED_PATHS mapping, DEVELOPER_PATH_SUBDIVISIONS array, updated createLane and generatePlan
+  - src/lib/packet-templates.ts - Added "Allowed Paths" section with guardrail rule and git diff --stat verification
+- All acceptance criteria verified:
+  - Packets include 'Allowed Paths' section listing permitted directories/files ✓
+  - Packets include rule: 'git diff --stat must stay within allowed paths' ✓
+  - Plan generator assigns non-overlapping paths to parallel lanes ✓
+  - Typecheck passes ✓
+  - Build passes ✓
+- **Learnings for future iterations:**
+  - AGENT_ALLOWED_PATHS defines default paths per agent type (architect gets lib/types, qa-tester gets tests/, etc.)
+  - DEVELOPER_PATH_SUBDIVISIONS provides 6 non-overlapping path sets for parallel developer lanes
+  - When multiple developers exist in chain, each gets a different subdivision (modulo the number of subdivisions)
+  - Single developer gets default ["src/"] which is more permissive
+  - Guardrail rule instructs agents to run `git diff --stat` before committing and verify all files are within allowed paths
+---
+
+## 2026-02-03 - WR-042
+- What was implemented: Explicit warning in packets about never committing generated artifacts
+- Files changed:
+  - src/lib/packet-templates.ts - Added warning in "DO NOT" section about .next/, node_modules/, dist/ artifacts
+- All acceptance criteria verified:
+  - .next/ is in .gitignore ✓ (already present at line 17)
+  - Packets include explicit warning: 'Never commit .next/ or other generated artifacts' ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - The .gitignore already had /.next/ from the default Next.js template
+  - The "DO NOT" section in packet templates is the ideal place for explicit prohibitions
+  - Warning covers .next/, node_modules/, dist/ and mentions "other generated artifacts" for completeness
+---
+
+## 2026-02-03 - WR-060
+- What was implemented: Merge screen showing lane readiness with commit counts and file overlap detection
+- Files changed:
+  - src/app/api/runs/[slug]/merge-info/route.ts (new) - GET endpoint returns lane merge info with commit counts, files changed, conflict risk
+  - src/components/MergeView.tsx (new) - Client component displays merge readiness panel with lane cards
+  - src/app/runs/[slug]/page.tsx - Integrated MergeView component into run detail page
+- All acceptance criteria verified:
+  - Merge view shows per-lane commit count ahead of integration branch ✓
+  - UI highlights potential conflict risk based on file overlap heuristic ✓
+  - Lanes marked complete are shown as merge candidates ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - Use `git rev-list --count base..branch` to count commits ahead of a branch
+  - Use `git diff --name-only base...branch` (triple dot) for symmetric diff to get changed files
+  - Fall back to main/master if integration branch doesn't exist yet
+  - Conflict risk is calculated based on file overlap: none (0 lanes), low (1 lane), medium (2-3), high (4+)
+  - Branch existence check: `git show-ref --verify --quiet refs/heads/<branch>`
+  - MergeView is a client component that fetches data via API to allow refresh without page reload
+---
+
+## 2026-02-03 - WR-061
+- What was implemented: Merge proposal generation with topological sort, conflict risk analysis, and PM prompt
+- Files changed:
+  - src/app/api/runs/[slug]/merge-proposal/route.ts (new) - POST generates proposal, GET reads existing
+  - src/components/MergeView.tsx - Added Generate Merge Proposal button, MergeProposalDisplay component
+  - src/lib/plan-schema.ts - Added MergeProposal and MergeProposalLane interfaces
+- All acceptance criteria verified:
+  - UI button generates merge proposal based on lane dependencies and conflicts ✓
+  - Proposal includes merge order and method (merge/rebase/squash) ✓
+  - Proposal stored in run artifacts as merge-proposal.json ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - Topological sort ensures dependencies are merged first (visit dependencies before current node)
+  - Merge method selection: squash for single commits or low risk, merge for high conflict risk
+  - PM prompt is markdown with commands reference for manual merge execution
+  - Use cycle detection in topological sort to handle circular dependencies gracefully
+  - Filter to only complete lanes when building merge proposal (incomplete lanes added as warning)
+---
+
+## 2026-02-03 - WR-062
+- What was implemented: Execute merge with checkpoints - API endpoint and UI for executing merges
+- Files changed:
+  - src/app/api/runs/[slug]/merge/route.ts (new) - POST endpoint executes merges in proposal order
+  - src/app/api/open-cursor/route.ts (new) - POST endpoint opens Cursor for conflict resolution
+  - src/components/MergeView.tsx - Added merge execution UI with conflict display, Open in Cursor button, merge-to-main confirmation
+- All acceptance criteria verified:
+  - API endpoint POST /api/runs/[slug]/merge executes merges in proposed order ✓
+  - On conflict: merge stops and returns conflict info ✓
+  - UI shows 'Open in Cursor' for manual conflict resolution ✓
+  - Merge to main requires explicit confirmation checkbox ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - Git merge execution flow: checkout integration branch → merge lane branch → handle conflicts
+  - Squash merges require a separate commit step after `git merge --squash`
+  - Conflict detection via `git diff --name-only --diff-filter=U` lists unmerged files
+  - HTTP 409 Conflict is appropriate status code for merge conflicts
+  - Two-step confirmation for merge to main: checkbox to enable + explicit confirmation checkbox
+  - Open in Cursor uses `/usr/local/bin/cursor -n <path>` for new window
+  - MergeResponse includes results array showing success/failure per lane
+  - ConflictInfo includes worktreePath for opening the correct location in Cursor
+---
+
+## 2026-02-03 - WR-070
+- What was implemented: Improved War Room UI clarity with prominent "Next Steps" panel
+- Files changed:
+  - src/components/PlanViewer.tsx - Added Next Steps section with two-column action cards and numbered checklist
+- All acceptance criteria verified:
+  - Plan viewer shows 'Next steps' checklist after plan generation ✓
+  - 'Copy PM Prompt' button is prominently displayed for manual mode ✓
+  - 'Stage Lanes' button explains: opens Cursor windows and writes packets ✓
+  - Each action has brief description of what will happen ✓
+  - Typecheck passes ✓
+- **Learnings for future iterations:**
+  - Gradient backgrounds (from-blue-50 to-purple-50) make action panels stand out
+  - Two-column grid for action cards gives clear visual separation of options
+  - "Recommended" badge helps guide users to the common path
+  - Numbered checklist format (1-4 steps) provides clear post-action guidance
+  - Dynamic lane count in button description ({plan.lanes.length}) personalizes the UI
+  - Button descriptions should explain WHAT happens, not just the action name
+---

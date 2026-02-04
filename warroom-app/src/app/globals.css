@@ -1,26 +1,2016 @@
 @import "tailwindcss";
 
+/* =============================================================================
+   AXXON LABS DESIGN SYSTEM - WARROOM APP
+   Design Bible v1.0 - Mission Control Interface
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   SECTION 2: COLOR SYSTEM
+   ----------------------------------------------------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Primary Palette */
+  --bg: #0a0a0a;
+  --panel: #111111;
+  --text: #fafafa;
+  --muted: #737373;
+  --accent: #7c3aed;
+  --accent-light: #9f67ff;
+
+  /* Border System */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --border-accent: rgba(124, 58, 237, 0.3);
+  --border-accent-strong: rgba(124, 58, 237, 0.6);
+
+  /* Status Colors */
+  --status-success: #22c55e;
+  --status-warning: #f59e0b;
+  --status-error: #ef4444;
+  --status-idle: var(--muted);
+
+  /* Background Overlays */
+  --bg-hover: rgba(255, 255, 255, 0.02);
+  --bg-hover-accent: rgba(124, 58, 237, 0.03);
+  --bg-card: rgba(124, 58, 237, 0.02);
+  --bg-card-hover: rgba(124, 58, 237, 0.05);
+  --bg-card-active: rgba(124, 58, 237, 0.08);
+  --bg-glow: radial-gradient(circle at center, rgba(124, 58, 237, 0.15) 0%, transparent 70%);
+
+  /* Gradients */
+  --gradient-accent: linear-gradient(135deg, #9f67ff 0%, #7c3aed 100%);
+  --gradient-card: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(124, 58, 237, 0.02) 100%);
+  --gradient-fade: linear-gradient(180deg, var(--accent) 0%, rgba(124, 58, 237, 0.3) 60%, transparent 100%);
+  --gradient-progress: linear-gradient(90deg, var(--accent), #9f67ff);
+
+  /* -----------------------------------------------------------------------------
+     SECTION 3: TYPOGRAPHY
+     ----------------------------------------------------------------------------- */
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', Monaco, 'Consolas', monospace;
+
+  /* -----------------------------------------------------------------------------
+     SECTION 4: SPACING SYSTEM
+     ----------------------------------------------------------------------------- */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* -----------------------------------------------------------------------------
+     SECTION 5: ANIMATION SYSTEM
+     ----------------------------------------------------------------------------- */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+
+  --duration-instant: 0.15s;
+  --duration-fast: 0.3s;
+  --duration-normal: 0.5s;
+  --duration-slow: 0.8s;
+
+  /* -----------------------------------------------------------------------------
+     SECTION 8: SHADOWS & EFFECTS
+     ----------------------------------------------------------------------------- */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(124, 58, 237, 0.5);
+  --shadow-agent: 0 0 30px rgba(124, 58, 237, 0.6), 0 0 60px rgba(124, 58, 237, 0.3);
+
+  /* Responsive Breakpoints (for reference) */
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+  --bp-2xl: 1536px;
+
+  /* Text Hierarchy */
+  --text-primary: var(--text);
+  --text-secondary: #a3a3a3;
+  --text-tertiary: var(--muted);
+  --text-ghost: #525252;
+
+  /* Border Variants */
+  --border-default: var(--border);
+  --border-subtle: rgba(255, 255, 255, 0.04);
+
+  /* Legacy Amber/Cyan mappings to Accent */
+  --amber: var(--accent);
+  --amber-bright: var(--accent-light);
+  --amber-dim: var(--border-accent);
+  --amber-glow: rgba(124, 58, 237, 0.08);
+
+  --cyan: var(--accent);
+  --cyan-bright: var(--accent-light);
+  --cyan-dim: var(--border-accent);
+  --cyan-glow: rgba(124, 58, 237, 0.08);
+
+  /* Legacy compatibility (Tailwind integration) */
+  --background: var(--bg);
+  --foreground: var(--text);
 }
 
+/* Tailwind theme integration */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* -----------------------------------------------------------------------------
+   BASE STYLES - Typography Foundation (Section 3)
+   ----------------------------------------------------------------------------- */
+html {
+  background: var(--bg);
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.65;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'ss01' on, 'ss02' on;
+  position: relative;
+  min-height: 100vh;
+}
+
+/* -----------------------------------------------------------------------------
+   TYPOGRAPHY CLASSES (Section 3)
+   ----------------------------------------------------------------------------- */
+.display {
+  font-size: clamp(36px, 6vw, 72px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+}
+
+.h1 {
+  font-size: clamp(28px, 4vw, 48px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.0;
+}
+
+.h2 {
+  font-size: clamp(20px, 2.5vw, 32px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.h3 {
+  font-size: clamp(16px, 1.5vw, 20px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.body {
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.65;
+}
+
+.small {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+code, .code-inline {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--panel);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* -----------------------------------------------------------------------------
+   LAYOUT CONTAINER (Section 4)
+   ----------------------------------------------------------------------------- */
+.wrap {
+  width: min(1400px, 95vw);
+  margin: 0 auto;
+  padding: 0 var(--space-lg);
+}
+
+.panel-wrap {
+  width: 100%;
+  padding: var(--space-lg);
+}
+
+/* -----------------------------------------------------------------------------
+   KEYFRAME ANIMATIONS (Section 5)
+   ----------------------------------------------------------------------------- */
+
+/* Reveal Animation (Entry) */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reveal {
+  animation: reveal 0.6s var(--ease) forwards;
+}
+
+/* Stagger children */
+.reveal-stagger > *:nth-child(1) { animation-delay: 0s; }
+.reveal-stagger > *:nth-child(2) { animation-delay: 0.05s; }
+.reveal-stagger > *:nth-child(3) { animation-delay: 0.1s; }
+.reveal-stagger > *:nth-child(4) { animation-delay: 0.15s; }
+.reveal-stagger > *:nth-child(5) { animation-delay: 0.2s; }
+.reveal-stagger > *:nth-child(6) { animation-delay: 0.25s; }
+
+/* Pulse Animation (Status indicator) */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+.pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Agent Breathing (Active agent) */
+@keyframes breathe {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(124, 58, 237, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(124, 58, 237, 0.7);
+  }
+}
+
+.agent--active {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+/* Spinner */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* Progress Shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.progress--loading {
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    #9f67ff 50%,
+    var(--accent) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Legacy animation compatibility */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typing-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+   TEXT EFFECTS (Section 8)
+   ----------------------------------------------------------------------------- */
+.glow-text {
+  text-shadow: 0 0 40px rgba(255, 255, 255, 0.05);
+}
+
+::selection {
+  background: var(--accent);
+  color: white;
+}
+
+/* -----------------------------------------------------------------------------
+   UTILITY CLASSES - Legacy Support
+   Keeping these for existing component compatibility (Phase 2 will update)
+   ----------------------------------------------------------------------------- */
+.font-mono {
+  font-family: var(--font-mono) !important;
+}
+
+/* Text colors - accent variants */
+.text-accent { color: var(--accent); }
+.text-accent-light { color: var(--accent-light); }
+.text-muted { color: var(--muted); }
+
+/* Legacy amber/cyan mappings for existing components */
+.text-amber { color: var(--accent); }
+.text-amber-bright { color: var(--accent-light); }
+.text-cyan { color: var(--accent); }
+.text-cyan-bright { color: var(--accent-light); }
+
+.glow-amber {
+  text-shadow: 0 0 10px rgba(124, 58, 237, 0.3), 0 0 20px rgba(124, 58, 237, 0.2);
+}
+
+.glow-cyan {
+  text-shadow: 0 0 10px rgba(124, 58, 237, 0.3), 0 0 20px rgba(124, 58, 237, 0.2);
+}
+
+/* Uppercase label styles */
+.label-caps {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.label-caps-accent {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* Tabular numbers for data */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* -----------------------------------------------------------------------------
+   PANEL SYSTEM - Legacy Support
+   ----------------------------------------------------------------------------- */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  position: relative;
+}
+
+.panel-bracketed {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  position: relative;
+}
+
+.panel-bracketed::before,
+.panel-bracketed::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--accent);
+  border-style: solid;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.panel-bracketed::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+}
+
+.panel-bracketed::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+}
+
+.panel-elevated {
+  background: var(--panel);
+  border: 1px solid var(--border-accent);
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 4px 24px -4px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.panel-header {
+  background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.panel-header::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(124, 58, 237, 0.3) 20%,
+    var(--accent) 50%,
+    rgba(124, 58, 237, 0.3) 80%,
+    transparent 100%
+  );
+}
+
+/* -----------------------------------------------------------------------------
+   BUTTON SYSTEM - Legacy Support
+   ----------------------------------------------------------------------------- */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: white;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover {
+  background: var(--accent-light);
+  border-color: var(--accent-light);
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.btn-secondary:hover {
+  color: var(--text);
+  border-color: var(--border-accent);
+  background: var(--bg-card-hover);
+}
+
+.btn-secondary:active {
+  background: var(--bg-card-active);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.btn-ghost:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: white;
+  background: var(--status-error);
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-danger:hover {
+  background: #f87171;
+}
+
+.btn-success {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--bg);
+  background: var(--status-success);
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-success:hover {
+  background: #4ade80;
+}
+
+/* -----------------------------------------------------------------------------
+   STATUS BADGES - Legacy Support
+   ----------------------------------------------------------------------------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 2px;
+}
+
+.badge-amber,
+.badge--running {
+  background: rgba(124, 58, 237, 0.15);
+  color: var(--accent-light);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+}
+
+.badge-cyan {
+  background: rgba(124, 58, 237, 0.15);
+  color: var(--accent-light);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+}
+
+.badge-success,
+.badge--success {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.badge-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-danger,
+.badge--error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-neutral,
+.badge--idle {
+  background: rgba(115, 115, 115, 0.15);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+/* Status indicator dots */
+.indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.indicator-dot-amber,
+.indicator-dot-accent {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.5);
+}
+
+.indicator-dot-cyan {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.5);
+}
+
+.indicator-dot-success {
+  background: var(--status-success);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}
+
+.indicator-dot-danger {
+  background: var(--status-error);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+/* Small indicator dot variant */
+.indicator-dot--sm {
+  width: 6px;
+  height: 6px;
+}
+
+/* -----------------------------------------------------------------------------
+   INPUT SYSTEM - Legacy Support
+   ----------------------------------------------------------------------------- */
+.input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 3px;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(124, 58, 237, 0.05);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.input::placeholder {
+  color: var(--muted);
+}
+
+.textarea {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 3px;
+  resize: vertical;
+  min-height: 100px;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(124, 58, 237, 0.05);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.textarea::placeholder {
+  color: var(--muted);
+}
+
+/* -----------------------------------------------------------------------------
+   CARD SYSTEM - Legacy Support
+   ----------------------------------------------------------------------------- */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: var(--space-lg);
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.card-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
+}
+
+.card-body {
+  padding: 1.25rem;
+}
+
+.card-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* Lane card - agent task cards */
+.lane-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+  padding: 1rem 1.25rem;
+  transition: all var(--duration-fast) var(--ease);
+  position: relative;
+}
+
+.lane-card:hover {
+  border-left-color: var(--accent-light);
+  background: var(--bg-card-hover);
+  box-shadow: var(--shadow-glow);
+}
+
+.lane-card.lane-complete {
+  border-left-color: var(--status-success);
+}
+
+.lane-card.lane-complete:hover {
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.15);
+}
+
+.lane-card.lane-in-progress {
+  border-left-color: var(--status-warning);
+}
+
+.lane-card.lane-failed {
+  border-left-color: var(--status-error);
+}
+
+/* -----------------------------------------------------------------------------
+   MODAL SYSTEM - Legacy Support
+   ----------------------------------------------------------------------------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--border-accent);
+  border-radius: 4px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--shadow-lg),
+    var(--shadow-glow);
+  animation: reveal 0.2s var(--ease);
+}
+
+.modal-header {
+  padding: 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
+  position: relative;
+}
+
+.modal-header::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(124, 58, 237, 0.3) 30%,
+    rgba(124, 58, 237, 0.3) 70%,
+    transparent 100%
+  );
+}
+
+.modal-body {
+  padding: 1.25rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* -----------------------------------------------------------------------------
+   LOGO AND BRANDING - Legacy Support
+   ----------------------------------------------------------------------------- */
+.logo-mark {
+  width: 36px;
+  height: 36px;
+  background: var(--gradient-accent);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: white;
+  box-shadow:
+    var(--shadow-sm),
+    var(--shadow-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.logo-text {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 1.25rem;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+/* -----------------------------------------------------------------------------
+   AGENT TYPE COLORS - Legacy Support (updated to purple-based)
+   ----------------------------------------------------------------------------- */
+.agent-product-owner { --agent-color: #a855f7; }
+.agent-architect { --agent-color: #3b82f6; }
+.agent-developer { --agent-color: #22c55e; }
+.agent-staff-engineer { --agent-color: #6366f1; }
+.agent-doc-updater { --agent-color: var(--accent); }
+.agent-techdebt { --agent-color: #f97316; }
+.agent-visual-qa { --agent-color: #ec4899; }
+.agent-qa-tester { --agent-color: #06b6d4; }
+.agent-security { --agent-color: #ef4444; }
+
+.agent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--agent-color, var(--accent));
+  background: color-mix(in srgb, var(--agent-color, var(--accent)) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--agent-color, var(--accent)) 30%, transparent);
+  border-radius: 2px;
+}
+
+/* -----------------------------------------------------------------------------
+   PROGRESS INDICATORS - Legacy Support
+   ----------------------------------------------------------------------------- */
+.progress {
+  height: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.progress__bar {
+  height: 100%;
+  background: var(--gradient-progress);
+  transition: width var(--duration-fast) var(--ease);
+}
+
+/* Loading state */
+.loading-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.loading-text::after {
+  content: "";
+  width: 4px;
+  height: 14px;
+  background: var(--accent);
+  animation: typing-cursor 1s ease-in-out infinite;
+}
+
+/* -----------------------------------------------------------------------------
+   CODE BLOCKS - Legacy Support
+   ----------------------------------------------------------------------------- */
+.code-block {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--muted);
+  overflow-x: auto;
+}
+
+/* -----------------------------------------------------------------------------
+   SCROLLBAR STYLING
+   ----------------------------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--panel);
+  border-radius: 4px;
+  border: 2px solid var(--bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* -----------------------------------------------------------------------------
+   FOCUS STATES
+   ----------------------------------------------------------------------------- */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* -----------------------------------------------------------------------------
+   TOGGLE / CHECKBOX - Legacy Support
+   ----------------------------------------------------------------------------- */
+.toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--muted);
+  border-radius: 50%;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.toggle.active {
+  background: rgba(124, 58, 237, 0.3);
+  border-color: var(--accent);
+}
+
+.toggle.active::after {
+  left: 18px;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.5);
+}
+
+/* -----------------------------------------------------------------------------
+   DIVIDERS - Legacy Support
+   ----------------------------------------------------------------------------- */
+.divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--border) 20%,
+    var(--border) 80%,
+    transparent 100%
+  );
+}
+
+.divider-accent {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(124, 58, 237, 0.3) 20%,
+    rgba(124, 58, 237, 0.3) 80%,
+    transparent 100%
+  );
+}
+
+/* -----------------------------------------------------------------------------
+   TOOLTIPS - Legacy Support
+   ----------------------------------------------------------------------------- */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  padding: 0.375rem 0.625rem;
+  font-size: 0.75rem;
+  font-family: var(--font-sans);
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all var(--duration-instant) var(--ease);
+  z-index: 50;
+}
+
+[data-tooltip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+/* -----------------------------------------------------------------------------
+   QUICK ACTIONS RAIL - Legacy Support
+   ----------------------------------------------------------------------------- */
+.quick-actions-rail {
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  margin-top: 2rem;
+}
+
+.quick-actions-header {
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+
+.quick-action-tile {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1rem 1.25rem;
+  transition: all var(--duration-fast) var(--ease);
+  position: relative;
+  overflow: hidden;
+}
+
+.quick-action-tile::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: transparent;
+  transition: background var(--duration-fast) var(--ease);
+}
+
+.quick-action-tile:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.quick-action-tile:hover::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(124, 58, 237, 0.3) 20%,
+    var(--accent) 50%,
+    rgba(124, 58, 237, 0.3) 80%,
+    transparent 100%
+  );
+}
+
+.quick-action-tile-recommended {
+  background: var(--bg-card);
+  border: 1px solid var(--border-accent);
+  position: relative;
+}
+
+.quick-action-tile-recommended::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gradient-accent);
+}
+
+.quick-action-tile-recommended:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-glow);
+}
+
+.badge-recommended {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-light);
+  background: rgba(124, 58, 237, 0.2);
+  border: 1px solid var(--border-accent);
+  border-radius: 2px;
+}
+
+/* -----------------------------------------------------------------------------
+   FOLDER PICKER BUTTON - Legacy Support
+   ----------------------------------------------------------------------------- */
+.folder-picker-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.folder-picker-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-accent);
+  color: var(--accent);
+  box-shadow: var(--shadow-glow);
+}
+
+.folder-picker-btn:active {
+  transform: scale(0.96);
+}
+
+.input-with-action {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.input-with-action .input {
+  flex: 1;
+}
+
+/* =============================================================================
+   PHASE 2: COMPONENT PATTERNS (Design Bible Sections 6, 7, 12)
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   SECTION 6: COMPONENT PATTERNS - Cards
+   ----------------------------------------------------------------------------- */
+
+/* Base Card - with hover lift effect */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: var(--space-lg);
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Card without hover effect */
+.card--static {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: var(--space-lg);
+}
+
+/* Agent Card - displays agent info with status dot */
+.agent-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.agent-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.agent-card--active {
+  border-color: var(--border-accent);
+  background: var(--bg-card-active);
+}
+
+.agent-card__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.agent-card--active .agent-card__dot {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+.agent-card__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-card__name {
+  font-weight: 500;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.agent-card__status {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Task Card - with accent bottom line that expands on hover */
+.task-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  position: relative;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.task-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 0;
+  background: var(--gradient-accent);
+  transition: width var(--duration-fast) var(--ease);
+}
+
+.task-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-accent);
+}
+
+.task-card:hover::after {
+  width: 100%;
+}
+
+.task-card__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-card__title {
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.task-card__meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.task-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* Task Card Status Variants */
+.task-card--running {
+  border-left: 3px solid var(--accent);
+}
+
+.task-card--success {
+  border-left: 3px solid var(--status-success);
+}
+
+.task-card--error {
+  border-left: 3px solid var(--status-error);
+}
+
+.task-card--idle {
+  border-left: 3px solid var(--muted);
+}
+
+/* -----------------------------------------------------------------------------
+   SECTION 6: COMPONENT PATTERNS - Buttons
+   ----------------------------------------------------------------------------- */
+
+/* Button base */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+  position: relative;
+  overflow: hidden;
+  border-radius: 3px;
+  font-family: var(--font-sans);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Primary Button - filled with accent */
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-light);
+  border-color: var(--accent-light);
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn--primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Ghost Button - transparent with border */
+.btn--ghost {
+  background: transparent;
+  border-color: var(--border);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  border-color: var(--border-accent);
+  background: var(--bg-card-hover);
+}
+
+/* Secondary Button (alias for ghost with stronger border) */
+.btn--secondary {
+  background: transparent;
+  border-color: var(--border-strong);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  border-color: var(--border-accent);
+  background: var(--bg-card-hover);
+}
+
+/* Success Button */
+.btn--success {
+  background: var(--status-success);
+  border-color: var(--status-success);
+  color: var(--bg);
+}
+
+.btn--success:hover:not(:disabled) {
+  background: #4ade80;
+  border-color: #4ade80;
+}
+
+/* Danger Button */
+.btn--danger {
+  background: var(--status-error);
+  border-color: var(--status-error);
+  color: white;
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: #f87171;
+  border-color: #f87171;
+}
+
+/* Small Button variant */
+.btn--sm {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+/* Icon-only Button */
+.btn--icon {
+  padding: 8px;
+  border: none;
+  background: transparent;
+}
+
+.btn--icon:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+/* -----------------------------------------------------------------------------
+   SECTION 6: COMPONENT PATTERNS - Status Badges
+   ----------------------------------------------------------------------------- */
+
+/* Badge base (already defined, ensuring consistency) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  border: 1px solid transparent;
+}
+
+/* Badge with dot indicator */
+.badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.badge--running .badge__dot {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Status badge variants */
+.badge--running {
+  background: rgba(124, 58, 237, 0.15);
+  color: var(--accent-light);
+  border-color: rgba(124, 58, 237, 0.3);
+}
+
+.badge--success {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.badge--error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.badge--idle {
+  background: rgba(115, 115, 115, 0.15);
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+.badge--warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* -----------------------------------------------------------------------------
+   SECTION 6: COMPONENT PATTERNS - Progress Indicators
+   ----------------------------------------------------------------------------- */
+
+/* Linear Progress Bar */
+.progress {
+  height: 4px;
+  background: var(--border);
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.progress__bar {
+  height: 100%;
+  background: var(--gradient-progress);
+  transition: width var(--duration-fast) var(--ease);
+}
+
+/* Progress loading state with shimmer */
+.progress--loading .progress__bar {
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    #9f67ff 50%,
+    var(--accent) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Circular Progress (Agent Progress) */
+.agent-progress {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--accent) var(--progress, 0%),
+    var(--border) var(--progress, 0%)
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.agent-progress__inner {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.agent-progress__value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+/* Small variant */
+.agent-progress--sm {
+  width: 32px;
+  height: 32px;
+}
+
+.agent-progress--sm .agent-progress__inner {
+  width: 26px;
+  height: 26px;
+}
+
+.agent-progress--sm .agent-progress__value {
+  font-size: 10px;
+}
+
+/* -----------------------------------------------------------------------------
+   SECTION 6: COMPONENT PATTERNS - Input Fields
+   ----------------------------------------------------------------------------- */
+
+/* Input base (already defined, ensuring focus glow) */
+.input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 3px;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(124, 58, 237, 0.05);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.input::placeholder {
+  color: var(--muted);
+}
+
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Input sizes */
+.input--sm {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.input--lg {
+  padding: 16px 20px;
+  font-size: 16px;
+}
+
+/* Textarea (already defined, ensuring consistency) */
+.textarea {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 3px;
+  resize: vertical;
+  min-height: 100px;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(124, 58, 237, 0.05);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.textarea::placeholder {
+  color: var(--muted);
+}
+
+/* -----------------------------------------------------------------------------
+   SECTION 7: LAYOUT PATTERNS - Dashboard Grid
+   ----------------------------------------------------------------------------- */
+
+.dashboard {
+  display: grid;
+  grid-template-columns: 280px 1fr 320px;
+  grid-template-rows: 60px 1fr;
+  gap: 1px;
+  background: var(--border);
+  height: 100vh;
+}
+
+.dashboard > * {
+  background: var(--bg);
+}
+
+/* Sidebar */
+.sidebar {
+  grid-row: span 2;
+  padding: var(--space-lg);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+/* Header */
+.header {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Main content area */
+.main {
+  padding: var(--space-lg);
+  overflow-y: auto;
+}
+
+/* Activity panel */
+.activity-panel {
+  grid-row: span 2;
+  padding: var(--space-lg);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+/* Responsive dashboard */
+@media (max-width: 1024px) {
+  .dashboard {
+    grid-template-columns: 240px 1fr;
+  }
+
+  .activity-panel {
+    position: fixed;
+    right: 0;
+    top: 60px;
+    bottom: 0;
+    width: 320px;
+    transform: translateX(100%);
+    transition: transform var(--duration-normal) var(--ease);
+    z-index: 50;
+    background: var(--bg);
+    border-left: 1px solid var(--border);
+  }
+
+  .activity-panel--open {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+    grid-template-rows: 60px auto 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .sidebar--open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--bg);
+    transform: none;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+   SECTION 7: LAYOUT PATTERNS - Agent Visualization Area
+   ----------------------------------------------------------------------------- */
+
+.agent-orbit {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.agent-orbit__ring {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+}
+
+.agent-orbit__ring--inner {
+  inset: 20%;
+}
+
+.agent-orbit__ring--core {
+  inset: 40%;
+  background: var(--bg-glow);
+}
+
+.agent-orbit__dot {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.5);
+}
+
+.agent-orbit__dot--active {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+.agent-orbit__dot--idle {
+  background: var(--muted);
+  box-shadow: none;
+}
+
+/* -----------------------------------------------------------------------------
+   SECTION 7: LAYOUT PATTERNS - Task List
+   ----------------------------------------------------------------------------- */
+
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+}
+
+.task-list > * {
+  background: var(--bg);
+}
+
+/* Separated task list (with visible gaps) */
+.task-list--separated {
+  gap: var(--space-sm);
+  background: transparent;
+}
+
+.task-list--separated > * {
+  border-radius: 0;
+}
+
+/* -----------------------------------------------------------------------------
+   SECTION 12: AGENT VISUAL LANGUAGE - Agent States
+   ----------------------------------------------------------------------------- */
+
+/* Agent state base */
+.agent-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+/* Agent state: Idle */
+.agent-state--idle {
+  background: var(--muted);
+  border: 1px solid var(--border);
+}
+
+/* Agent state: Thinking */
+.agent-state--thinking {
+  background: var(--accent);
+  animation: pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.5);
+}
+
+/* Agent state: Working */
+.agent-state--working {
+  background: var(--accent);
+  animation: breathe 3s ease-in-out infinite;
+  border: 1px solid var(--border-accent);
+}
+
+/* Agent state: Success */
+.agent-state--success {
+  background: var(--status-success);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}
+
+@keyframes success-pulse {
+  0% {
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(34, 197, 94, 0.8);
+  }
+  100% {
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+  }
+}
+
+.agent-state--success-pulse {
+  background: var(--status-success);
+  animation: success-pulse 1s ease-in-out 2;
+}
+
+/* Agent state: Error */
+.agent-state--error {
+  background: var(--status-error);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
+
+.agent-state--error-shake {
+  background: var(--status-error);
+  animation: error-shake 0.4s ease-in-out;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+/* Agent state: Connecting */
+.agent-state--connecting {
+  background: transparent;
+  border: 2px dashed var(--accent);
+  animation: spin 2s linear infinite;
+}
+
+/* -----------------------------------------------------------------------------
+   SECTION 12: AGENT VISUAL LANGUAGE - Connection Lines
+   ----------------------------------------------------------------------------- */
+
+/* SVG connection line between agents */
+.agent-connection {
+  stroke: rgba(124, 58, 237, 0.4);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  fill: none;
+  animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -8;
+  }
+}
+
+/* Active connection - solid with glow */
+.agent-connection--active {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 4px rgba(124, 58, 237, 0.5));
+}
+
+/* Inactive connection */
+.agent-connection--inactive {
+  stroke: var(--border);
+  stroke-dasharray: 4 4;
+  animation: none;
+}
+
+/* -----------------------------------------------------------------------------
+   HEARTBEAT ANIMATION (used in Next Steps panel)
+   ----------------------------------------------------------------------------- */
+
+@keyframes heartbeat {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px 8px rgba(124, 58, 237, 0.2);
+  }
 }

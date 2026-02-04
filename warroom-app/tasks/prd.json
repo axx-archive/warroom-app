@@ -1,0 +1,315 @@
+{
+  "project": "War Room",
+  "branchName": "ralph/war-room-hybrid-mission-control",
+  "description": "War Room (Hybrid Mission Control) - A local webapp for generating/importing plans, staging lanes with git worktrees + Cursor windows, tracking status/artifacts, and merge choreography.",
+  "userStories": [
+    {
+      "id": "WR-001",
+      "title": "Verify canonical app root and build hygiene",
+      "description": "As AJ, I want a single canonical War Room Next.js app with working builds so development is deterministic.",
+      "acceptanceCriteria": [
+        "warroom-app/ is the single canonical Next.js app directory",
+        "npm run dev works from warroom-app/",
+        "npm run typecheck passes",
+        "npm run lint passes",
+        "npm run build passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Verified 2026-02-02: All criteria passing"
+    },
+    {
+      "id": "WR-002",
+      "title": "Fix Node/bin-link reliability",
+      "description": "As AJ, I want deterministic tsc/eslint/next execution so installs don't randomly break.",
+      "acceptanceCriteria": [
+        "Fresh npm install works and npm run typecheck|lint|build run successfully",
+        "If Node pinning is used: .nvmrc or .tool-versions exists",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Verified 2026-02-02: .nvmrc pins Node 25, engines field requires >=20"
+    },
+    {
+      "id": "WR-003",
+      "title": "Gitignore baseline for build artifacts",
+      "description": "As AJ, I want generated build artifacts ignored so I don't get accidental commits.",
+      "acceptanceCriteria": [
+        ".gitignore includes .next/, node_modules/, dist/, and logs",
+        "Repo has no tracked .next/ or node_modules/ files",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Verified 2026-02-02: Added /dist and /logs + *.log patterns"
+    },
+    {
+      "id": "WR-010",
+      "title": "Runs dashboard lists run folders",
+      "description": "As AJ, I want War Room to list runs from ~/.openclaw/workspace/warroom/runs/ so I can see what's happening.",
+      "acceptanceCriteria": [
+        "UI shows list of runs with slug, status, startMode, updatedAt",
+        "Clicking a run navigates to run detail view",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Verified 2026-02-03: /runs page lists runs, /runs/[slug] shows detail view"
+    },
+    {
+      "id": "WR-011",
+      "title": "Read and render run folder plan/status",
+      "description": "As AJ, I want the UI to render from plan.json and status.json so UI is always consistent with file truth.",
+      "acceptanceCriteria": [
+        "UI reads plan.json from disk (server-side) and renders plan summary",
+        "UI reads status.json from disk and renders lane completion status",
+        "Lane list shows each lane with its status",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Verified 2026-02-03: StatusJson supports both lanes object and lanesCompleted array formats"
+    },
+    {
+      "id": "WR-012",
+      "title": "Status update API for lane completion",
+      "description": "As AJ, I want to mark lanes complete in the UI so progress persists.",
+      "acceptanceCriteria": [
+        "API endpoint POST /api/runs/[slug]/status updates status.json",
+        "API updates lanesCompleted array, status field, and updatedAt timestamp",
+        "UI can toggle lane complete via checkbox or button",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Verified 2026-02-03: LaneStatusCard component with checkbox toggle, API updates both formats"
+    },
+    {
+      "id": "WR-020",
+      "title": "Generate plan stub writes plan.json and packets",
+      "description": "As AJ, I want Generate Plan to write plan.json + packets to a run directory.",
+      "acceptanceCriteria": [
+        "POST /api/generate-plan accepts goal and returns {plan, runDir}",
+        "Run folder created at ~/.openclaw/workspace/warroom/runs/<runSlug>/",
+        "plan.json written with correct schema",
+        "packets/*.md generated for each lane",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Verified 2026-02-03: Full implementation in place - API endpoint, plan-generator, run-manager, packet-templates"
+    },
+    {
+      "id": "WR-021",
+      "title": "Copy PM Prompt panel for manual kickoff",
+      "description": "As AJ, I want War Room to generate a copy/paste prompt for Claude Code PM so I can manually kick off planning.",
+      "acceptanceCriteria": [
+        "UI shows 'Copy PM Prompt' button on plan creation screen",
+        "Prompt includes /warroom-plan command reference",
+        "Prompt includes repoPath, goal, and constraints",
+        "Copy button copies text to clipboard",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Verified 2026-02-03: Copy PM Prompt button in PlanViewer with /warroom-plan reference, repo path, goal, constraints"
+    },
+    {
+      "id": "WR-022",
+      "title": "Import plan.json via paste",
+      "description": "As AJ, I want to paste a JSON plan into War Room to create a run.",
+      "acceptanceCriteria": [
+        "UI has 'Import Plan' button that opens a modal with textarea",
+        "Import accepts valid JSON and writes to new run folder",
+        "Packets auto-generated if not provided in JSON",
+        "Validation errors shown for invalid JSON",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Verified 2026-02-03: ImportPlanModal with validation, API endpoint, auto-generated lanes and packets"
+    },
+    {
+      "id": "WR-023",
+      "title": "Import run folder by path",
+      "description": "As AJ, I want to point War Room at an existing run folder and have it render.",
+      "acceptanceCriteria": [
+        "UI can open an existing runDir via path input",
+        "Existing plan.json and status.json are read and rendered",
+        "Error shown if path invalid or missing required files",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Verified 2026-02-03: ImportRunFolderModal with path input, API validates and reads files, navigates to run detail"
+    },
+    {
+      "id": "WR-030",
+      "title": "Stage lanes creates git worktrees",
+      "description": "As AJ, I want War Room to create git worktrees for each lane.",
+      "acceptanceCriteria": [
+        "API endpoint POST /api/runs/[slug]/stage creates worktrees",
+        "Worktrees created at lane.worktreePath for each lane",
+        "Branches created per lane if they don't exist",
+        "Errors handled and surfaced in API response",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Verified 2026-02-03: POST /api/runs/[slug]/stage creates worktrees, branches, and updates status.json"
+    },
+    {
+      "id": "WR-031",
+      "title": "Stage lanes opens Cursor windows",
+      "description": "As AJ, I want War Room to open Cursor windows per lane so it feels like a team.",
+      "acceptanceCriteria": [
+        "Stage API runs /usr/local/bin/cursor -n <worktreePath> for each lane",
+        "UI shows 'staged' status after successful staging",
+        "Errors from cursor command surfaced appropriately",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Verified 2026-02-03: Stage API opens Cursor windows with -n flag, tracks cursorOpened/cursorErrors in response"
+    },
+    {
+      "id": "WR-032",
+      "title": "Stage lanes writes WARROOM_PACKET.md to worktrees",
+      "description": "As AJ, I want each lane worktree to contain a ready-to-paste packet file.",
+      "acceptanceCriteria": [
+        "WARROOM_PACKET.md written to root of each worktree",
+        "Content matches corresponding packet in run folder packets/",
+        "File written during stage operation",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "Verified 2026-02-03: Stage API writes WARROOM_PACKET.md from packets/<laneId>.md to worktree root"
+    },
+    {
+      "id": "WR-033",
+      "title": "Optional autonomy toggle for skip-permissions",
+      "description": "As AJ, I want to toggle 'skip permissions prompts' so I don't click approvals constantly.",
+      "acceptanceCriteria": [
+        "UI toggle for autonomy mode on run/lane view",
+        "Toggle sets lane.autonomy.dangerouslySkipPermissions in status",
+        "Packets include instruction to run claude --dangerously-skip-permissions when enabled",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Verified 2026-02-03: Autonomy toggle in LaneStatusCard, status API handles autonomy, packets include skip-permissions instruction"
+    },
+    {
+      "id": "WR-040",
+      "title": "Foundation lane enforcement in plan generation",
+      "description": "As AJ, I want the plan generator to enforce a foundation lane for scaffolding tasks so later lanes don't create conflicting app structure.",
+      "acceptanceCriteria": [
+        "Plan generator detects if goal involves scaffolding/foundation changes",
+        "If scaffolding needed, lane-1 is marked as foundation lane",
+        "Non-foundation lanes include dependency on foundation lane",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Verified 2026-02-03: FOUNDATION_KEYWORDS array detects scaffolding goals, lane-1 gets foundation:true flag, all other lanes depend on lane-1"
+    },
+    {
+      "id": "WR-041",
+      "title": "Allowed paths in packets for lane guardrails",
+      "description": "As AJ, I want packets to include Allowed Paths so each lane stays in its lane.",
+      "acceptanceCriteria": [
+        "Packets include 'Allowed Paths' section listing permitted directories/files",
+        "Packets include rule: 'git diff --stat must stay within allowed paths'",
+        "Plan generator assigns non-overlapping paths to parallel lanes",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "Verified 2026-02-03: AGENT_ALLOWED_PATHS per agent, DEVELOPER_PATH_SUBDIVISIONS for parallel devs, packet guardrail rule"
+    },
+    {
+      "id": "WR-042",
+      "title": "Hard ignore of .next/ in lane commits",
+      "description": "As AJ, I want to prevent .next/ from being committed so merges stay clean.",
+      "acceptanceCriteria": [
+        ".next/ is in .gitignore",
+        "Packets include explicit warning: 'Never commit .next/ or other generated artifacts'",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Verified 2026-02-03: .next/ in .gitignore, packet templates include explicit warning about generated artifacts"
+    },
+    {
+      "id": "WR-060",
+      "title": "Merge screen shows lane readiness",
+      "description": "As AJ, I want War Room to show which lanes have commits and are ready to merge.",
+      "acceptanceCriteria": [
+        "Merge view shows per-lane commit count ahead of integration branch",
+        "UI highlights potential conflict risk based on file overlap heuristic",
+        "Lanes marked complete are shown as merge candidates",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": "Verified 2026-02-03: MergeView component shows commit counts, file overlap risk, and merge candidates"
+    },
+    {
+      "id": "WR-061",
+      "title": "Propose merge plan via PM prompt",
+      "description": "As AJ, I want War Room to generate a merge order proposal for review.",
+      "acceptanceCriteria": [
+        "UI button generates merge proposal based on lane dependencies and conflicts",
+        "Proposal includes merge order and method (merge/rebase/squash)",
+        "Proposal stored in run artifacts as merge-proposal.json",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": "Verified 2026-02-03: Generate Merge Proposal button, topological sort, merge-proposal.json storage, Copy PM Prompt"
+    },
+    {
+      "id": "WR-062",
+      "title": "Execute merge with checkpoints",
+      "description": "As AJ, I want War Room to execute merges into integration branch with checkpoints.",
+      "acceptanceCriteria": [
+        "API endpoint POST /api/runs/[slug]/merge executes merges in proposed order",
+        "On conflict: merge stops and returns conflict info",
+        "UI shows 'Open in Cursor' for manual conflict resolution",
+        "Merge to main requires explicit confirmation checkbox",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": true,
+      "notes": "Verified 2026-02-03: POST /api/runs/[slug]/merge endpoint, conflict detection, Open in Cursor button, confirmation checkbox"
+    },
+    {
+      "id": "WR-070",
+      "title": "Improve War Room UI clarity with next steps",
+      "description": "As AJ, I want the UI to clearly explain what War Room does vs what I do next.",
+      "acceptanceCriteria": [
+        "Plan viewer shows 'Next steps' checklist after plan generation",
+        "'Copy PM Prompt' button is prominently displayed for manual mode",
+        "'Stage Lanes' button explains: opens Cursor windows and writes packets",
+        "Each action has brief description of what will happen",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 21,
+      "passes": true,
+      "notes": "Verified 2026-02-03: Next Steps panel with two-column layout, Stage Lanes button with description, numbered checklist"
+    }
+  ]
+}
