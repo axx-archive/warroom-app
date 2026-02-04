@@ -378,3 +378,22 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Main branch push requires human confirmation - use `isProtectedMainBranch()` to check protected names
   - Push status UI: badges on lane cards (pushing spinner, success check, failed X) and status panel in MergeView
 ---
+
+## 2026-02-04 - US-309: One-click Start Mission
+- Implemented "Start Mission" button for autonomous orchestration of all lanes
+- Files changed:
+  - `src/app/api/runs/[slug]/start-mission/route.ts` - New API endpoint for mission control (POST/GET/DELETE)
+  - `src/lib/websocket/types.ts` - Added `MissionPhase` type and `MissionProgressEvent` interface
+  - `src/lib/websocket/server.ts` - Added `emitMissionProgress()` function for WebSocket events
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added `emitMissionProgressUpdate()` method, integrated progress emissions throughout lifecycle
+  - `src/hooks/useWebSocket.ts` - Added `onMissionProgress` callback and `mission-progress` event handling
+  - `src/components/RunDetailClient.tsx` - Added Start/Stop Mission buttons, mission progress display, and notifications
+- **Learnings for future iterations:**
+  - Mission phases: launching (0-25%), running (25-75%), committing (75-85%), merging (85-100%), complete, failed, stopped
+  - FileWatcher.start() takes no args - use addLane(laneId, worktreePath) for each lane first
+  - Mission progress bar shows "Phase X/4: Description..." for clear feedback
+  - MissionState interface tracks: isRunning, phase, message, overallProgress, lane counts
+  - Use separate notification system for mission events vs merge notifications to avoid confusion
+  - Check mission status on mount via GET to show correct state if page refreshes during mission
+  - Stop Mission button calls DELETE on the endpoint and resets run status to "staged"
+---
