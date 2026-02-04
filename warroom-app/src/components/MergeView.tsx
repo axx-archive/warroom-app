@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { LaneStatus, MergeMethod, MergeProposal } from "@/lib/plan-schema";
+
+// Imperative handle for parent to trigger refresh
+export interface MergeViewHandle {
+  refreshProposal: () => Promise<void>;
+}
 
 interface LaneMergeInfo {
   laneId: string;
@@ -64,7 +69,7 @@ const RISK_CONFIG = {
   high: { color: "var(--status-error)", borderColor: "rgba(239, 68, 68, 0.3)" },
 };
 
-export function MergeView({ slug }: MergeViewProps) {
+export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function MergeView({ slug }, ref) {
   const [mergeInfo, setMergeInfo] = useState<MergeInfoResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +86,14 @@ export function MergeView({ slug }: MergeViewProps) {
   const [confirmMergeToMain, setConfirmMergeToMain] = useState(false);
   const [mergedToMain, setMergedToMain] = useState(false);
   const [launchMergeStatus, setLaunchMergeStatus] = useState<"idle" | "copied" | "error">("idle");
+
+  // Expose refresh function to parent via ref
+  useImperativeHandle(ref, () => ({
+    refreshProposal: async () => {
+      await fetchExistingProposal();
+      await fetchMergeInfo();
+    },
+  }));
 
   const fetchMergeInfo = useCallback(async () => {
     setLoading(true);
@@ -437,7 +450,7 @@ export function MergeView({ slug }: MergeViewProps) {
       </div>
     </div>
   );
-}
+});
 
 function LaneMergeCard({ lane }: { lane: LaneMergeInfo }) {
   const [expanded, setExpanded] = useState(false);
