@@ -13,6 +13,7 @@ import { MissionPhase, MissionProgressEvent } from "@/lib/websocket/types";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { AddLaneModal } from "./AddLaneModal";
 import { HistoryTab } from "./HistoryTab";
+import { TimelineView } from "./TimelineView";
 
 interface RunDetailClientProps {
   lanes: Lane[];
@@ -1035,6 +1036,9 @@ export function RunDetailClient({
 
       {/* History Tab */}
       <HistoryTab slug={slug} laneIds={activityLaneIds} />
+
+      {/* Progress Timeline View */}
+      <TimelineView slug={slug} lanes={currentLanes} laneStates={laneStates} />
 
       {/* Auto-merge proposal notification */}
       {mergeNotification && (
