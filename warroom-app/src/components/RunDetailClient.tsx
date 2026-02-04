@@ -7,6 +7,8 @@ import { MergeView, MergeViewHandle } from "./MergeView";
 import { useRealtimeStatus, LaneState } from "@/hooks/useRealtimeStatus";
 import { ConnectionStatusIndicator } from "./ConnectionStatusIndicator";
 import { DiffPreviewModal } from "./DiffPreviewModal";
+import { ActivityFeed } from "./ActivityFeed";
+import { useActivityFeed } from "@/hooks/useActivityFeed";
 
 interface RunDetailClientProps {
   lanes: Lane[];
@@ -53,6 +55,17 @@ export function RunDetailClient({
   slug,
   initialStates,
 }: RunDetailClientProps) {
+  // Activity feed state
+  const {
+    events: activityEvents,
+    filter: activityFilter,
+    setFilter: setActivityFilter,
+    addLaneActivityEvent,
+    addStatusChangeEvent,
+    laneIds: activityLaneIds,
+    eventCount: activityEventCount,
+  } = useActivityFeed();
+
   // Use real-time status hook (WebSocket with polling fallback)
   const {
     laneStates,
@@ -66,6 +79,8 @@ export function RunDetailClient({
     slug,
     initialLaneStates: initialStates,
     enabled: true,
+    onLaneActivity: addLaneActivityEvent,
+    onLaneStatusChange: addStatusChangeEvent,
   });
 
   // Key to force MergeView refresh
@@ -580,6 +595,15 @@ export function RunDetailClient({
           onPreviewChanges={handlePreviewChanges}
         />
       </div>
+
+      {/* Activity Feed */}
+      <ActivityFeed
+        events={activityEvents}
+        laneIds={activityLaneIds}
+        filter={activityFilter}
+        onFilterChange={setActivityFilter}
+        eventCount={activityEventCount}
+      />
 
       {/* Auto-merge proposal notification */}
       {mergeNotification && (
