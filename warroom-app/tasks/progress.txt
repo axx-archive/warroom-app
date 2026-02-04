@@ -450,3 +450,24 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Format cost display: <$0.001 for very small amounts, $0.00X for cents, $X.XX for dollars
   - Format token counts: 1.2K for thousands, 1.5M for millions
 ---
+
+## 2026-02-04 - US-404: Plan templates
+- Implemented template save/load functionality for reusing plan configurations
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `PlanTemplate` and `TemplateLane` interfaces
+  - `src/app/api/templates/route.ts` - New API endpoint for listing and creating templates
+  - `src/app/api/templates/[id]/route.ts` - New API endpoint for getting and deleting templates
+  - `src/components/SaveAsTemplateModal.tsx` - New modal for saving a plan as template
+  - `src/components/TemplatePickerModal.tsx` - New modal with template list and preview pane
+  - `src/components/RunSidebarActions.tsx` - New sidebar component with "Save as Template" button
+  - `src/app/runs/[slug]/page.tsx` - Added RunSidebarActions to run detail sidebar
+  - `src/app/page.tsx` - Added "New from Template" button in header and quick actions
+  - `src/components/PlanGenerator.tsx` - Updated to accept and display selected template
+- **Learnings for future iterations:**
+  - Templates stored in `~/.openclaw/workspace/warroom/templates/` as JSON files
+  - `TemplateLane` strips repo-specific paths (worktreePath, branch) - only keeps laneId, agent, dependsOn, autonomy, verify
+  - Template selection pre-fills PlanGenerator with description, maxLanes, and autonomy settings
+  - Use UUID for template IDs, store with `.json` extension
+  - Template picker shows split view: list on left, preview on right
+  - Modal pattern: flex layout with overflow-hidden parent, overflow-y-auto children for scrollable panes
+---
