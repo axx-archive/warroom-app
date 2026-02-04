@@ -12,6 +12,7 @@ import { useActivityFeed } from "@/hooks/useActivityFeed";
 import { MissionPhase, MissionProgressEvent } from "@/lib/websocket/types";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { AddLaneModal } from "./AddLaneModal";
+import { HistoryTab } from "./HistoryTab";
 
 interface RunDetailClientProps {
   lanes: Lane[];
@@ -1031,6 +1032,9 @@ export function RunDetailClient({
         onFilterChange={setActivityFilter}
         eventCount={activityEventCount}
       />
+
+      {/* History Tab */}
+      <HistoryTab slug={slug} laneIds={activityLaneIds} />
 
       {/* Auto-merge proposal notification */}
       {mergeNotification && (

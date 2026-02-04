@@ -4,6 +4,8 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { logLaneLaunched, logLaneStatusChange } from "@/lib/history";
+import { LaneStatus } from "@/lib/plan-schema";
 
 const execAsync = promisify(exec);
 
@@ -365,6 +367,7 @@ export async function POST(
 
     // Update status.json to mark lane as staged and update run status
     const statusPath = path.join(runDir, "status.json");
+    let previousStatus: LaneStatus = "pending";
     try {
       let statusJson: Record<string, unknown> = {};
       try {
@@ -390,6 +393,10 @@ export async function POST(
         lanesObj[laneId] = {};
       }
       lanesObj[laneId].staged = true;
+
+      // Track previous status for history logging
+      previousStatus = (lanesObj[laneId].status as LaneStatus) || "pending";
+
       if (!lanesObj[laneId].status || lanesObj[laneId].status === "pending") {
         lanesObj[laneId].status = "in_progress";
       }
@@ -408,6 +415,14 @@ export async function POST(
       statusJson.updatedAt = new Date().toISOString();
 
       await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
+
+      // Log lane launched event to history
+      logLaneLaunched(runDir, laneId, launchMode, skipPermissions ?? false);
+
+      // Log status change if status changed
+      if (previousStatus !== "in_progress") {
+        logLaneStatusChange(runDir, laneId, previousStatus, "in_progress", "lane launched");
+      }
     } catch (error) {
       console.error("Failed to update status.json:", error);
       // Non-fatal - continue

@@ -16,6 +16,7 @@ import {
   LaneVerify,
 } from "@/lib/plan-schema";
 import { generatePacketMarkdown } from "@/lib/packet-templates";
+import { logLaneAdded } from "@/lib/history";
 
 const execAsync = promisify(exec);
 
@@ -297,6 +298,9 @@ export async function POST(
     status.updatedAt = new Date().toISOString();
 
     await fs.writeFile(statusPath, JSON.stringify(status, null, 2));
+
+    // Log lane added to history
+    logLaneAdded(runDir, body.laneId, body.agent, body.dependsOn || []);
 
     const response: AddLaneResponse = {
       success: true,

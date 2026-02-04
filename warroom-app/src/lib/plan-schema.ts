@@ -314,3 +314,232 @@ export interface PlanTemplate {
   // Tags for categorization
   tags?: string[];
 }
+
+// History/Audit Log Event Types
+export type HistoryEventType =
+  | "lane_launched"
+  | "lane_status_change"
+  | "commit"
+  | "merge_started"
+  | "merge_lane_complete"
+  | "merge_complete"
+  | "merge_conflict"
+  | "merge_failed"
+  | "push_started"
+  | "push_complete"
+  | "push_failed"
+  | "error"
+  | "retry_scheduled"
+  | "retry_started"
+  | "mission_started"
+  | "mission_stopped"
+  | "mission_complete"
+  | "lane_reset"
+  | "lane_added";
+
+// Base history event
+export interface HistoryEventBase {
+  // Unique event ID (UUID)
+  id: string;
+  // Event type
+  type: HistoryEventType;
+  // Timestamp of the event (ISO-8601)
+  timestamp: string;
+  // Lane ID if event is lane-specific
+  laneId?: string;
+  // Human-readable message describing the event
+  message: string;
+}
+
+// Lane launched event
+export interface LaneLaunchedEvent extends HistoryEventBase {
+  type: "lane_launched";
+  details: {
+    launchMode: LaunchMode;
+    autonomy: boolean;
+  };
+}
+
+// Lane status change event
+export interface LaneStatusChangeEvent extends HistoryEventBase {
+  type: "lane_status_change";
+  details: {
+    previousStatus: LaneStatus;
+    newStatus: LaneStatus;
+    reason?: string; // e.g., "auto-completion detected", "user marked complete"
+  };
+}
+
+// Commit event
+export interface CommitEvent extends HistoryEventBase {
+  type: "commit";
+  details: {
+    commitHash: string;
+    commitMessage: string;
+    filesChanged: number;
+    autoCommit: boolean; // True if committed by orchestrator
+  };
+}
+
+// Merge events
+export interface MergeStartedEvent extends HistoryEventBase {
+  type: "merge_started";
+  details: {
+    lanesToMerge: string[];
+    integrationBranch: string;
+  };
+}
+
+export interface MergeLaneCompleteEvent extends HistoryEventBase {
+  type: "merge_lane_complete";
+  details: {
+    mergedLane: string;
+    mergedLanes: string[];
+    remainingLanes: string[];
+  };
+}
+
+export interface MergeCompleteEvent extends HistoryEventBase {
+  type: "merge_complete";
+  details: {
+    mergedLanes: string[];
+    integrationBranch: string;
+  };
+}
+
+export interface MergeConflictEvent extends HistoryEventBase {
+  type: "merge_conflict";
+  details: {
+    conflictingLane: string;
+    conflictingFiles: string[];
+  };
+}
+
+export interface MergeFailedEvent extends HistoryEventBase {
+  type: "merge_failed";
+  details: {
+    failedLane?: string;
+    error: string;
+  };
+}
+
+// Push events
+export interface PushStartedEvent extends HistoryEventBase {
+  type: "push_started";
+  details: {
+    branch: string;
+    pushType: "lane" | "integration" | "main";
+  };
+}
+
+export interface PushCompleteEvent extends HistoryEventBase {
+  type: "push_complete";
+  details: {
+    branch: string;
+    pushType: "lane" | "integration" | "main";
+  };
+}
+
+export interface PushFailedEvent extends HistoryEventBase {
+  type: "push_failed";
+  details: {
+    branch: string;
+    pushType: "lane" | "integration" | "main";
+    error: string;
+    errorType: "auth" | "protected" | "rejected" | "network" | "unknown";
+  };
+}
+
+// Error event
+export interface ErrorEvent extends HistoryEventBase {
+  type: "error";
+  details: {
+    errorType: string;
+    error: string;
+    stack?: string;
+  };
+}
+
+// Retry events
+export interface RetryScheduledEvent extends HistoryEventBase {
+  type: "retry_scheduled";
+  details: {
+    attempt: number;
+    maxAttempts: number;
+    scheduledFor: string; // ISO-8601
+    backoffSeconds: number;
+  };
+}
+
+export interface RetryStartedEvent extends HistoryEventBase {
+  type: "retry_started";
+  details: {
+    attempt: number;
+    maxAttempts: number;
+  };
+}
+
+// Mission events
+export interface MissionStartedEvent extends HistoryEventBase {
+  type: "mission_started";
+  details: {
+    totalLanes: number;
+    launchMode: LaunchMode;
+  };
+}
+
+export interface MissionStoppedEvent extends HistoryEventBase {
+  type: "mission_stopped";
+  details: {
+    completedLanes: number;
+    totalLanes: number;
+    reason: string; // "user_stopped", "error", etc.
+  };
+}
+
+export interface MissionCompleteEvent extends HistoryEventBase {
+  type: "mission_complete";
+  details: {
+    completedLanes: number;
+    totalLanes: number;
+    duration: number; // in seconds
+  };
+}
+
+// Lane modification events
+export interface LaneResetEvent extends HistoryEventBase {
+  type: "lane_reset";
+  details: {
+    previousStatus: LaneStatus;
+  };
+}
+
+export interface LaneAddedEvent extends HistoryEventBase {
+  type: "lane_added";
+  details: {
+    agent: AgentType;
+    dependencies: string[];
+  };
+}
+
+// Union type of all history events
+export type HistoryEvent =
+  | LaneLaunchedEvent
+  | LaneStatusChangeEvent
+  | CommitEvent
+  | MergeStartedEvent
+  | MergeLaneCompleteEvent
+  | MergeCompleteEvent
+  | MergeConflictEvent
+  | MergeFailedEvent
+  | PushStartedEvent
+  | PushCompleteEvent
+  | PushFailedEvent
+  | ErrorEvent
+  | RetryScheduledEvent
+  | RetryStartedEvent
+  | MissionStartedEvent
+  | MissionStoppedEvent
+  | MissionCompleteEvent
+  | LaneResetEvent
+  | LaneAddedEvent;

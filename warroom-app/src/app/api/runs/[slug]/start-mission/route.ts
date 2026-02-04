@@ -8,6 +8,7 @@ import os from "os";
 import { startRun, getOrchestratorStatus, stopRun } from "@/lib/orchestrator";
 import { StatusJson, WarRoomPlan } from "@/lib/plan-schema";
 import { getFileWatcher } from "@/lib/file-watcher";
+import { logMissionStarted, logMissionStopped } from "@/lib/history";
 
 export async function POST(
   request: Request,
@@ -82,6 +83,9 @@ export async function POST(
 
     // Start the mission via orchestrator
     const result = await startRun(slug);
+
+    // Log mission started to history
+    logMissionStarted(runDir, plan.lanes.length, "terminal");
 
     if (!result.success) {
       // Revert status if start failed
@@ -174,15 +178,29 @@ export async function DELETE(
     // Update status.json
     const runDir = path.join(os.homedir(), ".openclaw/workspace/warroom/runs", slug);
     const statusPath = path.join(runDir, "status.json");
+    let completedCount = 0;
+    let totalCount = 0;
     try {
       const statusContent = await fs.readFile(statusPath, "utf-8");
       const statusJson: StatusJson = JSON.parse(statusContent);
+
+      // Count completed lanes for logging
+      if (statusJson.lanes) {
+        totalCount = Object.keys(statusJson.lanes).length;
+        completedCount = Object.values(statusJson.lanes).filter(
+          (lane) => lane.status === "complete"
+        ).length;
+      }
+
       statusJson.status = "staged"; // Revert to staged so mission can be restarted
       statusJson.updatedAt = new Date().toISOString();
       await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
     } catch {
       // Ignore status update errors
     }
+
+    // Log mission stopped to history
+    logMissionStopped(runDir, completedCount, totalCount, "user_stopped");
 
     return NextResponse.json({
       success: true,

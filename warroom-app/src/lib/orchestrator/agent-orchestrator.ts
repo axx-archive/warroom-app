@@ -6,7 +6,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
 import readline from "readline";
-import { LaneStatus, WarRoomPlan, StatusJson, Lane, LaunchMode, RetryState, RetryAttempt, MergeState, PushState, AutoPushOptions } from "../plan-schema";
+import { LaneStatus, WarRoomPlan, StatusJson, Lane, LaunchMode, RetryState, RetryAttempt, MergeState, PushState } from "../plan-schema";
 import { emitLaneStatusChange, emitLaneActivity, emitMergeProgress, emitMergeReady, emitRunComplete, emitMissionProgress } from "../websocket/server";
 import { MissionPhase } from "../websocket/types";
 import {
@@ -31,6 +31,21 @@ import {
   pushLaneBranch,
   pushIntegrationBranch,
 } from "./git-operations";
+import {
+  logLaneStatusChange,
+  logCommit,
+  logMergeStarted,
+  logMergeComplete,
+  logMergeConflict,
+  logMergeFailed,
+  logPushStarted,
+  logPushComplete,
+  logPushFailed,
+  logError,
+  logRetryScheduled,
+  logRetryStarted,
+  logMissionComplete,
+} from "../history";
 
 // Retry configuration constants
 const MAX_RETRY_ATTEMPTS = 3;
@@ -122,6 +137,11 @@ class AgentOrchestrator {
 
     process.on("SIGTERM", () => shutdown("SIGTERM"));
     process.on("SIGINT", () => shutdown("SIGINT"));
+  }
+
+  // Get run directory path
+  private getRunDir(runSlug: string): string {
+    return path.join(os.homedir(), ".openclaw/workspace/warroom/runs", runSlug);
   }
 
   // Emit mission progress event
@@ -558,6 +578,16 @@ class AgentOrchestrator {
 
       console.log(`[AgentOrchestrator] Lane ${lane.laneId} failed (attempt ${currentAttempt + 1}/${MAX_RETRY_ATTEMPTS}). Retrying in ${backoffMs / 1000}s...`);
 
+      // Log retry scheduled to history
+      logRetryScheduled(
+        this.getRunDir(runSlug),
+        lane.laneId,
+        retryState.attempt,
+        MAX_RETRY_ATTEMPTS,
+        nextRetryAt.toISOString(),
+        backoffMs / 1000
+      );
+
       // Emit lane activity event for retry scheduling
       emitLaneActivity({
         runSlug,
@@ -578,6 +608,9 @@ class AgentOrchestrator {
       // Schedule retry
       laneState.retryTimer = setTimeout(async () => {
         console.log(`[AgentOrchestrator] Retrying lane ${lane.laneId} (attempt ${retryState.attempt}/${MAX_RETRY_ATTEMPTS})...`);
+
+        // Log retry started to history
+        logRetryStarted(this.getRunDir(runSlug), lane.laneId, retryState.attempt, MAX_RETRY_ATTEMPTS);
 
         retryState.status = "retrying";
         retryState.nextRetryAt = undefined;
@@ -632,6 +665,18 @@ class AgentOrchestrator {
     laneState.error = reason;
 
     console.log(`[AgentOrchestrator] Lane ${lane.laneId} permanently failed: ${reason}`);
+
+    // Log status change to history
+    logLaneStatusChange(
+      this.getRunDir(runSlug),
+      lane.laneId,
+      "in_progress",
+      "failed",
+      reason
+    );
+
+    // Log error to history
+    logError(this.getRunDir(runSlug), "lane_failed", reason, undefined, lane.laneId);
 
     // Emit status change event
     emitLaneStatusChange({
@@ -717,6 +762,16 @@ class AgentOrchestrator {
       if (commitResult.committed) {
         console.log(`[AgentOrchestrator] Auto-committed lane ${laneId}: ${commitResult.commitHash}`);
 
+        // Log commit to history
+        logCommit(
+          this.getRunDir(runSlug),
+          laneId,
+          commitResult.commitHash || "unknown",
+          commitResult.commitMessage || "Auto-commit lane work",
+          commitResult.filesChanged || 0,
+          true // autoCommit
+        );
+
         // Emit commit activity event
         emitLaneActivity({
           runSlug,
@@ -739,6 +794,15 @@ class AgentOrchestrator {
       // Mark lane as complete
       laneState.status = "complete";
 
+      // Log status change to history
+      logLaneStatusChange(
+        this.getRunDir(runSlug),
+        laneId,
+        "in_progress",
+        "complete",
+        "Agent work completed successfully"
+      );
+
       // Emit status change event
       emitLaneStatusChange({
         runSlug,
@@ -753,6 +817,15 @@ class AgentOrchestrator {
     } else {
       // Commit failed - log but still mark as complete since the work itself succeeded
       console.error(`[AgentOrchestrator] Auto-commit failed for lane ${laneId}: ${commitResult.error}`);
+
+      // Log error to history
+      logError(
+        this.getRunDir(runSlug),
+        "auto_commit_failed",
+        commitResult.error || "Unknown commit error",
+        undefined,
+        laneId
+      );
 
       // Emit activity event about commit failure
       emitLaneActivity({
@@ -797,6 +870,9 @@ class AgentOrchestrator {
 
       console.log(`[AgentOrchestrator] Auto-pushing lane branch ${lane.branch}`);
 
+      // Log push started to history
+      logPushStarted(this.getRunDir(runSlug), lane.branch, "lane", lane.laneId);
+
       // Emit push started activity
       emitLaneActivity({
         runSlug,
@@ -826,6 +902,9 @@ class AgentOrchestrator {
       if (pushResult.success) {
         console.log(`[AgentOrchestrator] Successfully pushed lane branch ${lane.branch}`);
 
+        // Log push complete to history
+        logPushComplete(this.getRunDir(runSlug), lane.branch, "lane", lane.laneId);
+
         emitLaneActivity({
           runSlug,
           laneId: lane.laneId,
@@ -839,6 +918,16 @@ class AgentOrchestrator {
         });
       } else {
         console.error(`[AgentOrchestrator] Failed to push lane branch ${lane.branch}: ${pushResult.error}`);
+
+        // Log push failed to history
+        logPushFailed(
+          this.getRunDir(runSlug),
+          lane.branch,
+          "lane",
+          pushResult.error || "Unknown push error",
+          pushResult.errorType || "unknown",
+          lane.laneId
+        );
 
         emitLaneActivity({
           runSlug,
@@ -903,6 +992,9 @@ class AgentOrchestrator {
 
       console.log(`[AgentOrchestrator] Auto-pushing integration branch ${integrationBranch}`);
 
+      // Log push started to history
+      logPushStarted(this.getRunDir(runSlug), integrationBranch, "integration");
+
       // Emit push started event
       emitMergeProgress({
         runSlug,
@@ -928,6 +1020,9 @@ class AgentOrchestrator {
       if (pushResult.success) {
         console.log(`[AgentOrchestrator] Successfully pushed integration branch ${integrationBranch}`);
 
+        // Log push complete to history
+        logPushComplete(this.getRunDir(runSlug), integrationBranch, "integration");
+
         emitMergeProgress({
           runSlug,
           status: "pushed",
@@ -937,6 +1032,15 @@ class AgentOrchestrator {
         });
       } else {
         console.error(`[AgentOrchestrator] Failed to push integration branch: ${pushResult.error}`);
+
+        // Log push failed to history
+        logPushFailed(
+          this.getRunDir(runSlug),
+          integrationBranch,
+          "integration",
+          pushResult.error || "Unknown push error",
+          pushResult.errorType || "unknown"
+        );
 
         emitMergeProgress({
           runSlug,
@@ -1078,6 +1182,12 @@ class AgentOrchestrator {
 
     console.log(`[AgentOrchestrator] Starting auto-merge for run ${runSlug}`);
 
+    // Get lane IDs to merge
+    const laneIdsToMerge = statusJson.lanesCompleted || [];
+
+    // Log merge started to history
+    logMergeStarted(this.getRunDir(runSlug), laneIdsToMerge, plan.integrationBranch);
+
     // Emit merge started event
     emitMergeProgress({
       runSlug,
@@ -1112,6 +1222,9 @@ class AgentOrchestrator {
           updatedAt: new Date().toISOString(),
         };
 
+        // Log merge complete to history
+        logMergeComplete(this.getRunDir(runSlug), mergeResult.mergedLanes, plan.integrationBranch);
+
         // Update status.json with merge state
         await this.updateMergeStateInStatusJson(runSlug, runState.mergeState);
 
@@ -1131,6 +1244,18 @@ class AgentOrchestrator {
         runState.stoppedAt = new Date().toISOString();
         console.log(`[AgentOrchestrator] Auto-merge complete for run ${runSlug}. Awaiting human gate for main merge.`);
 
+        // Calculate mission duration
+        const startedAt = runState.startedAt ? new Date(runState.startedAt).getTime() : Date.now();
+        const duration = Math.round((Date.now() - startedAt) / 1000);
+
+        // Log mission complete to history
+        logMissionComplete(
+          this.getRunDir(runSlug),
+          mergeResult.mergedLanes.length,
+          mergeResult.mergedLanes.length,
+          duration
+        );
+
         // Emit mission progress: complete
         this.emitMissionProgressUpdate(runSlug, "complete", "Mission complete! All lanes merged to integration branch.");
 
@@ -1143,6 +1268,13 @@ class AgentOrchestrator {
       } else if (mergeResult.conflict) {
         // Conflict detected - stop and mark lane as conflict
         console.log(`[AgentOrchestrator] Merge conflict detected in lane ${mergeResult.conflict.laneId}`);
+
+        // Log merge conflict to history
+        logMergeConflict(
+          this.getRunDir(runSlug),
+          mergeResult.conflict.laneId,
+          mergeResult.conflict.conflictingFiles
+        );
 
         runState.mergeState = {
           status: "conflict",
@@ -1190,6 +1322,9 @@ class AgentOrchestrator {
         // Non-conflict failure
         console.error(`[AgentOrchestrator] Auto-merge failed for run ${runSlug}: ${mergeResult.error}`);
 
+        // Log merge failed to history
+        logMergeFailed(this.getRunDir(runSlug), mergeResult.error || "Unknown merge error");
+
         runState.mergeState = {
           status: "failed",
           mergedLanes: mergeResult.mergedLanes,
@@ -1210,6 +1345,9 @@ class AgentOrchestrator {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`[AgentOrchestrator] Auto-merge error for run ${runSlug}:`, error);
+
+      // Log merge failed to history
+      logMergeFailed(this.getRunDir(runSlug), errorMessage);
 
       runState.mergeState = {
         status: "failed",

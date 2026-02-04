@@ -7,8 +7,9 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { StatusJson } from "@/lib/plan-schema";
+import { StatusJson, LaneStatus } from "@/lib/plan-schema";
 import { emitLaneStatusChange } from "@/lib/websocket";
+import { logLaneReset } from "@/lib/history";
 
 const execAsync = promisify(exec);
 
@@ -163,6 +164,9 @@ export async function POST(
         timestamp: new Date().toISOString(),
       });
     }
+
+    // Log lane reset to history
+    logLaneReset(runDir, laneId, previousStatus as LaneStatus);
 
     return NextResponse.json({
       success: true,
