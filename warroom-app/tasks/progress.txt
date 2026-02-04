@@ -177,3 +177,19 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Modal sizing: use max-width/height with flex layout for responsive sizing
   - Pass callbacks through component hierarchy: LaneStatusCard -> LanesManager -> RunDetailClient
 ---
+
+## 2026-02-04 - US-205: Lane activity feed
+- Implemented collapsible activity feed panel for live event monitoring
+- Files changed:
+  - `src/hooks/useActivityFeed.ts` - New hook for managing activity events with max 100 events, filter support
+  - `src/components/ActivityFeed.tsx` - New collapsible panel component with event display, filtering, auto-scroll
+  - `src/hooks/useRealtimeStatus.ts` - Added onLaneActivity and onLaneStatusChange callback props for forwarding events
+  - `src/components/RunDetailClient.tsx` - Integrated ActivityFeed with useActivityFeed hook
+- **Learnings for future iterations:**
+  - WebSocket event callbacks should use refs to avoid stale closures in event handlers
+  - For functions called from hooks before they're defined (circular), use a ref pattern: `fetchStatusRef.current()`
+  - Event pruning pattern: use array slice to keep newest events and limit array size (prepend new, slice to max)
+  - Auto-scroll with pause on hover: track mouse enter/leave, skip scroll when paused
+  - Collapsible panel pattern: header is clickable toggle, stopPropagation for interactive elements inside header
+  - Event type icons use different colors for visual distinction: green (created), orange (modified), red (deleted), cyan (commit), magenta (status)
+---
