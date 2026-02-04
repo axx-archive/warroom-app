@@ -11,7 +11,7 @@ const MAX_EVENTS = 100;
 export interface ActivityEvent {
   id: string;
   laneId: string;
-  type: "file-created" | "file-modified" | "file-deleted" | "commit" | "status-change" | "output";
+  type: "file-created" | "file-modified" | "file-deleted" | "commit" | "status-change" | "output" | "retry" | "status";
   timestamp: string;
   // For file events
   path?: string;
@@ -20,10 +20,15 @@ export interface ActivityEvent {
   // For status change events
   previousStatus?: LaneStatus;
   newStatus?: LaneStatus;
-  // For output events
+  // For output and retry events
   details?: {
     stream?: "stdout" | "stderr";
     line?: string;
+    // Retry event details
+    retryAttempt?: number;
+    maxAttempts?: number;
+    nextRetryAt?: string;
+    backoffSeconds?: number;
   };
 }
 

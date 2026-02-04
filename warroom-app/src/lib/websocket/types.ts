@@ -23,12 +23,17 @@ export interface ClientToServerEvents {
 export interface LaneActivityEvent {
   runSlug: string;
   laneId: string;
-  type: "file-created" | "file-modified" | "file-deleted" | "commit" | "output";
+  type: "file-created" | "file-modified" | "file-deleted" | "commit" | "output" | "retry" | "status";
   path?: string;
   message?: string;
   details?: {
     stream?: "stdout" | "stderr";
     line?: string;
+    // Retry event details
+    retryAttempt?: number;
+    maxAttempts?: number;
+    nextRetryAt?: string;
+    backoffSeconds?: number;
   };
   timestamp: string;
 }

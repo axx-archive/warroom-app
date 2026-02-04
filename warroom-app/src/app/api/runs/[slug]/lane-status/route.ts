@@ -8,7 +8,7 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { WarRoomPlan, Lane, StatusJson, CompletionDetection, LaunchMode, LaneAgentStatus } from "@/lib/plan-schema";
+import { WarRoomPlan, Lane, StatusJson, CompletionDetection, LaunchMode, LaneAgentStatus, RetryState } from "@/lib/plan-schema";
 import { detectLaneCompletion } from "@/lib/completion-detector";
 import { emitLaneStatusChange } from "@/lib/websocket";
 
@@ -47,6 +47,8 @@ interface LaneUncommittedStatus {
   launchMode?: LaunchMode; // 'cursor' or 'terminal'
   // Agent progress from LANE_STATUS.json
   agentStatus?: LaneAgentStatus;
+  // Retry state for failed lanes
+  retryState?: RetryState;
 }
 
 export interface LaneStatusResponse {
@@ -341,6 +343,7 @@ export async function GET(
           autoMarkedComplete,
           launchMode,
           agentStatus: agentStatus ?? undefined,
+          retryState: laneStatusEntry?.retryState,
         };
       })
     );

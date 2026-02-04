@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useCallback, useRef, useEffect } from "react";
-import { Lane, LaneStatus, LaneAutonomy, LaunchMode } from "@/lib/plan-schema";
+import { Lane, LaneStatus, LaneAutonomy, LaunchMode, RetryState } from "@/lib/plan-schema";
 import { LaneUncommittedStatus, UncommittedFile } from "@/hooks/useStatusPolling";
 
 interface LaneStatusCardProps {
@@ -44,6 +44,176 @@ const STATUS_CONFIG: Record<LaneStatus, { color: string; bgColor: string; border
     label: "Failed",
   },
 };
+
+// Helper function to calculate time remaining
+function calculateTimeRemaining(nextRetryAt: string | undefined): { timeRemaining: string; secondsLeft: number } {
+  if (!nextRetryAt) {
+    return { timeRemaining: "", secondsLeft: 0 };
+  }
+
+  const now = Date.now();
+  const nextRetry = new Date(nextRetryAt).getTime();
+  const diff = Math.max(0, Math.floor((nextRetry - now) / 1000));
+
+  let timeRemaining: string;
+  if (diff <= 0) {
+    timeRemaining = "retrying...";
+  } else if (diff < 60) {
+    timeRemaining = `${diff}s`;
+  } else {
+    const minutes = Math.floor(diff / 60);
+    const seconds = diff % 60;
+    timeRemaining = `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  }
+
+  return { timeRemaining, secondsLeft: diff };
+}
+
+// Retry countdown component with live timer
+function RetryCountdown({
+  retryState,
+}: {
+  retryState: RetryState;
+}) {
+  // Calculate initial values synchronously to avoid the ESLint warning
+  const initialCalc = retryState.nextRetryAt && retryState.status === "waiting"
+    ? calculateTimeRemaining(retryState.nextRetryAt)
+    : { timeRemaining: "", secondsLeft: 0 };
+  const [timeRemaining, setTimeRemaining] = useState<string>(initialCalc.timeRemaining);
+  const [secondsLeft, setSecondsLeft] = useState<number>(initialCalc.secondsLeft);
+
+  useEffect(() => {
+    if (!retryState.nextRetryAt || retryState.status !== "waiting") {
+      // Don't reset state here - rely on component re-mount
+      return;
+    }
+
+    const updateCountdown = () => {
+      const { timeRemaining: newTime, secondsLeft: newSeconds } = calculateTimeRemaining(retryState.nextRetryAt);
+      setTimeRemaining(newTime);
+      setSecondsLeft(newSeconds);
+    };
+
+    // Start interval for countdown updates
+    const interval = setInterval(updateCountdown, 1000);
+
+    return () => clearInterval(interval);
+  }, [retryState.nextRetryAt, retryState.status]);
+
+  if (!retryState.nextRetryAt && retryState.status !== "retrying") {
+    return null;
+  }
+
+  const isRetrying = retryState.status === "retrying" || secondsLeft <= 0;
+
+  return (
+    <div
+      className="mt-3 ml-8 p-3 rounded-lg"
+      style={{
+        backgroundColor: "rgba(249, 115, 22, 0.1)",
+        border: "1px solid rgba(249, 115, 22, 0.3)",
+      }}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <svg
+            className={`w-4 h-4 shrink-0 ${isRetrying ? "spinner" : ""}`}
+            style={{ color: "#f97316" }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          <div>
+            <p className="text-sm font-medium" style={{ color: "#f97316" }}>
+              {isRetrying ? "Retrying..." : `Retry ${retryState.attempt}/${retryState.maxAttempts} in ${timeRemaining}`}
+            </p>
+            {retryState.history.length > 0 && (
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                Last error: {retryState.history[retryState.history.length - 1].error}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className="text-xs px-2 py-1 rounded-full tabular-nums"
+            style={{
+              backgroundColor: "rgba(249, 115, 22, 0.2)",
+              color: "#f97316",
+            }}
+          >
+            {isRetrying ? "Retrying" : timeRemaining}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Retry exhausted banner component
+function RetryExhaustedBanner({
+  retryState,
+}: {
+  retryState: RetryState;
+}) {
+  return (
+    <div
+      className="mt-3 ml-8 p-3 rounded-lg"
+      style={{
+        backgroundColor: "rgba(239, 68, 68, 0.1)",
+        border: "1px solid rgba(239, 68, 68, 0.3)",
+      }}
+    >
+      <div className="flex items-start gap-2">
+        <svg
+          className="w-4 h-4 shrink-0 mt-0.5"
+          style={{ color: "var(--status-error)" }}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+          />
+        </svg>
+        <div className="min-w-0">
+          <p className="text-sm font-medium" style={{ color: "var(--status-error)" }}>
+            Max retries ({retryState.maxAttempts}) exhausted
+          </p>
+          <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+            {retryState.history.length > 0 && (
+              <>Last error: {retryState.history[retryState.history.length - 1].error}</>
+            )}
+          </p>
+          {retryState.history.length > 0 && (
+            <div className="mt-2">
+              <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                Retry history:
+              </p>
+              <ul className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                {retryState.history.map((attempt, idx) => (
+                  <li key={idx}>
+                    Attempt {attempt.attempt}: {attempt.error} (backoff: {attempt.backoffSeconds}s)
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Uncommitted files popover component
 function UncommittedFilesPopover({
@@ -900,6 +1070,16 @@ export function LaneStatusCard({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Retry Status Banner */}
+      {uncommittedStatus?.retryState && uncommittedStatus.retryState.status === "waiting" && (
+        <RetryCountdown retryState={uncommittedStatus.retryState} />
+      )}
+
+      {/* Retry Exhausted Banner */}
+      {uncommittedStatus?.retryState && uncommittedStatus.retryState.status === "exhausted" && (
+        <RetryExhaustedBanner retryState={uncommittedStatus.retryState} />
       )}
     </div>
   );

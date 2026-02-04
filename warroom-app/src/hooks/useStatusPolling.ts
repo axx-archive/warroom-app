@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode, LaneAgentStatus } from "@/lib/plan-schema";
+import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode, LaneAgentStatus, RetryState } from "@/lib/plan-schema";
 
 const POLL_INTERVAL = 5000; // 5 seconds
 
@@ -34,6 +34,8 @@ export interface LaneUncommittedStatus {
   launchMode?: LaunchMode;
   // Agent progress from LANE_STATUS.json
   agentStatus?: LaneAgentStatus;
+  // Retry state for failed lanes
+  retryState?: RetryState;
 }
 
 export interface LaneState {
@@ -138,6 +140,7 @@ export function useStatusPolling({
             completionSuggestion?: CompletionSuggestion;
             launchMode?: LaunchMode;
             agentStatus?: LaneAgentStatus;
+            retryState?: RetryState;
           };
           newLaneUncommitted[laneId] = {
             uncommittedCount: data.uncommittedCount,
@@ -151,6 +154,7 @@ export function useStatusPolling({
             completionSuggestion: data.completionSuggestion,
             launchMode: data.launchMode,
             agentStatus: data.agentStatus,
+            retryState: data.retryState,
           };
         }
       }

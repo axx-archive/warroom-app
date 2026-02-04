@@ -95,6 +95,30 @@ export interface CompletionDetection {
   autoMarked?: boolean; // True if lane was automatically marked complete
 }
 
+// Auto-retry state for failed lanes
+export interface RetryState {
+  // Current retry attempt (1-3)
+  attempt: number;
+  // Maximum retry attempts
+  maxAttempts: number;
+  // Timestamp when next retry is scheduled (ISO-8601)
+  nextRetryAt?: string;
+  // History of retry attempts
+  history: RetryAttempt[];
+  // Status: waiting for retry, retrying, or exhausted
+  status: "waiting" | "retrying" | "exhausted";
+}
+
+// Record of a single retry attempt
+export interface RetryAttempt {
+  attempt: number;
+  startedAt: string;
+  endedAt?: string;
+  exitCode?: number | null;
+  error?: string;
+  backoffSeconds: number;
+}
+
 export interface LaneStatusEntry {
   staged: boolean;
   status: LaneStatus;
@@ -104,6 +128,7 @@ export interface LaneStatusEntry {
   suggestionDismissed?: boolean; // True if user dismissed completion suggestion
   lastActivityAt?: string; // ISO-8601 timestamp of last file activity in worktree
   completionDetection?: CompletionDetection; // Auto-completion detection log
+  retryState?: RetryState; // Auto-retry state for failed lanes
 }
 
 export interface StatusJson {

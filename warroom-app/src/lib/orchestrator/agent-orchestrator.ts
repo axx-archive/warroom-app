@@ -6,7 +6,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
 import readline from "readline";
-import { LaneStatus, WarRoomPlan, StatusJson, Lane, LaunchMode } from "../plan-schema";
+import { LaneStatus, WarRoomPlan, StatusJson, Lane, LaunchMode, RetryState, RetryAttempt } from "../plan-schema";
 import { emitLaneStatusChange, emitLaneActivity } from "../websocket/server";
 import {
   spawnTerminal as spawnTerminalWindow,
@@ -25,11 +25,21 @@ import {
   DetectedError,
 } from "./output-buffer";
 
+// Retry configuration constants
+const MAX_RETRY_ATTEMPTS = 3;
+// Backoff delays in seconds: 30s, 2min, 10min
+const RETRY_BACKOFF_SECONDS = [30, 120, 600];
+
+// Calculate backoff delay for a given retry attempt (0-indexed)
+function getBackoffDelay(attemptIndex: number): number {
+  return RETRY_BACKOFF_SECONDS[Math.min(attemptIndex, RETRY_BACKOFF_SECONDS.length - 1)] * 1000;
+}
+
 // Lane process state
 export interface LaneProcessState {
   laneId: string;
   process: ChildProcess | null;
-  status: "pending" | "starting" | "running" | "paused" | "stopped" | "complete" | "failed";
+  status: "pending" | "starting" | "running" | "paused" | "stopped" | "complete" | "failed" | "retrying";
   startedAt?: string;
   stoppedAt?: string;
   exitCode?: number | null;
@@ -38,6 +48,9 @@ export interface LaneProcessState {
   launchMode?: LaunchMode;
   terminal?: "iTerm" | "Terminal.app";
   windowId?: string;
+  // Retry state
+  retryState?: RetryState;
+  retryTimer?: NodeJS.Timeout;
 }
 
 // Run orchestration state
@@ -415,21 +428,28 @@ class AgentOrchestrator {
       const hadErrors = hasLaneErrors(runSlug, lane.laneId);
 
       // Process failed if exit code non-zero or errors detected in output
-      laneState.status = (code === 0 && !hadErrors) ? "complete" : "failed";
+      const success = code === 0 && !hadErrors;
 
       console.log(`[AgentOrchestrator] Lane ${lane.laneId} exited with code ${code}, errors: ${hadErrors}`);
 
-      // Emit status change event
-      emitLaneStatusChange({
-        runSlug,
-        laneId: lane.laneId,
-        previousStatus: "in_progress" as LaneStatus,
-        newStatus: (laneState.status === "complete" ? "complete" : "failed") as LaneStatus,
-        timestamp: new Date().toISOString(),
-      });
+      if (success) {
+        laneState.status = "complete";
 
-      // Check if we should start more lanes
-      this.onLaneComplete(runSlug, lane.laneId, code === 0 && !hadErrors);
+        // Emit status change event
+        emitLaneStatusChange({
+          runSlug,
+          laneId: lane.laneId,
+          previousStatus: "in_progress" as LaneStatus,
+          newStatus: "complete" as LaneStatus,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Check if we should start more lanes
+        this.onLaneComplete(runSlug, lane.laneId, true);
+      } else {
+        // Handle failure with potential retry
+        this.handleLaneFailure(runSlug, lane, laneState, code, hadErrors);
+      }
     });
 
     // Handle process errors
@@ -441,7 +461,174 @@ class AgentOrchestrator {
       addOutputLine(runSlug, lane.laneId, `Process error: ${error.message}`, "stderr");
 
       console.error(`[AgentOrchestrator] Lane ${lane.laneId} error:`, error);
+
+      // Handle failure with potential retry
+      this.handleLaneFailure(runSlug, lane, laneState, null, true);
     });
+  }
+
+  // Handle lane failure with retry logic
+  private async handleLaneFailure(
+    runSlug: string,
+    lane: Lane,
+    laneState: LaneProcessState,
+    exitCode: number | null,
+    hadErrors: boolean
+  ): Promise<void> {
+    // Initialize retry state if not present
+    if (!laneState.retryState) {
+      laneState.retryState = {
+        attempt: 0,
+        maxAttempts: MAX_RETRY_ATTEMPTS,
+        history: [],
+        status: "waiting",
+      };
+    }
+
+    const retryState = laneState.retryState;
+    const currentAttempt = retryState.attempt;
+
+    // Record this attempt in history
+    const attemptRecord: RetryAttempt = {
+      attempt: currentAttempt + 1,
+      startedAt: laneState.startedAt || new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      exitCode: exitCode,
+      error: hadErrors ? "Errors detected in output" : `Exit code: ${exitCode}`,
+      backoffSeconds: currentAttempt < MAX_RETRY_ATTEMPTS
+        ? RETRY_BACKOFF_SECONDS[currentAttempt] || RETRY_BACKOFF_SECONDS[RETRY_BACKOFF_SECONDS.length - 1]
+        : 0,
+    };
+    retryState.history.push(attemptRecord);
+
+    // Check if we can retry
+    if (currentAttempt < MAX_RETRY_ATTEMPTS) {
+      const backoffMs = getBackoffDelay(currentAttempt);
+      const nextRetryAt = new Date(Date.now() + backoffMs);
+
+      retryState.attempt = currentAttempt + 1;
+      retryState.nextRetryAt = nextRetryAt.toISOString();
+      retryState.status = "waiting";
+
+      laneState.status = "retrying";
+      laneState.error = undefined;
+      laneState.process = null;
+
+      console.log(`[AgentOrchestrator] Lane ${lane.laneId} failed (attempt ${currentAttempt + 1}/${MAX_RETRY_ATTEMPTS}). Retrying in ${backoffMs / 1000}s...`);
+
+      // Emit lane activity event for retry scheduling
+      emitLaneActivity({
+        runSlug,
+        laneId: lane.laneId,
+        type: "status",
+        details: {
+          retryAttempt: retryState.attempt,
+          maxAttempts: MAX_RETRY_ATTEMPTS,
+          nextRetryAt: nextRetryAt.toISOString(),
+          backoffSeconds: backoffMs / 1000,
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      // Update status.json with retry state
+      await this.updateStatusJsonRetryState(runSlug, lane.laneId, retryState);
+
+      // Schedule retry
+      laneState.retryTimer = setTimeout(async () => {
+        console.log(`[AgentOrchestrator] Retrying lane ${lane.laneId} (attempt ${retryState.attempt}/${MAX_RETRY_ATTEMPTS})...`);
+
+        retryState.status = "retrying";
+        retryState.nextRetryAt = undefined;
+
+        // Update status.json
+        await this.updateStatusJsonRetryState(runSlug, lane.laneId, retryState);
+
+        // Reload plan and status to get latest configuration
+        try {
+          const runDir = path.join(os.homedir(), ".openclaw/workspace/warroom/runs", runSlug);
+          const planPath = path.join(runDir, "plan.json");
+          const planContent = await fs.readFile(planPath, "utf-8");
+          const plan: WarRoomPlan = JSON.parse(planContent);
+
+          const statusPath = path.join(runDir, "status.json");
+          const statusContent = await fs.readFile(statusPath, "utf-8");
+          const statusJson: StatusJson = JSON.parse(statusContent);
+
+          // Find the lane config from plan
+          const laneConfig = plan.lanes.find((l) => l.laneId === lane.laneId);
+          if (laneConfig) {
+            // Reset lane state for retry
+            laneState.status = "pending";
+            laneState.startedAt = undefined;
+            laneState.stoppedAt = undefined;
+            laneState.exitCode = undefined;
+
+            // Restart the lane
+            await this.startLane(runSlug, plan, laneConfig, statusJson);
+          }
+        } catch (error) {
+          console.error(`[AgentOrchestrator] Failed to retry lane ${lane.laneId}:`, error);
+          this.markLaneAsFailed(runSlug, lane, laneState, "Retry failed");
+        }
+      }, backoffMs);
+
+    } else {
+      // Max retries exhausted - mark as failed
+      retryState.status = "exhausted";
+      this.markLaneAsFailed(runSlug, lane, laneState, `Max retries (${MAX_RETRY_ATTEMPTS}) exhausted`);
+    }
+  }
+
+  // Mark lane as permanently failed after max retries
+  private async markLaneAsFailed(
+    runSlug: string,
+    lane: Lane,
+    laneState: LaneProcessState,
+    reason: string
+  ): Promise<void> {
+    laneState.status = "failed";
+    laneState.error = reason;
+
+    console.log(`[AgentOrchestrator] Lane ${lane.laneId} permanently failed: ${reason}`);
+
+    // Emit status change event
+    emitLaneStatusChange({
+      runSlug,
+      laneId: lane.laneId,
+      previousStatus: "in_progress" as LaneStatus,
+      newStatus: "failed" as LaneStatus,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Update status.json
+    await this.updateStatusJsonRetryState(runSlug, lane.laneId, laneState.retryState);
+
+    // Continue with normal failure handling
+    this.onLaneComplete(runSlug, lane.laneId, false);
+  }
+
+  // Update status.json with retry state
+  private async updateStatusJsonRetryState(
+    runSlug: string,
+    laneId: string,
+    retryState?: RetryState
+  ): Promise<void> {
+    try {
+      const runDir = path.join(os.homedir(), ".openclaw/workspace/warroom/runs", runSlug);
+      const statusPath = path.join(runDir, "status.json");
+      const statusContent = await fs.readFile(statusPath, "utf-8");
+      const statusJson: StatusJson = JSON.parse(statusContent);
+
+      if (!statusJson.lanes) statusJson.lanes = {};
+      if (!statusJson.lanes[laneId]) statusJson.lanes[laneId] = { staged: true, status: "pending" };
+
+      statusJson.lanes[laneId].retryState = retryState;
+      statusJson.updatedAt = new Date().toISOString();
+
+      await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
+    } catch (error) {
+      console.error(`[AgentOrchestrator] Failed to update retry state in status.json:`, error);
+    }
   }
 
   // Spawn a Claude Code process
@@ -506,9 +693,9 @@ class AgentOrchestrator {
       // Try to start more lanes
       await this.startReadyLanes(runSlug, plan, statusJson);
 
-      // Check if all lanes are complete
+      // Check if all lanes are complete (excluding retrying lanes)
       const allComplete = Array.from(runState.lanes.values()).every(
-        (lane) => lane.status === "complete" || lane.status === "failed"
+        (lane) => lane.status === "complete" || (lane.status === "failed" && lane.retryState?.status === "exhausted")
       );
 
       if (allComplete) {
@@ -532,11 +719,17 @@ class AgentOrchestrator {
     // Stop all lane processes (both direct processes and terminal windows)
     const stopPromises: Promise<void>[] = [];
     for (const [, laneState] of runState.lanes) {
-      // Check for running lanes with either a process or terminal window
+      // Clear any pending retry timers
+      if (laneState.retryTimer) {
+        clearTimeout(laneState.retryTimer);
+        laneState.retryTimer = undefined;
+      }
+
+      // Check for running or retrying lanes with either a process or terminal window
       const hasProcess = laneState.process !== null;
       const hasTerminal = laneState.terminal && laneState.windowId;
 
-      if (laneState.status === "running" && (hasProcess || hasTerminal)) {
+      if ((laneState.status === "running" || laneState.status === "retrying") && (hasProcess || hasTerminal)) {
         stopPromises.push(this.stopLaneProcess(laneState));
       }
     }
