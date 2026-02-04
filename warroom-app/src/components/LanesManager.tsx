@@ -17,6 +17,7 @@ interface LanesManagerProps {
   laneStates: Record<string, LaneState>; // Controlled state from parent (polling)
   laneUncommitted?: Record<string, LaneUncommittedStatus>; // Uncommitted file data from polling
   onStatusChange?: (laneId: string, newStatus: LaneStatus) => void;
+  onPreviewChanges?: (laneId: string) => void; // Callback to open diff preview modal
 }
 
 export function LanesManager({
@@ -25,6 +26,7 @@ export function LanesManager({
   laneStates,
   laneUncommitted = {},
   onStatusChange,
+  onPreviewChanges,
 }: LanesManagerProps) {
   // Get list of completed lane IDs
   const completedLanes = lanes
@@ -56,6 +58,7 @@ export function LanesManager({
             completedLanes={completedLanes}
             uncommittedStatus={uncommitted}
             onStatusChange={handleStatusChange}
+            onPreviewChanges={onPreviewChanges}
           />
         );
       })}

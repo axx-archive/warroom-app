@@ -14,6 +14,7 @@ interface LaneStatusCardProps {
   uncommittedStatus?: LaneUncommittedStatus; // Uncommitted files data from polling
   onStatusChange?: (laneId: string, newStatus: LaneStatus) => void; // Callback when status changes
   onDismissSuggestion?: (laneId: string) => void; // Callback when suggestion is dismissed
+  onPreviewChanges?: (laneId: string) => void; // Callback to open diff preview modal
 }
 
 const STATUS_CONFIG: Record<LaneStatus, { color: string; bgColor: string; borderColor: string; label: string }> = {
@@ -165,6 +166,7 @@ export function LaneStatusCard({
   uncommittedStatus,
   onStatusChange,
   onDismissSuggestion,
+  onPreviewChanges,
 }: LaneStatusCardProps) {
   const [status, setStatus] = useState<LaneStatus>(initialStatus);
   const [staged] = useState(initialStaged);
@@ -617,6 +619,20 @@ export function LaneStatusCard({
                   Commit
                 </>
               )}
+            </button>
+          )}
+          {/* Preview Changes Button - show when lane has changes */}
+          {hasUncommittedFiles && onPreviewChanges && (
+            <button
+              onClick={() => onPreviewChanges(lane.laneId)}
+              className="btn btn--sm btn--secondary"
+              title="Preview all changes in this lane"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              Preview
             </button>
           )}
           <span
