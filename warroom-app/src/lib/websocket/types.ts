@@ -22,9 +22,13 @@ export interface ClientToServerEvents {
 export interface LaneActivityEvent {
   runSlug: string;
   laneId: string;
-  type: "file-created" | "file-modified" | "file-deleted" | "commit";
+  type: "file-created" | "file-modified" | "file-deleted" | "commit" | "output";
   path?: string;
   message?: string;
+  details?: {
+    stream?: "stdout" | "stderr";
+    line?: string;
+  };
   timestamp: string;
 }
 

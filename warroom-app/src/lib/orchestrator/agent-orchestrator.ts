@@ -5,13 +5,25 @@ import { ChildProcess, spawn } from "child_process";
 import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
+import readline from "readline";
 import { LaneStatus, WarRoomPlan, StatusJson, Lane, LaunchMode } from "../plan-schema";
-import { emitLaneStatusChange } from "../websocket/server";
+import { emitLaneStatusChange, emitLaneActivity } from "../websocket/server";
 import {
   spawnTerminal as spawnTerminalWindow,
   isTerminalWindowOpen,
   closeTerminalWindow,
 } from "./terminal-spawner";
+import {
+  addOutputLine,
+  getLaneOutput,
+  getRecentOutput,
+  clearLaneOutput,
+  hasLaneErrors,
+  getLaneErrors,
+  LaneOutputState,
+  OutputLine,
+  DetectedError,
+} from "./output-buffer";
 
 // Lane process state
 export interface LaneProcessState {
@@ -349,13 +361,63 @@ class AgentOrchestrator {
     const claudeProcess = laneState.process;
     if (!claudeProcess) return;
 
+    // Clear any previous output buffer for this lane
+    clearLaneOutput(runSlug, lane.laneId);
+
+    // Capture stdout using readline for line-by-line processing
+    if (claudeProcess.stdout) {
+      const stdoutReader = readline.createInterface({
+        input: claudeProcess.stdout,
+        crlfDelay: Infinity,
+      });
+
+      stdoutReader.on("line", (line) => {
+        addOutputLine(runSlug, lane.laneId, line, "stdout");
+
+        // Emit lane activity event for real-time updates
+        emitLaneActivity({
+          runSlug,
+          laneId: lane.laneId,
+          type: "output",
+          details: { stream: "stdout", line },
+          timestamp: new Date().toISOString(),
+        });
+      });
+    }
+
+    // Capture stderr using readline for line-by-line processing
+    if (claudeProcess.stderr) {
+      const stderrReader = readline.createInterface({
+        input: claudeProcess.stderr,
+        crlfDelay: Infinity,
+      });
+
+      stderrReader.on("line", (line) => {
+        addOutputLine(runSlug, lane.laneId, line, "stderr");
+
+        // Emit lane activity event for real-time updates
+        emitLaneActivity({
+          runSlug,
+          laneId: lane.laneId,
+          type: "output",
+          details: { stream: "stderr", line },
+          timestamp: new Date().toISOString(),
+        });
+      });
+    }
+
     // Handle process exit
     claudeProcess.on("exit", (code) => {
       laneState.exitCode = code;
       laneState.stoppedAt = new Date().toISOString();
-      laneState.status = code === 0 ? "complete" : "failed";
 
-      console.log(`[AgentOrchestrator] Lane ${lane.laneId} exited with code ${code}`);
+      // Check if there were errors detected in output
+      const hadErrors = hasLaneErrors(runSlug, lane.laneId);
+
+      // Process failed if exit code non-zero or errors detected in output
+      laneState.status = (code === 0 && !hadErrors) ? "complete" : "failed";
+
+      console.log(`[AgentOrchestrator] Lane ${lane.laneId} exited with code ${code}, errors: ${hadErrors}`);
 
       // Emit status change event
       emitLaneStatusChange({
@@ -367,13 +429,17 @@ class AgentOrchestrator {
       });
 
       // Check if we should start more lanes
-      this.onLaneComplete(runSlug, lane.laneId, code === 0);
+      this.onLaneComplete(runSlug, lane.laneId, code === 0 && !hadErrors);
     });
 
     // Handle process errors
     claudeProcess.on("error", (error) => {
       laneState.status = "failed";
       laneState.error = error.message;
+
+      // Add error to output buffer
+      addOutputLine(runSlug, lane.laneId, `Process error: ${error.message}`, "stderr");
+
       console.error(`[AgentOrchestrator] Lane ${lane.laneId} error:`, error);
     });
   }
@@ -639,6 +705,26 @@ class AgentOrchestrator {
     const runState = this.runs.get(runSlug);
     return runState?.status === "running" || runState?.status === "starting";
   }
+
+  // Get output for a specific lane
+  public getLaneOutput(runSlug: string, laneId: string): LaneOutputState | null {
+    return getLaneOutput(runSlug, laneId);
+  }
+
+  // Get recent output lines for a lane
+  public getRecentOutput(runSlug: string, laneId: string, count?: number): OutputLine[] {
+    return getRecentOutput(runSlug, laneId, count);
+  }
+
+  // Get errors detected in lane output
+  public getLaneErrors(runSlug: string, laneId: string): DetectedError[] {
+    return getLaneErrors(runSlug, laneId);
+  }
+
+  // Check if lane has errors in output
+  public hasLaneErrors(runSlug: string, laneId: string): boolean {
+    return hasLaneErrors(runSlug, laneId);
+  }
 }
 
 // Export singleton getter
@@ -665,4 +751,20 @@ export async function resumeLane(runSlug: string, laneId: string): Promise<{ suc
 
 export function getOrchestratorStatus(): OrchestratorStatus {
   return getOrchestrator().getStatus();
+}
+
+export function getOrchestratorLaneOutput(runSlug: string, laneId: string): LaneOutputState | null {
+  return getOrchestrator().getLaneOutput(runSlug, laneId);
+}
+
+export function getOrchestratorRecentOutput(runSlug: string, laneId: string, count?: number): OutputLine[] {
+  return getOrchestrator().getRecentOutput(runSlug, laneId, count);
+}
+
+export function getOrchestratorLaneErrors(runSlug: string, laneId: string): DetectedError[] {
+  return getOrchestrator().getLaneErrors(runSlug, laneId);
+}
+
+export function hasOrchestratorLaneErrors(runSlug: string, laneId: string): boolean {
+  return getOrchestrator().hasLaneErrors(runSlug, laneId);
 }

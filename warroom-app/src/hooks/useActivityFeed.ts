@@ -11,7 +11,7 @@ const MAX_EVENTS = 100;
 export interface ActivityEvent {
   id: string;
   laneId: string;
-  type: "file-created" | "file-modified" | "file-deleted" | "commit" | "status-change";
+  type: "file-created" | "file-modified" | "file-deleted" | "commit" | "status-change" | "output";
   timestamp: string;
   // For file events
   path?: string;
@@ -20,6 +20,11 @@ export interface ActivityEvent {
   // For status change events
   previousStatus?: LaneStatus;
   newStatus?: LaneStatus;
+  // For output events
+  details?: {
+    stream?: "stdout" | "stderr";
+    line?: string;
+  };
 }
 
 interface UseActivityFeedOptions {
@@ -38,7 +43,7 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}) {
     return `event-${Date.now()}-${eventIdCounter.current}`;
   }, []);
 
-  // Add a lane activity event (file change or commit)
+  // Add a lane activity event (file change, commit, or output)
   const addLaneActivityEvent = useCallback((event: LaneActivityEvent) => {
     const activityEvent: ActivityEvent = {
       id: generateEventId(),
@@ -47,6 +52,7 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}) {
       timestamp: event.timestamp,
       path: event.path,
       message: event.message,
+      details: event.details,
     };
 
     setEvents((prev) => {

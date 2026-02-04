@@ -7,6 +7,10 @@ export {
   pauseLane,
   resumeLane,
   getOrchestratorStatus,
+  getOrchestratorLaneOutput,
+  getOrchestratorRecentOutput,
+  getOrchestratorLaneErrors,
+  hasOrchestratorLaneErrors,
 } from "./agent-orchestrator";
 
 export type {
@@ -14,6 +18,26 @@ export type {
   RunOrchestrationState,
   OrchestratorStatus,
 } from "./agent-orchestrator";
+
+// Output buffer exports
+export {
+  getOutputBufferManager,
+  addOutputLine,
+  getLaneOutput,
+  getRecentOutput,
+  getRunOutputs,
+  clearLaneOutput,
+  clearRunOutputs,
+  hasLaneErrors,
+  getLaneErrors,
+} from "./output-buffer";
+
+export type {
+  OutputLine,
+  ProgressIndicator,
+  DetectedError,
+  LaneOutputState,
+} from "./output-buffer";
 
 // Terminal spawner exports
 export {
