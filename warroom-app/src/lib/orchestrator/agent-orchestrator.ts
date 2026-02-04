@@ -1,15 +1,17 @@
 // AgentOrchestrator - Singleton class for managing Claude Code agent processes
 // Manages the lifecycle of all Claude Code processes for a run
 
-import { ChildProcess, spawn, exec } from "child_process";
-import { promisify } from "util";
+import { ChildProcess, spawn } from "child_process";
 import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
-import { LaneStatus, WarRoomPlan, StatusJson, Lane } from "../plan-schema";
+import { LaneStatus, WarRoomPlan, StatusJson, Lane, LaunchMode } from "../plan-schema";
 import { emitLaneStatusChange } from "../websocket/server";
-
-const execAsync = promisify(exec);
+import {
+  spawnTerminal as spawnTerminalWindow,
+  isTerminalWindowOpen,
+  closeTerminalWindow,
+} from "./terminal-spawner";
 
 // Lane process state
 export interface LaneProcessState {
@@ -20,6 +22,10 @@ export interface LaneProcessState {
   stoppedAt?: string;
   exitCode?: number | null;
   error?: string;
+  // Terminal mode properties
+  launchMode?: LaunchMode;
+  terminal?: "iTerm" | "Terminal.app";
+  windowId?: string;
 }
 
 // Run orchestration state
@@ -41,16 +47,6 @@ export interface OrchestratorStatus {
     startedAt?: string;
     stoppedAt?: string;
   }>;
-}
-
-// Check if iTerm2 is installed
-async function hasIterm(): Promise<boolean> {
-  try {
-    await fs.access("/Applications/iTerm.app");
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // Singleton orchestrator class
@@ -209,10 +205,14 @@ class AgentOrchestrator {
     laneState.startedAt = new Date().toISOString();
 
     try {
-      // Get autonomy settings
+      // Get autonomy and launch mode settings
       const laneStatusEntry = statusJson.lanes?.[lane.laneId];
       const skipPermissions = laneStatusEntry?.autonomy?.dangerouslySkipPermissions ??
                              lane.autonomy?.dangerouslySkipPermissions ?? false;
+      const launchMode: LaunchMode = laneStatusEntry?.launchMode ??
+                                     (skipPermissions ? "terminal" : "cursor");
+
+      laneState.launchMode = launchMode;
 
       // Ensure worktree exists
       const worktreePath = lane.worktreePath;
@@ -226,15 +226,23 @@ class AgentOrchestrator {
         return;
       }
 
-      // Spawn the Claude Code process
-      const claudeProcess = await this.spawnClaudeProcess(
-        worktreePath,
-        lane.laneId,
-        runSlug,
-        skipPermissions
-      );
+      // Choose spawn method based on launch mode
+      if (launchMode === "terminal") {
+        // Terminal mode: spawn iTerm2/Terminal.app window
+        await this.spawnLaneInTerminal(laneState, runSlug, lane, skipPermissions);
+      } else {
+        // Direct process mode (or cursor mode falls back to direct for orchestrator)
+        const claudeProcess = await this.spawnClaudeProcess(
+          worktreePath,
+          lane.laneId,
+          runSlug,
+          skipPermissions
+        );
 
-      laneState.process = claudeProcess;
+        laneState.process = claudeProcess;
+        this.setupProcessHandlers(laneState, runSlug, lane);
+      }
+
       laneState.status = "running";
 
       // Emit status change
@@ -246,39 +254,128 @@ class AgentOrchestrator {
         timestamp: new Date().toISOString(),
       });
 
-      // Handle process exit
-      claudeProcess.on("exit", (code) => {
-        laneState.exitCode = code;
-        laneState.stoppedAt = new Date().toISOString();
-        laneState.status = code === 0 ? "complete" : "failed";
-
-        console.log(`[AgentOrchestrator] Lane ${lane.laneId} exited with code ${code}`);
-
-        // Emit status change event
-        emitLaneStatusChange({
-          runSlug,
-          laneId: lane.laneId,
-          previousStatus: "in_progress" as LaneStatus,
-          newStatus: (laneState.status === "complete" ? "complete" : "failed") as LaneStatus,
-          timestamp: new Date().toISOString(),
-        });
-
-        // Check if we should start more lanes
-        this.onLaneComplete(runSlug, lane.laneId, code === 0);
-      });
-
-      // Handle process errors
-      claudeProcess.on("error", (error) => {
-        laneState.status = "failed";
-        laneState.error = error.message;
-        console.error(`[AgentOrchestrator] Lane ${lane.laneId} error:`, error);
-      });
-
     } catch (error) {
       laneState.status = "failed";
       laneState.error = error instanceof Error ? error.message : String(error);
       console.error(`[AgentOrchestrator] Failed to start lane ${lane.laneId}:`, error);
     }
+  }
+
+  // Spawn a lane in a terminal window (iTerm2 or Terminal.app)
+  private async spawnLaneInTerminal(
+    laneState: LaneProcessState,
+    runSlug: string,
+    lane: Lane,
+    skipPermissions: boolean
+  ): Promise<void> {
+    const result = await spawnTerminalWindow({
+      worktreePath: lane.worktreePath,
+      laneId: lane.laneId,
+      runSlug,
+      skipPermissions,
+    });
+
+    if (!result.success) {
+      throw new Error(result.error || "Failed to spawn terminal");
+    }
+
+    laneState.terminal = result.terminal !== "unknown" ? result.terminal : undefined;
+    laneState.windowId = result.windowId;
+
+    console.log(`[AgentOrchestrator] Spawned ${result.terminal} window for ${lane.laneId}, window ID: ${result.windowId}`);
+
+    // For terminal mode, we monitor by polling window status
+    // since we don't have a direct process handle
+    this.monitorTerminalWindow(laneState, runSlug, lane);
+  }
+
+  // Monitor a terminal window for completion
+  private monitorTerminalWindow(
+    laneState: LaneProcessState,
+    runSlug: string,
+    lane: Lane
+  ): void {
+    if (!laneState.terminal || !laneState.windowId) return;
+
+    const terminal = laneState.terminal;
+    const windowId = laneState.windowId;
+
+    // Poll every 5 seconds to check if window is still open
+    const checkInterval = setInterval(async () => {
+      // Skip if lane is no longer running
+      if (laneState.status !== "running") {
+        clearInterval(checkInterval);
+        return;
+      }
+
+      try {
+        const isOpen = await isTerminalWindowOpen(terminal, windowId);
+
+        if (!isOpen) {
+          clearInterval(checkInterval);
+
+          // Window was closed - assume work is complete
+          // (The actual completion status should be determined by LANE_STATUS.json in US-304)
+          laneState.stoppedAt = new Date().toISOString();
+          laneState.status = "complete";
+          laneState.exitCode = 0;
+
+          console.log(`[AgentOrchestrator] Terminal window closed for ${lane.laneId}`);
+
+          // Emit status change event
+          emitLaneStatusChange({
+            runSlug,
+            laneId: lane.laneId,
+            previousStatus: "in_progress" as LaneStatus,
+            newStatus: "complete" as LaneStatus,
+            timestamp: new Date().toISOString(),
+          });
+
+          // Check if we should start more lanes
+          this.onLaneComplete(runSlug, lane.laneId, true);
+        }
+      } catch (error) {
+        console.error(`[AgentOrchestrator] Error checking terminal window:`, error);
+      }
+    }, 5000);
+  }
+
+  // Setup process event handlers for direct process spawning
+  private setupProcessHandlers(
+    laneState: LaneProcessState,
+    runSlug: string,
+    lane: Lane
+  ): void {
+    const claudeProcess = laneState.process;
+    if (!claudeProcess) return;
+
+    // Handle process exit
+    claudeProcess.on("exit", (code) => {
+      laneState.exitCode = code;
+      laneState.stoppedAt = new Date().toISOString();
+      laneState.status = code === 0 ? "complete" : "failed";
+
+      console.log(`[AgentOrchestrator] Lane ${lane.laneId} exited with code ${code}`);
+
+      // Emit status change event
+      emitLaneStatusChange({
+        runSlug,
+        laneId: lane.laneId,
+        previousStatus: "in_progress" as LaneStatus,
+        newStatus: (laneState.status === "complete" ? "complete" : "failed") as LaneStatus,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Check if we should start more lanes
+      this.onLaneComplete(runSlug, lane.laneId, code === 0);
+    });
+
+    // Handle process errors
+    claudeProcess.on("error", (error) => {
+      laneState.status = "failed";
+      laneState.error = error.message;
+      console.error(`[AgentOrchestrator] Lane ${lane.laneId} error:`, error);
+    });
   }
 
   // Spawn a Claude Code process
@@ -366,10 +463,14 @@ class AgentOrchestrator {
     runState.status = "stopping";
     console.log(`[AgentOrchestrator] Stopping run ${runSlug}...`);
 
-    // Stop all lane processes
+    // Stop all lane processes (both direct processes and terminal windows)
     const stopPromises: Promise<void>[] = [];
-    for (const [laneId, laneState] of runState.lanes) {
-      if (laneState.process && laneState.status === "running") {
+    for (const [, laneState] of runState.lanes) {
+      // Check for running lanes with either a process or terminal window
+      const hasProcess = laneState.process !== null;
+      const hasTerminal = laneState.terminal && laneState.windowId;
+
+      if (laneState.status === "running" && (hasProcess || hasTerminal)) {
         stopPromises.push(this.stopLaneProcess(laneState));
       }
     }
@@ -381,8 +482,22 @@ class AgentOrchestrator {
     console.log(`[AgentOrchestrator] Run ${runSlug} stopped`);
   }
 
-  // Stop a single lane process
+  // Stop a single lane process (handles both direct processes and terminal windows)
   private async stopLaneProcess(laneState: LaneProcessState): Promise<void> {
+    // Handle terminal window mode
+    if (laneState.launchMode === "terminal" && laneState.terminal && laneState.windowId) {
+      try {
+        await closeTerminalWindow(laneState.terminal, laneState.windowId);
+        laneState.status = "stopped";
+        laneState.stoppedAt = new Date().toISOString();
+        console.log(`[AgentOrchestrator] Closed terminal window for ${laneState.laneId}`);
+      } catch (error) {
+        console.error(`[AgentOrchestrator] Failed to close terminal window:`, error);
+      }
+      return;
+    }
+
+    // Handle direct process mode
     if (!laneState.process) return;
 
     return new Promise((resolve) => {
@@ -418,8 +533,17 @@ class AgentOrchestrator {
       return { success: false, error: "Lane not found" };
     }
 
-    if (!laneState.process || laneState.status !== "running") {
+    if (laneState.status !== "running") {
       return { success: false, error: "Lane is not running" };
+    }
+
+    // Terminal mode doesn't support pause/resume via SIGSTOP
+    if (laneState.launchMode === "terminal") {
+      return { success: false, error: "Cannot pause terminal mode lanes - close the window to stop" };
+    }
+
+    if (!laneState.process) {
+      return { success: false, error: "Lane has no process" };
     }
 
     try {
@@ -447,8 +571,17 @@ class AgentOrchestrator {
       return { success: false, error: "Lane not found" };
     }
 
-    if (!laneState.process || laneState.status !== "paused") {
+    if (laneState.status !== "paused") {
       return { success: false, error: "Lane is not paused" };
+    }
+
+    // Terminal mode doesn't support pause/resume
+    if (laneState.launchMode === "terminal") {
+      return { success: false, error: "Cannot resume terminal mode lanes" };
+    }
+
+    if (!laneState.process) {
+      return { success: false, error: "Lane has no process" };
     }
 
     try {
@@ -476,8 +609,8 @@ class AgentOrchestrator {
 
       const laneStatuses: Record<string, Omit<LaneProcessState, "process">> = {};
       for (const [laneId, laneState] of runState.lanes) {
-        // Omit the process object from the response
-        const { process, ...rest } = laneState;
+        // Omit the process object from the response (terminal info is kept)
+        const { process: _process, ...rest } = laneState;
         laneStatuses[laneId] = rest;
       }
 

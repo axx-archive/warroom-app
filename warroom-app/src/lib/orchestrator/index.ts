@@ -14,3 +14,18 @@ export type {
   RunOrchestrationState,
   OrchestratorStatus,
 } from "./agent-orchestrator";
+
+// Terminal spawner exports
+export {
+  spawnTerminal,
+  hasIterm,
+  closeTerminalWindow,
+  isTerminalWindowOpen,
+  getOpenTerminalSessions,
+  sendToTerminal,
+} from "./terminal-spawner";
+
+export type {
+  SpawnTerminalResult,
+  SpawnTerminalOptions,
+} from "./terminal-spawner";
