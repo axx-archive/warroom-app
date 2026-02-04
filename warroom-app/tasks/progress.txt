@@ -312,3 +312,20 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Emit "status" type lane activity events with retry details for real-time WebSocket updates
   - Orange color (#f97316) for retry status UI, red (--status-error) for exhausted state
 ---
+
+## 2026-02-04 - US-306: Auto-commit lane work
+- Implemented automatic commit of lane work when completion is detected
+- Files changed:
+  - `src/lib/orchestrator/git-operations.ts` - New module with auto-commit functionality
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added `handleLaneCompletion()` method that calls auto-commit
+  - `src/lib/orchestrator/index.ts` - Exported git operation utilities
+- **Learnings for future iterations:**
+  - Use `git status --porcelain` for machine-readable uncommitted file detection
+  - Read `LANE_STATUS.json` for commit message summary: prefer `summary` field, fall back to `currentStep`, then last `completedSteps` item
+  - Commit message format: `feat(laneId): <summary>` - truncate summary to 100 chars
+  - Escape single quotes in shell: `'\\''` pattern works for git commit messages
+  - The `handleLaneCompletion()` method handles both direct process and terminal mode completions
+  - Extract commit hash from git commit output using regex: `/\[[\w\-/]+ ([a-f0-9]+)\]/`
+  - If auto-commit fails, still mark lane as complete since the agent's work succeeded
+  - Emit "commit" type lane activity event with commit details via WebSocket
+---
