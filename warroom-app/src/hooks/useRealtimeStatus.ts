@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode, LaneAgentStatus, RetryState } from "@/lib/plan-schema";
+import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode, LaneAgentStatus, RetryState, PushState } from "@/lib/plan-schema";
 import { useWebSocket, ConnectionStatus } from "./useWebSocket";
 import { LaneStatusChangeEvent, LaneActivityEvent } from "@/lib/websocket/types";
 
@@ -39,6 +39,8 @@ export interface LaneUncommittedStatus {
   agentStatus?: LaneAgentStatus;
   // Retry state for failed lanes
   retryState?: RetryState;
+  // Push state for the lane branch
+  pushState?: PushState;
 }
 
 export interface LaneState {
@@ -209,6 +211,7 @@ export function useRealtimeStatus({
             launchMode?: LaunchMode;
             agentStatus?: LaneAgentStatus;
             retryState?: RetryState;
+            pushState?: PushState;
           };
           newLaneUncommitted[laneId] = {
             uncommittedCount: data.uncommittedCount,
@@ -223,6 +226,7 @@ export function useRealtimeStatus({
             launchMode: data.launchMode,
             agentStatus: data.agentStatus,
             retryState: data.retryState,
+            pushState: data.pushState,
           };
         }
       }

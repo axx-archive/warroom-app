@@ -6,7 +6,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
 import readline from "readline";
-import { LaneStatus, WarRoomPlan, StatusJson, Lane, LaunchMode, RetryState, RetryAttempt, MergeState } from "../plan-schema";
+import { LaneStatus, WarRoomPlan, StatusJson, Lane, LaunchMode, RetryState, RetryAttempt, MergeState, PushState, AutoPushOptions } from "../plan-schema";
 import { emitLaneStatusChange, emitLaneActivity, emitMergeProgress, emitMergeReady, emitRunComplete } from "../websocket/server";
 import {
   spawnTerminal as spawnTerminalWindow,
@@ -27,6 +27,8 @@ import {
 import {
   autoCommitLaneWork,
   autoMergeLanes,
+  pushLaneBranch,
+  pushIntegrationBranch,
 } from "./git-operations";
 
 // Retry configuration constants
@@ -642,7 +644,7 @@ class AgentOrchestrator {
     return childProcess;
   }
 
-  // Handle lane completion with auto-commit
+  // Handle lane completion with auto-commit and optional auto-push
   private async handleLaneCompletion(
     runSlug: string,
     lane: Lane,
@@ -671,6 +673,9 @@ class AgentOrchestrator {
           },
           timestamp: new Date().toISOString(),
         });
+
+        // Check if auto-push is enabled for lane branches
+        await this.autoPushLaneBranch(runSlug, lane);
       } else {
         console.log(`[AgentOrchestrator] No uncommitted changes in lane ${laneId}, skipping commit`);
       }
@@ -716,6 +721,198 @@ class AgentOrchestrator {
 
       // Continue with lane completion flow
       this.onLaneComplete(runSlug, laneId, true);
+    }
+  }
+
+  // Auto-push lane branch if enabled
+  private async autoPushLaneBranch(runSlug: string, lane: Lane): Promise<void> {
+    try {
+      // Read status.json to check auto-push options
+      const runDir = path.join(os.homedir(), ".openclaw/workspace/warroom/runs", runSlug);
+      const statusPath = path.join(runDir, "status.json");
+      const statusContent = await fs.readFile(statusPath, "utf-8");
+      const statusJson: StatusJson = JSON.parse(statusContent);
+
+      // Check if auto-push for lane branches is enabled
+      if (!statusJson.autoPushOptions?.pushLaneBranches) {
+        console.log(`[AgentOrchestrator] Auto-push disabled for lane branches, skipping push for ${lane.laneId}`);
+        return;
+      }
+
+      console.log(`[AgentOrchestrator] Auto-pushing lane branch ${lane.branch}`);
+
+      // Emit push started activity
+      emitLaneActivity({
+        runSlug,
+        laneId: lane.laneId,
+        type: "status",
+        message: `Pushing branch ${lane.branch}...`,
+        details: {
+          pushType: "lane",
+          status: "pushing",
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      // Push the lane branch
+      const pushResult = await pushLaneBranch(lane.worktreePath, lane.branch);
+
+      // Update push state in status.json
+      const pushState: PushState = {
+        status: pushResult.success ? "success" : "failed",
+        lastPushedAt: pushResult.success ? new Date().toISOString() : undefined,
+        error: pushResult.error,
+        pushType: "lane",
+      };
+
+      await this.updateLanePushState(runSlug, lane.laneId, pushState);
+
+      if (pushResult.success) {
+        console.log(`[AgentOrchestrator] Successfully pushed lane branch ${lane.branch}`);
+
+        emitLaneActivity({
+          runSlug,
+          laneId: lane.laneId,
+          type: "status",
+          message: `Successfully pushed branch ${lane.branch} to origin`,
+          details: {
+            pushType: "lane",
+            status: "success",
+          },
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        console.error(`[AgentOrchestrator] Failed to push lane branch ${lane.branch}: ${pushResult.error}`);
+
+        emitLaneActivity({
+          runSlug,
+          laneId: lane.laneId,
+          type: "status",
+          message: `Push failed for branch ${lane.branch}: ${pushResult.error}`,
+          details: {
+            pushType: "lane",
+            status: "failed",
+            errorType: pushResult.errorType,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error(`[AgentOrchestrator] Error during auto-push for lane ${lane.laneId}:`, error);
+    }
+  }
+
+  // Update lane push state in status.json
+  private async updateLanePushState(
+    runSlug: string,
+    laneId: string,
+    pushState: PushState
+  ): Promise<void> {
+    try {
+      const runDir = path.join(os.homedir(), ".openclaw/workspace/warroom/runs", runSlug);
+      const statusPath = path.join(runDir, "status.json");
+      const statusContent = await fs.readFile(statusPath, "utf-8");
+      const statusJson: StatusJson = JSON.parse(statusContent);
+
+      if (!statusJson.lanes) statusJson.lanes = {};
+      if (!statusJson.lanes[laneId]) statusJson.lanes[laneId] = { staged: true, status: "pending" };
+
+      statusJson.lanes[laneId].pushState = pushState;
+      statusJson.updatedAt = new Date().toISOString();
+
+      await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
+    } catch (error) {
+      console.error(`[AgentOrchestrator] Failed to update lane push state in status.json:`, error);
+    }
+  }
+
+  // Auto-push integration branch if enabled
+  private async autoPushIntegrationBranch(
+    runSlug: string,
+    repoPath: string,
+    integrationBranch: string
+  ): Promise<void> {
+    try {
+      // Read status.json to check auto-push options
+      const runDir = path.join(os.homedir(), ".openclaw/workspace/warroom/runs", runSlug);
+      const statusPath = path.join(runDir, "status.json");
+      const statusContent = await fs.readFile(statusPath, "utf-8");
+      const statusJson: StatusJson = JSON.parse(statusContent);
+
+      // Check if auto-push for integration branch is enabled
+      if (!statusJson.autoPushOptions?.pushIntegrationBranch) {
+        console.log(`[AgentOrchestrator] Auto-push disabled for integration branch, skipping push`);
+        return;
+      }
+
+      console.log(`[AgentOrchestrator] Auto-pushing integration branch ${integrationBranch}`);
+
+      // Emit push started event
+      emitMergeProgress({
+        runSlug,
+        status: "pushing",
+        message: `Pushing integration branch ${integrationBranch}...`,
+        mergedLanes: statusJson.mergeState?.mergedLanes || [],
+        timestamp: new Date().toISOString(),
+      });
+
+      // Push the integration branch
+      const pushResult = await pushIntegrationBranch(repoPath, integrationBranch);
+
+      // Update push state in status.json
+      const pushState: PushState = {
+        status: pushResult.success ? "success" : "failed",
+        lastPushedAt: pushResult.success ? new Date().toISOString() : undefined,
+        error: pushResult.error,
+        pushType: "integration",
+      };
+
+      await this.updateIntegrationBranchPushState(runSlug, pushState);
+
+      if (pushResult.success) {
+        console.log(`[AgentOrchestrator] Successfully pushed integration branch ${integrationBranch}`);
+
+        emitMergeProgress({
+          runSlug,
+          status: "pushed",
+          message: `Successfully pushed integration branch ${integrationBranch} to origin`,
+          mergedLanes: statusJson.mergeState?.mergedLanes || [],
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        console.error(`[AgentOrchestrator] Failed to push integration branch: ${pushResult.error}`);
+
+        emitMergeProgress({
+          runSlug,
+          status: "push_failed",
+          message: `Push failed for integration branch: ${pushResult.error}`,
+          error: pushResult.error,
+          mergedLanes: statusJson.mergeState?.mergedLanes || [],
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error(`[AgentOrchestrator] Error during auto-push for integration branch:`, error);
+    }
+  }
+
+  // Update integration branch push state in status.json
+  private async updateIntegrationBranchPushState(
+    runSlug: string,
+    pushState: PushState
+  ): Promise<void> {
+    try {
+      const runDir = path.join(os.homedir(), ".openclaw/workspace/warroom/runs", runSlug);
+      const statusPath = path.join(runDir, "status.json");
+      const statusContent = await fs.readFile(statusPath, "utf-8");
+      const statusJson: StatusJson = JSON.parse(statusContent);
+
+      statusJson.integrationBranchPushState = pushState;
+      statusJson.updatedAt = new Date().toISOString();
+
+      await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
+    } catch (error) {
+      console.error(`[AgentOrchestrator] Failed to update integration branch push state in status.json:`, error);
     }
   }
 
@@ -852,6 +1049,9 @@ class AgentOrchestrator {
 
         // Update status.json with merge state
         await this.updateMergeStateInStatusJson(runSlug, runState.mergeState);
+
+        // Auto-push integration branch if enabled
+        await this.autoPushIntegrationBranch(runSlug, plan.repo.path, plan.integrationBranch);
 
         // Emit merge complete event
         emitMergeProgress({

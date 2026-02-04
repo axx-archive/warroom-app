@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useCallback, useRef, useEffect } from "react";
-import { Lane, LaneStatus, LaneAutonomy, LaunchMode, RetryState } from "@/lib/plan-schema";
+import { Lane, LaneStatus, LaneAutonomy, LaunchMode, RetryState, PushState } from "@/lib/plan-schema";
 import { LaneUncommittedStatus, UncommittedFile } from "@/hooks/useStatusPolling";
 
 interface LaneStatusCardProps {
@@ -715,6 +715,8 @@ export function LaneStatusCard({
                   +{uncommittedStatus!.commitsSinceLaunch} commit{uncommittedStatus!.commitsSinceLaunch === 1 ? "" : "s"}
                 </button>
               )}
+              {/* Push status badge */}
+              {uncommittedStatus?.pushState && <PushStatusBadge pushState={uncommittedStatus.pushState} />}
             </div>
             <p className="mono small mt-1" style={{ color: "var(--muted)" }}>
               {lane.branch}
@@ -1088,5 +1090,70 @@ export function LaneStatusCard({
         <RetryExhaustedBanner retryState={uncommittedStatus.retryState} />
       )}
     </div>
+  );
+}
+
+// Push status badge component
+function PushStatusBadge({ pushState }: { pushState: PushState }) {
+  const getStatusConfig = () => {
+    switch (pushState.status) {
+      case "pushing":
+        return {
+          color: "#06b6d4", // cyan
+          bgColor: "rgba(6, 182, 212, 0.15)",
+          borderColor: "rgba(6, 182, 212, 0.4)",
+          label: "Pushing...",
+          icon: (
+            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ),
+        };
+      case "success":
+        return {
+          color: "#22c55e", // green
+          bgColor: "rgba(34, 197, 94, 0.15)",
+          borderColor: "rgba(34, 197, 94, 0.4)",
+          label: "Pushed",
+          icon: (
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ),
+        };
+      case "failed":
+        return {
+          color: "#ef4444", // red
+          bgColor: "rgba(239, 68, 68, 0.15)",
+          borderColor: "rgba(239, 68, 68, 0.4)",
+          label: "Push Failed",
+          icon: (
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          ),
+        };
+      default:
+        return null;
+    }
+  };
+
+  const config = getStatusConfig();
+  if (!config || pushState.status === "idle") return null;
+
+  return (
+    <span
+      className="badge flex items-center gap-1"
+      style={{
+        backgroundColor: config.bgColor,
+        color: config.color,
+        borderColor: config.borderColor,
+      }}
+      title={pushState.error || (pushState.lastPushedAt ? `Pushed at ${new Date(pushState.lastPushedAt).toLocaleString()}` : config.label)}
+    >
+      {config.icon}
+      {config.label}
+    </span>
   );
 }

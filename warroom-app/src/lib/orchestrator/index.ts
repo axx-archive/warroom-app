@@ -66,10 +66,18 @@ export {
   abortAutoMerge,
   getMainBranch,
   integrationBranchExists,
+  // Push operations
+  pushBranch,
+  pushLaneBranch,
+  pushIntegrationBranch,
+  hasRemoteTrackingBranch,
+  getCurrentBranch,
+  isProtectedMainBranch,
 } from "./git-operations";
 
 export type {
   AutoCommitResult,
   AutoMergeResult,
   MergeLaneResult,
+  PushResult,
 } from "./git-operations";

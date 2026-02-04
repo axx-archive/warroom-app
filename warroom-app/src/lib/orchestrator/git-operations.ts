@@ -520,3 +520,148 @@ export async function abortAutoMerge(repoPath: string): Promise<{ success: boole
     };
   }
 }
+
+// ============ Git Push Operations ============
+
+// Result of a push operation
+export interface PushResult {
+  success: boolean;
+  branch: string;
+  remote: string;
+  error?: string;
+  errorType?: "auth" | "protected" | "rejected" | "network" | "unknown";
+}
+
+/**
+ * Check if a remote tracking branch exists
+ */
+export async function hasRemoteTrackingBranch(
+  repoPath: string,
+  branch: string,
+  remote: string = "origin"
+): Promise<boolean> {
+  const result = await gitExec(
+    `git ls-remote --heads ${remote} ${branch}`,
+    repoPath
+  );
+  return result.success && result.stdout.trim().length > 0;
+}
+
+/**
+ * Get the current branch name in a worktree
+ */
+export async function getCurrentBranch(worktreePath: string): Promise<string | null> {
+  const result = await gitExec(`git rev-parse --abbrev-ref HEAD`, worktreePath);
+  if (!result.success) return null;
+  const branch = result.stdout.trim();
+  return branch === "HEAD" ? null : branch;
+}
+
+/**
+ * Push a branch to remote with proper error handling
+ * Handles common failure cases: auth errors, protected branches, rejected pushes
+ */
+export async function pushBranch(
+  repoPath: string,
+  branch: string,
+  remote: string = "origin",
+  setUpstream: boolean = false
+): Promise<PushResult> {
+  console.log(`[GitOperations] Pushing branch ${branch} to ${remote}`);
+
+  // Build push command
+  const upstreamFlag = setUpstream ? "-u" : "";
+  const pushCmd = `git push ${upstreamFlag} ${remote} ${branch}`.trim().replace(/\s+/g, " ");
+
+  const result = await gitExec(pushCmd, repoPath);
+
+  if (result.success) {
+    console.log(`[GitOperations] Successfully pushed ${branch} to ${remote}`);
+    return {
+      success: true,
+      branch,
+      remote,
+    };
+  }
+
+  // Parse error type from stderr
+  const stderr = result.stderr.toLowerCase();
+  let errorType: PushResult["errorType"] = "unknown";
+
+  if (
+    stderr.includes("authentication") ||
+    stderr.includes("permission denied") ||
+    stderr.includes("could not read from remote") ||
+    stderr.includes("invalid credentials")
+  ) {
+    errorType = "auth";
+  } else if (
+    stderr.includes("protected branch") ||
+    stderr.includes("pre-receive hook declined") ||
+    stderr.includes("denied to")
+  ) {
+    errorType = "protected";
+  } else if (
+    stderr.includes("rejected") ||
+    stderr.includes("non-fast-forward") ||
+    stderr.includes("failed to push")
+  ) {
+    errorType = "rejected";
+  } else if (
+    stderr.includes("could not resolve host") ||
+    stderr.includes("network") ||
+    stderr.includes("connection refused") ||
+    stderr.includes("timed out")
+  ) {
+    errorType = "network";
+  }
+
+  console.error(`[GitOperations] Push failed for ${branch}: ${result.error}`);
+
+  return {
+    success: false,
+    branch,
+    remote,
+    error: result.error || result.stderr || "Push failed",
+    errorType,
+  };
+}
+
+/**
+ * Push a lane branch after commit
+ * This is called when auto-push for lane branches is enabled
+ */
+export async function pushLaneBranch(
+  worktreePath: string,
+  branch: string
+): Promise<PushResult> {
+  console.log(`[GitOperations] Auto-pushing lane branch ${branch}`);
+
+  // Check if remote tracking exists - if not, set upstream
+  const hasTracking = await hasRemoteTrackingBranch(worktreePath, branch);
+  return await pushBranch(worktreePath, branch, "origin", !hasTracking);
+}
+
+/**
+ * Push the integration branch after merge
+ * This is called when auto-push for integration branch is enabled
+ */
+export async function pushIntegrationBranch(
+  repoPath: string,
+  integrationBranch: string
+): Promise<PushResult> {
+  console.log(`[GitOperations] Auto-pushing integration branch ${integrationBranch}`);
+
+  // Check if remote tracking exists - if not, set upstream
+  const hasTracking = await hasRemoteTrackingBranch(repoPath, integrationBranch);
+  return await pushBranch(repoPath, integrationBranch, "origin", !hasTracking);
+}
+
+/**
+ * Check if a branch is a protected main branch
+ * Used to prevent accidental pushes without human confirmation
+ */
+export function isProtectedMainBranch(branch: string): boolean {
+  const protectedBranches = ["main", "master", "production", "prod", "release"];
+  return protectedBranches.includes(branch.toLowerCase());
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
-import { LaneStatus, MergeMethod, MergeProposal, MergeState } from "@/lib/plan-schema";
+import { LaneStatus, MergeMethod, MergeProposal, MergeState, AutoPushOptions, PushState } from "@/lib/plan-schema";
 
 // Imperative handle for parent to trigger refresh
 export interface MergeViewHandle {
@@ -28,6 +28,8 @@ interface MergeInfoResponse {
   overlapMatrix: Record<string, string[]>;
   mergeState?: MergeState;
   repoPath?: string;
+  autoPushOptions?: AutoPushOptions;
+  integrationBranchPushState?: PushState;
   error?: string;
 }
 
@@ -89,6 +91,10 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
   const [mergedToMain, setMergedToMain] = useState(false);
   const [launchMergeStatus, setLaunchMergeStatus] = useState<"idle" | "copied" | "error">("idle");
   const [openingCursor, setOpeningCursor] = useState(false);
+  const [autoPushOptions, setAutoPushOptions] = useState<AutoPushOptions>({
+    pushLaneBranches: false,
+    pushIntegrationBranch: false,
+  });
 
   // Expose refresh function to parent via ref
   useImperativeHandle(ref, () => ({
@@ -106,6 +112,10 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
       const data = await response.json();
       if (data.success) {
         setMergeInfo(data);
+        // Load auto-push options from merge info
+        if (data.autoPushOptions) {
+          setAutoPushOptions(data.autoPushOptions);
+        }
       } else {
         setError(data.error || "Failed to fetch merge info");
       }
@@ -283,6 +293,19 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
     }
   }, []);
 
+  const updateAutoPushOptions = useCallback(async (newOptions: AutoPushOptions) => {
+    setAutoPushOptions(newOptions);
+    try {
+      await fetch(`/api/runs/${slug}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoPushOptions: newOptions }),
+      });
+    } catch (err) {
+      console.error("Failed to update auto-push options:", err);
+    }
+  }, [slug]);
+
   useEffect(() => {
     fetchMergeInfo();
     fetchExistingProposal();
@@ -410,6 +433,13 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
           </div>
         </div>
       )}
+
+      {/* Auto-Push Options */}
+      <AutoPushOptionsPanel
+        options={autoPushOptions}
+        onChange={updateAutoPushOptions}
+        integrationBranchPushState={mergeInfo.integrationBranchPushState}
+      />
 
       {/* Merge Proposal Section */}
       <div className="pt-5 border-t border-[var(--border-subtle)]">
@@ -1125,6 +1155,139 @@ function MergeProposalDisplay({
         </div>
       </div>
 
+    </div>
+  );
+}
+
+// Auto-push options panel
+interface AutoPushOptionsPanelProps {
+  options: AutoPushOptions;
+  onChange: (options: AutoPushOptions) => void;
+  integrationBranchPushState?: PushState;
+}
+
+function AutoPushOptionsPanel({ options, onChange, integrationBranchPushState }: AutoPushOptionsPanelProps) {
+  return (
+    <div className="mb-5 pb-5 border-b border-[var(--border-subtle)]">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-6 h-6 rounded bg-[rgba(6,182,212,0.15)] border border-[rgba(6,182,212,0.3)] flex items-center justify-center">
+          <svg className="w-3.5 h-3.5 text-[var(--cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+        </div>
+        <span className="text-sm font-medium text-[var(--text-primary)]">Auto-Push Options</span>
+      </div>
+
+      <div className="space-y-3 ml-9">
+        {/* Push lane branches */}
+        <label className="flex items-center gap-3 cursor-pointer">
+          <button
+            type="button"
+            onClick={() => onChange({ ...options, pushLaneBranches: !options.pushLaneBranches })}
+            className={`toggle ${options.pushLaneBranches ? "active" : ""}`}
+            role="switch"
+            aria-checked={options.pushLaneBranches}
+          />
+          <div>
+            <span className="text-sm text-[var(--text-secondary)]">
+              Auto-push lane branches after commit
+            </span>
+            <div className="text-xs text-[var(--text-ghost)]">
+              Automatically push lane branches to origin after auto-commit
+            </div>
+          </div>
+        </label>
+
+        {/* Push integration branch */}
+        <label className="flex items-center gap-3 cursor-pointer">
+          <button
+            type="button"
+            onClick={() => onChange({ ...options, pushIntegrationBranch: !options.pushIntegrationBranch })}
+            className={`toggle ${options.pushIntegrationBranch ? "active" : ""}`}
+            role="switch"
+            aria-checked={options.pushIntegrationBranch}
+          />
+          <div>
+            <span className="text-sm text-[var(--text-secondary)]">
+              Auto-push integration branch after merge
+            </span>
+            <div className="text-xs text-[var(--text-ghost)]">
+              Automatically push integration branch to origin after lanes are merged
+            </div>
+          </div>
+        </label>
+      </div>
+
+      {/* Integration branch push status */}
+      {integrationBranchPushState && integrationBranchPushState.status !== "idle" && (
+        <div className="mt-3 ml-9">
+          <IntegrationBranchPushStatus pushState={integrationBranchPushState} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Integration branch push status display
+function IntegrationBranchPushStatus({ pushState }: { pushState: PushState }) {
+  const getStatusConfig = () => {
+    switch (pushState.status) {
+      case "pushing":
+        return {
+          color: "#06b6d4",
+          bgColor: "rgba(6, 182, 212, 0.08)",
+          borderColor: "rgba(6, 182, 212, 0.3)",
+          icon: (
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ),
+          text: "Pushing integration branch...",
+        };
+      case "success":
+        return {
+          color: "#22c55e",
+          bgColor: "rgba(34, 197, 94, 0.08)",
+          borderColor: "rgba(34, 197, 94, 0.3)",
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ),
+          text: `Integration branch pushed${pushState.lastPushedAt ? ` at ${new Date(pushState.lastPushedAt).toLocaleTimeString()}` : ""}`,
+        };
+      case "failed":
+        return {
+          color: "#ef4444",
+          bgColor: "rgba(239, 68, 68, 0.08)",
+          borderColor: "rgba(239, 68, 68, 0.3)",
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          ),
+          text: `Push failed: ${pushState.error || "Unknown error"}`,
+        };
+      default:
+        return null;
+    }
+  };
+
+  const config = getStatusConfig();
+  if (!config) return null;
+
+  return (
+    <div
+      className="p-3 rounded border flex items-center gap-2"
+      style={{
+        backgroundColor: config.bgColor,
+        borderColor: config.borderColor,
+        color: config.color,
+      }}
+    >
+      {config.icon}
+      <span className="text-sm">{config.text}</span>
     </div>
   );
 }

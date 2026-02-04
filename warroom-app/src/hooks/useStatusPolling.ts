@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode, LaneAgentStatus, RetryState } from "@/lib/plan-schema";
+import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode, LaneAgentStatus, RetryState, PushState } from "@/lib/plan-schema";
 
 const POLL_INTERVAL = 5000; // 5 seconds
 
@@ -36,6 +36,8 @@ export interface LaneUncommittedStatus {
   agentStatus?: LaneAgentStatus;
   // Retry state for failed lanes
   retryState?: RetryState;
+  // Push state for the lane branch
+  pushState?: PushState;
 }
 
 export interface LaneState {
@@ -141,6 +143,7 @@ export function useStatusPolling({
             launchMode?: LaunchMode;
             agentStatus?: LaneAgentStatus;
             retryState?: RetryState;
+            pushState?: PushState;
           };
           newLaneUncommitted[laneId] = {
             uncommittedCount: data.uncommittedCount,
@@ -155,6 +158,7 @@ export function useStatusPolling({
             launchMode: data.launchMode,
             agentStatus: data.agentStatus,
             retryState: data.retryState,
+            pushState: data.pushState,
           };
         }
       }

@@ -35,6 +35,10 @@ export interface LaneActivityEvent {
     maxAttempts?: number;
     nextRetryAt?: string;
     backoffSeconds?: number;
+    // Push event details
+    pushType?: "lane" | "integration" | "main";
+    status?: "pushing" | "success" | "failed";
+    errorType?: "auth" | "protected" | "rejected" | "network" | "unknown";
   };
   timestamp: string;
 }
@@ -64,9 +68,10 @@ export interface MergeReadyEvent {
 // Event emitted during auto-merge process
 export interface MergeProgressEvent {
   runSlug: string;
-  status: "started" | "merging" | "complete" | "conflict" | "failed";
+  status: "started" | "merging" | "complete" | "conflict" | "failed" | "pushing" | "pushed" | "push_failed";
   currentLane?: string;
   mergedLanes: string[];
+  message?: string;
   // Conflict info if status is "conflict"
   conflictInfo?: {
     laneId: string;

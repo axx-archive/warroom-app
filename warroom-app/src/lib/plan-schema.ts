@@ -103,6 +103,27 @@ export interface MergeState {
   updatedAt: string;
 }
 
+// Push state for tracking auto-push operations
+export interface PushState {
+  // Current push status
+  status: "idle" | "pushing" | "success" | "failed";
+  // Last successful push timestamp
+  lastPushedAt?: string;
+  // Error message if status is "failed"
+  error?: string;
+  // Whether push was for lane branch, integration branch, or main
+  pushType?: "lane" | "integration" | "main";
+}
+
+// Auto-push options
+export interface AutoPushOptions {
+  // Auto-push lane branches after commit
+  pushLaneBranches: boolean;
+  // Auto-push integration branch after merge
+  pushIntegrationBranch: boolean;
+  // Note: Main branch push always requires human confirmation
+}
+
 // Launch mode determines how the lane is opened
 export type LaunchMode = "cursor" | "terminal";
 
@@ -149,6 +170,7 @@ export interface LaneStatusEntry {
   lastActivityAt?: string; // ISO-8601 timestamp of last file activity in worktree
   completionDetection?: CompletionDetection; // Auto-completion detection log
   retryState?: RetryState; // Auto-retry state for failed lanes
+  pushState?: PushState; // Push state for tracking auto-push operations per lane
 }
 
 export interface StatusJson {
@@ -158,6 +180,8 @@ export interface StatusJson {
   lanesCompleted?: string[];
   lanes?: Record<string, LaneStatusEntry>;
   mergeState?: MergeState;
+  autoPushOptions?: AutoPushOptions; // Auto-push options for the run
+  integrationBranchPushState?: PushState; // Push state for the integration branch
   updatedAt: string;
 }
 
