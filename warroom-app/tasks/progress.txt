@@ -353,3 +353,28 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Open in Cursor button allows human resolution of conflicts
   - The orchestrator's onLaneComplete() method triggers auto-merge when all lanes are successfully complete
 ---
+
+## 2026-02-04 - US-308: Git push automation
+- Implemented auto-push functionality for lane branches and integration branch
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `PushState` and `AutoPushOptions` interfaces, extended `LaneStatusEntry` with `pushState`, extended `StatusJson` with `autoPushOptions` and `integrationBranchPushState`
+  - `src/lib/orchestrator/git-operations.ts` - Added `pushBranch()`, `pushLaneBranch()`, `pushIntegrationBranch()`, `hasRemoteTrackingBranch()`, `getCurrentBranch()`, `isProtectedMainBranch()` functions
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added `autoPushLaneBranch()`, `autoPushIntegrationBranch()`, `updateLanePushState()`, `updateIntegrationBranchPushState()` methods
+  - `src/lib/orchestrator/index.ts` - Exported new push functions and PushResult type
+  - `src/lib/websocket/types.ts` - Extended `LaneActivityEvent` with push details, extended `MergeProgressEvent` with push statuses
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Added `pushState` to response
+  - `src/app/api/runs/[slug]/merge-info/route.ts` - Added `autoPushOptions` and `integrationBranchPushState` to response
+  - `src/app/api/runs/[slug]/status/route.ts` - Added handler to persist `autoPushOptions` changes
+  - `src/hooks/useStatusPolling.ts` - Extended `LaneUncommittedStatus` with `pushState`
+  - `src/hooks/useRealtimeStatus.ts` - Extended `LaneUncommittedStatus` with `pushState`
+  - `src/components/LaneStatusCard.tsx` - Added `PushStatusBadge` component showing push status on lane cards
+  - `src/components/MergeView.tsx` - Added `AutoPushOptionsPanel` and `IntegrationBranchPushStatus` components with toggle controls
+- **Learnings for future iterations:**
+  - Push error types: "auth" (credentials), "protected" (branch rules), "rejected" (non-fast-forward), "network" (connectivity), "unknown"
+  - Use `git ls-remote --heads origin ${branch}` to check if remote tracking branch exists
+  - Set upstream with `-u` flag on first push: `git push -u origin ${branch}`
+  - `PushState` tracks: status (idle/pushing/success/failed), lastPushedAt, error, pushType (lane/integration/main)
+  - Auto-push is opt-in via `AutoPushOptions` stored in status.json - separate toggles for lane and integration branches
+  - Main branch push requires human confirmation - use `isProtectedMainBranch()` to check protected names
+  - Push status UI: badges on lane cards (pushing spinner, success check, failed X) and status panel in MergeView
+---
