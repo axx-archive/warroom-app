@@ -88,6 +88,7 @@ export interface LaneStatusEntry {
   status: LaneStatus;
   autonomy?: LaneAutonomy;
   commitsAtLaunch?: number; // Track commit count when lane was launched
+  suggestionDismissed?: boolean; // True if user dismissed completion suggestion
 }
 
 export interface StatusJson {

@@ -72,6 +72,8 @@ interface UpdateStatusRequest {
   autonomy?: LaneAutonomy;
   // Update overall run status
   status?: RunStatus;
+  // Dismiss completion suggestion for a lane
+  suggestionDismissed?: boolean;
 }
 
 export async function POST(
@@ -159,6 +161,22 @@ export async function POST(
         staged: existingLane?.staged ?? false,
         status: existingLane?.status ?? "pending",
         autonomy: body.autonomy,
+      };
+    }
+
+    // Update suggestion dismissed state
+    if (body.laneId && body.suggestionDismissed !== undefined) {
+      if (!currentStatus.lanes) {
+        currentStatus.lanes = {};
+      }
+
+      // Preserve existing lane data
+      const existingLane = currentStatus.lanes[body.laneId];
+      currentStatus.lanes[body.laneId] = {
+        ...existingLane,
+        staged: existingLane?.staged ?? false,
+        status: existingLane?.status ?? "pending",
+        suggestionDismissed: body.suggestionDismissed,
       };
     }
 

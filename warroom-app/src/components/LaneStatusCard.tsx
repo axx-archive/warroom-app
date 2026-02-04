@@ -13,6 +13,7 @@ interface LaneStatusCardProps {
   completedLanes?: string[]; // List of completed lane IDs to check dependencies
   uncommittedStatus?: LaneUncommittedStatus; // Uncommitted files data from polling
   onStatusChange?: (laneId: string, newStatus: LaneStatus) => void; // Callback when status changes
+  onDismissSuggestion?: (laneId: string) => void; // Callback when suggestion is dismissed
 }
 
 const STATUS_CONFIG: Record<LaneStatus, { color: string; bgColor: string; borderColor: string; label: string }> = {
@@ -163,6 +164,7 @@ export function LaneStatusCard({
   completedLanes = [],
   uncommittedStatus,
   onStatusChange,
+  onDismissSuggestion,
 }: LaneStatusCardProps) {
   const [status, setStatus] = useState<LaneStatus>(initialStatus);
   const [staged] = useState(initialStaged);
@@ -173,12 +175,17 @@ export function LaneStatusCard({
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitStatus, setCommitStatus] = useState<"idle" | "success" | "nochanges" | "error">("idle");
   const [showUncommittedPopover, setShowUncommittedPopover] = useState(false);
+  const [isDismissing, setIsDismissing] = useState(false);
   const uncommittedBadgeRef = useRef<HTMLButtonElement>(null);
 
   const isComplete = status === "complete";
   const config = STATUS_CONFIG[status];
   const hasUncommittedFiles = uncommittedStatus && uncommittedStatus.uncommittedCount > 0;
   const hasNewCommits = uncommittedStatus && uncommittedStatus.commitsSinceLaunch && uncommittedStatus.commitsSinceLaunch > 0;
+
+  // Completion suggestion
+  const suggestion = uncommittedStatus?.completionSuggestion;
+  const showSuggestion = suggestion?.suggested && !suggestion?.dismissed && !isComplete;
 
   // Check if all dependencies are complete
   const dependenciesMet = lane.dependsOn.length === 0 ||
@@ -362,6 +369,58 @@ export function LaneStatusCard({
       console.error("Error opening git log:", error);
     }
   }, [slug, lane.laneId, lane.worktreePath, uncommittedStatus?.commitsSinceLaunch]);
+
+  // Handle dismissing the completion suggestion
+  const handleDismissSuggestion = useCallback(async () => {
+    setIsDismissing(true);
+    try {
+      const response = await fetch(`/api/runs/${slug}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          laneId: lane.laneId,
+          suggestionDismissed: true,
+        }),
+      });
+
+      if (response.ok) {
+        onDismissSuggestion?.(lane.laneId);
+      } else {
+        console.error("Failed to dismiss suggestion");
+      }
+    } catch (error) {
+      console.error("Error dismissing suggestion:", error);
+    } finally {
+      setIsDismissing(false);
+    }
+  }, [slug, lane.laneId, onDismissSuggestion]);
+
+  // Handle quick "Mark Complete" from suggestion banner
+  const handleMarkComplete = useCallback(async () => {
+    const newStatus: LaneStatus = "complete";
+
+    startTransition(async () => {
+      try {
+        const response = await fetch(`/api/runs/${slug}/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            laneId: lane.laneId,
+            laneStatus: newStatus,
+          }),
+        });
+
+        if (response.ok) {
+          setStatus(newStatus);
+          onStatusChange?.(lane.laneId, newStatus);
+        } else {
+          console.error("Failed to mark lane as complete");
+        }
+      } catch (error) {
+        console.error("Error marking lane as complete:", error);
+      }
+    });
+  }, [slug, lane.laneId, onStatusChange]);
 
   return (
     <div
@@ -602,6 +661,75 @@ export function LaneStatusCard({
           )}
         </span>
       </div>
+
+      {/* Completion Suggestion Banner */}
+      {showSuggestion && (
+        <div
+          className="mt-3 ml-8 p-3 rounded-lg flex items-center justify-between gap-3"
+          style={{
+            backgroundColor: "rgba(34, 197, 94, 0.1)",
+            borderColor: "rgba(34, 197, 94, 0.3)",
+            border: "1px solid rgba(34, 197, 94, 0.3)",
+          }}
+        >
+          <div className="flex items-start gap-2 min-w-0 flex-1">
+            <svg
+              className="w-4 h-4 shrink-0 mt-0.5"
+              style={{ color: "#22c55e" }}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <div className="min-w-0">
+              <p className="text-sm font-medium" style={{ color: "#22c55e" }}>
+                This lane looks complete
+              </p>
+              <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-secondary)" }} title={suggestion?.reason}>
+                {suggestion?.reason}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleMarkComplete}
+              disabled={isPending}
+              className="btn btn--sm"
+              style={{
+                backgroundColor: "#22c55e",
+                color: "white",
+                border: "none",
+              }}
+            >
+              {isPending ? "..." : "Mark Complete"}
+            </button>
+            <button
+              onClick={handleDismissSuggestion}
+              disabled={isDismissing}
+              className="btn btn--sm btn--ghost"
+              title="Dismiss suggestion"
+              style={{ padding: "4px 8px" }}
+            >
+              {isDismissing ? (
+                <svg className="w-3 h-3 spinner" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

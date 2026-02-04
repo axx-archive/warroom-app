@@ -1,5 +1,5 @@
-// API route to get uncommitted changes and commit counts per lane
-// GET /api/runs/[slug]/lane-status - returns uncommitted file counts, file lists, and commits since launch per lane
+// API route to get uncommitted changes, commit counts, and completion suggestions per lane
+// GET /api/runs/[slug]/lane-status - returns uncommitted file counts, file lists, commits since launch, and completion signals per lane
 
 import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
@@ -16,17 +16,27 @@ interface UncommittedFile {
   path: string;
 }
 
+// Completion suggestion signals detected for a lane
+export interface CompletionSuggestion {
+  suggested: boolean;
+  reason?: string; // e.g., "REVIEW.md exists", "Commit message contains 'complete'"
+  signals: string[]; // List of all detected signals
+  dismissed?: boolean; // True if user dismissed this suggestion
+}
+
 interface LaneUncommittedStatus {
   laneId: string;
   uncommittedCount: number;
   uncommittedFiles: UncommittedFile[];
   worktreeExists: boolean;
   error?: string;
-  // New fields for commits tracking
+  // Commits tracking
   commitsSinceLaunch?: number;
   commitsAtLaunch?: number;
   currentCommits?: number;
   branch?: string;
+  // Completion suggestion
+  completionSuggestion?: CompletionSuggestion;
 }
 
 export interface LaneStatusResponse {
@@ -74,6 +84,75 @@ async function getCommitCount(worktreePath: string): Promise<number | null> {
   } catch {
     return null;
   }
+}
+
+// Completion signal patterns in commit messages
+const COMPLETION_PATTERNS = [
+  /\bcomplete[sd]?\b/i,
+  /\bdone\b/i,
+  /\bfinished\b/i,
+  /\bready for review\b/i,
+  /\bwrap up\b/i,
+];
+
+// Detect completion signals for a lane
+async function detectCompletionSignals(
+  worktreePath: string,
+  dismissed: boolean = false
+): Promise<CompletionSuggestion> {
+  const signals: string[] = [];
+
+  // If dismissed, return early with no suggestion
+  if (dismissed) {
+    return { suggested: false, signals: [], dismissed: true };
+  }
+
+  try {
+    await fs.access(worktreePath);
+  } catch {
+    return { suggested: false, signals: [] };
+  }
+
+  // Check for REVIEW.md
+  try {
+    await fs.access(path.join(worktreePath, "REVIEW.md"));
+    signals.push("REVIEW.md exists");
+  } catch {
+    // File doesn't exist, that's okay
+  }
+
+  // Check for FINDINGS.md
+  try {
+    await fs.access(path.join(worktreePath, "FINDINGS.md"));
+    signals.push("FINDINGS.md exists");
+  } catch {
+    // File doesn't exist, that's okay
+  }
+
+  // Check recent commit messages for completion patterns
+  try {
+    const { stdout } = await execAsync("git log --oneline -5 --format=%s", {
+      cwd: worktreePath,
+    });
+    const recentCommits = stdout.trim().split("\n").filter(Boolean);
+
+    for (const commit of recentCommits) {
+      for (const pattern of COMPLETION_PATTERNS) {
+        if (pattern.test(commit)) {
+          signals.push(`Commit message: "${commit.substring(0, 50)}${commit.length > 50 ? "..." : ""}"`);
+          break; // Only add once per commit
+        }
+      }
+    }
+  } catch {
+    // Git command failed, that's okay
+  }
+
+  // Determine if we should suggest completion
+  const suggested = signals.length > 0;
+  const reason = signals.length > 0 ? signals[0] : undefined;
+
+  return { suggested, reason, signals };
 }
 
 export async function GET(
@@ -126,7 +205,7 @@ export async function GET(
       // Status.json may not exist yet - that's okay
     }
 
-    // Get uncommitted files and commit counts for each lane
+    // Get uncommitted files, commit counts, and completion suggestions for each lane
     const laneStatuses: Record<string, LaneUncommittedStatus> = {};
 
     await Promise.all(
@@ -134,13 +213,25 @@ export async function GET(
         const { files, error } = await getUncommittedFiles(lane.worktreePath);
         const currentCommits = await getCommitCount(lane.worktreePath);
 
-        // Get commitsAtLaunch from status.json
-        const commitsAtLaunch = statusJson?.lanes?.[lane.laneId]?.commitsAtLaunch;
+        // Get lane-specific data from status.json
+        const laneStatusEntry = statusJson?.lanes?.[lane.laneId];
+        const commitsAtLaunch = laneStatusEntry?.commitsAtLaunch;
+        const suggestionDismissed = laneStatusEntry?.suggestionDismissed ?? false;
+        const laneStatus = laneStatusEntry?.status;
 
         // Calculate commits since launch
         let commitsSinceLaunch: number | undefined;
         if (currentCommits !== null && commitsAtLaunch !== undefined) {
           commitsSinceLaunch = Math.max(0, currentCommits - commitsAtLaunch);
+        }
+
+        // Detect completion signals (only for lanes that are in_progress and not already complete)
+        let completionSuggestion: CompletionSuggestion | undefined;
+        if (laneStatus === "in_progress") {
+          completionSuggestion = await detectCompletionSignals(
+            lane.worktreePath,
+            suggestionDismissed
+          );
         }
 
         laneStatuses[lane.laneId] = {
@@ -153,6 +244,7 @@ export async function GET(
           commitsAtLaunch,
           currentCommits: currentCommits ?? undefined,
           branch: lane.branch,
+          completionSuggestion,
         };
       })
     );

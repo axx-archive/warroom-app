@@ -10,6 +10,14 @@ export interface UncommittedFile {
   path: string;
 }
 
+// Completion suggestion signals detected for a lane
+export interface CompletionSuggestion {
+  suggested: boolean;
+  reason?: string; // e.g., "REVIEW.md exists", "Commit message contains 'complete'"
+  signals: string[]; // List of all detected signals
+  dismissed?: boolean; // True if user dismissed this suggestion
+}
+
 export interface LaneUncommittedStatus {
   uncommittedCount: number;
   uncommittedFiles: UncommittedFile[];
@@ -20,6 +28,8 @@ export interface LaneUncommittedStatus {
   commitsAtLaunch?: number;
   currentCommits?: number;
   branch?: string;
+  // Completion suggestion
+  completionSuggestion?: CompletionSuggestion;
 }
 
 export interface LaneState {
@@ -108,7 +118,7 @@ export function useStatusPolling({
         }
       }
 
-      // Process uncommitted data (including commits info)
+      // Process uncommitted data (including commits info and completion suggestions)
       const newLaneUncommitted: Record<string, LaneUncommittedStatus> = {};
       if (uncommittedResponse.ok && uncommittedData.success && uncommittedData.lanes) {
         for (const [laneId, laneData] of Object.entries(uncommittedData.lanes)) {
@@ -121,6 +131,7 @@ export function useStatusPolling({
             commitsAtLaunch?: number;
             currentCommits?: number;
             branch?: string;
+            completionSuggestion?: CompletionSuggestion;
           };
           newLaneUncommitted[laneId] = {
             uncommittedCount: data.uncommittedCount,
@@ -131,6 +142,7 @@ export function useStatusPolling({
             commitsAtLaunch: data.commitsAtLaunch,
             currentCommits: data.currentCommits,
             branch: data.branch,
+            completionSuggestion: data.completionSuggestion,
           };
         }
       }
