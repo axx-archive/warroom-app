@@ -11,6 +11,7 @@ import {
   MergeReadyEvent,
   MergeProgressEvent,
   RunCompleteEvent,
+  MissionProgressEvent,
 } from "@/lib/websocket/types";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:3001";
@@ -28,6 +29,7 @@ interface UseWebSocketOptions {
   onMergeReady?: (event: MergeReadyEvent) => void;
   onMergeProgress?: (event: MergeProgressEvent) => void;
   onRunComplete?: (event: RunCompleteEvent) => void;
+  onMissionProgress?: (event: MissionProgressEvent) => void;
 }
 
 interface UseWebSocketReturn {
@@ -46,6 +48,7 @@ export function useWebSocket({
   onMergeReady,
   onMergeProgress,
   onRunComplete,
+  onMissionProgress,
 }: UseWebSocketOptions): UseWebSocketReturn {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [lastError, setLastError] = useState<string | null>(null);
@@ -64,6 +67,7 @@ export function useWebSocket({
   const onMergeReadyRef = useRef(onMergeReady);
   const onMergeProgressRef = useRef(onMergeProgress);
   const onRunCompleteRef = useRef(onRunComplete);
+  const onMissionProgressRef = useRef(onMissionProgress);
 
   // Update refs when handlers change
   useEffect(() => {
@@ -73,7 +77,8 @@ export function useWebSocket({
     onMergeReadyRef.current = onMergeReady;
     onMergeProgressRef.current = onMergeProgress;
     onRunCompleteRef.current = onRunComplete;
-  }, [onLaneActivity, onLaneStatusChange, onLaneProgress, onMergeReady, onMergeProgress, onRunComplete]);
+    onMissionProgressRef.current = onMissionProgress;
+  }, [onLaneActivity, onLaneStatusChange, onLaneProgress, onMergeReady, onMergeProgress, onRunComplete, onMissionProgress]);
 
   // Cleanup function
   const cleanup = useCallback(() => {
@@ -189,6 +194,12 @@ export function useWebSocket({
       }
     });
 
+    socket.on("mission-progress", (event) => {
+      if (event.runSlug === runSlug && onMissionProgressRef.current) {
+        onMissionProgressRef.current(event);
+      }
+    });
+
     socket.on("connection-status", (event) => {
       if (event.connected) {
         setConnectionStatus("connected");
@@ -297,6 +308,12 @@ export function useWebSocket({
       socket.on("run-complete", (event) => {
         if (event.runSlug === runSlug && onRunCompleteRef.current) {
           onRunCompleteRef.current(event);
+        }
+      });
+
+      socket.on("mission-progress", (event) => {
+        if (event.runSlug === runSlug && onMissionProgressRef.current) {
+          onMissionProgressRef.current(event);
         }
       });
 

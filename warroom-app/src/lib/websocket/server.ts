@@ -13,6 +13,7 @@ import {
   MergeReadyEvent,
   MergeProgressEvent,
   RunCompleteEvent,
+  MissionProgressEvent,
 } from "./types";
 
 const WS_PORT = parseInt(process.env.WS_PORT || "3001", 10);
@@ -131,6 +132,14 @@ export function emitRunComplete(event: RunCompleteEvent): void {
   const server = getSocketServer();
   if (server) {
     server.to(`run:${event.runSlug}`).emit("run-complete", event);
+  }
+}
+
+// Emit mission progress event to subscribed clients
+export function emitMissionProgress(event: MissionProgressEvent): void {
+  const server = getSocketServer();
+  if (server) {
+    server.to(`run:${event.runSlug}`).emit("mission-progress", event);
   }
 }
 

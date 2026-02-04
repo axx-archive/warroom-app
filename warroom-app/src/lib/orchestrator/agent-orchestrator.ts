@@ -7,7 +7,8 @@ import path from "path";
 import os from "os";
 import readline from "readline";
 import { LaneStatus, WarRoomPlan, StatusJson, Lane, LaunchMode, RetryState, RetryAttempt, MergeState, PushState, AutoPushOptions } from "../plan-schema";
-import { emitLaneStatusChange, emitLaneActivity, emitMergeProgress, emitMergeReady, emitRunComplete } from "../websocket/server";
+import { emitLaneStatusChange, emitLaneActivity, emitMergeProgress, emitMergeReady, emitRunComplete, emitMissionProgress } from "../websocket/server";
+import { MissionPhase } from "../websocket/types";
 import {
   spawnTerminal as spawnTerminalWindow,
   isTerminalWindowOpen,
@@ -123,6 +124,55 @@ class AgentOrchestrator {
     process.on("SIGINT", () => shutdown("SIGINT"));
   }
 
+  // Emit mission progress event
+  private emitMissionProgressUpdate(runSlug: string, phase: MissionPhase, message: string): void {
+    const runState = this.runs.get(runSlug);
+    if (!runState) return;
+
+    const lanes = Array.from(runState.lanes.values());
+    const totalLanes = lanes.length;
+    const lanesLaunched = lanes.filter((l) =>
+      l.status !== "pending"
+    ).length;
+    const lanesRunning = lanes.filter((l) =>
+      l.status === "running" || l.status === "starting" || l.status === "retrying"
+    ).length;
+    const lanesComplete = lanes.filter((l) => l.status === "complete").length;
+    const lanesFailed = lanes.filter((l) => l.status === "failed").length;
+    const lanesMerged = runState.mergeState?.mergedLanes?.length || 0;
+
+    // Calculate overall progress
+    let overallProgress = 0;
+    if (phase === "launching") {
+      overallProgress = Math.round((lanesLaunched / totalLanes) * 25); // 0-25%
+    } else if (phase === "running") {
+      overallProgress = 25 + Math.round((lanesComplete / totalLanes) * 50); // 25-75%
+    } else if (phase === "committing") {
+      overallProgress = 75 + Math.round((lanesComplete / totalLanes) * 10); // 75-85%
+    } else if (phase === "merging") {
+      overallProgress = 85 + Math.round((lanesMerged / totalLanes) * 15); // 85-100%
+    } else if (phase === "complete") {
+      overallProgress = 100;
+    } else if (phase === "failed" || phase === "stopped") {
+      // Keep current progress for failed/stopped states
+      overallProgress = 25 + Math.round((lanesComplete / totalLanes) * 50);
+    }
+
+    emitMissionProgress({
+      runSlug,
+      phase,
+      message,
+      lanesLaunched,
+      lanesRunning,
+      lanesComplete,
+      lanesFailed,
+      totalLanes,
+      lanesMerged,
+      overallProgress,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   // Start a run - launches all ready lanes
   public async startRun(runSlug: string): Promise<{ success: boolean; error?: string }> {
     if (this.runs.has(runSlug)) {
@@ -174,10 +224,16 @@ class AgentOrchestrator {
 
       this.runs.set(runSlug, runState);
 
+      // Emit mission progress: launching phase
+      this.emitMissionProgressUpdate(runSlug, "launching", "Launching lanes...");
+
       // Start lanes in dependency order
       await this.startReadyLanes(runSlug, plan, statusJson);
 
       runState.status = "running";
+
+      // Emit mission progress: running phase
+      this.emitMissionProgressUpdate(runSlug, "running", "Lanes are executing...");
 
       return { success: true };
     } catch (error) {
@@ -951,6 +1007,9 @@ class AgentOrchestrator {
       // Try to start more lanes
       await this.startReadyLanes(runSlug, plan, statusJson);
 
+      // Emit mission progress update with current running status
+      this.emitMissionProgressUpdate(runSlug, "running", "Lanes are executing...");
+
       // Check if all lanes are complete (all successful)
       const allSuccessfullyComplete = Array.from(runState.lanes.values()).every(
         (lane) => lane.status === "complete"
@@ -974,6 +1033,9 @@ class AgentOrchestrator {
           timestamp: new Date().toISOString(),
         });
 
+        // Emit mission progress: merging phase
+        this.emitMissionProgressUpdate(runSlug, "merging", "Merging lanes to integration branch...");
+
         // Start auto-merge process
         await this.startAutoMerge(runSlug, plan, statusJson);
       } else if (allFinished) {
@@ -981,6 +1043,9 @@ class AgentOrchestrator {
         runState.status = "failed";
         runState.stoppedAt = new Date().toISOString();
         console.log(`[AgentOrchestrator] Run ${runSlug} failed - some lanes could not complete`);
+
+        // Emit mission progress: failed
+        this.emitMissionProgressUpdate(runSlug, "failed", "Mission failed - some lanes could not complete");
 
         emitRunComplete({
           runSlug,
@@ -1066,6 +1131,9 @@ class AgentOrchestrator {
         runState.stoppedAt = new Date().toISOString();
         console.log(`[AgentOrchestrator] Auto-merge complete for run ${runSlug}. Awaiting human gate for main merge.`);
 
+        // Emit mission progress: complete
+        this.emitMissionProgressUpdate(runSlug, "complete", "Mission complete! All lanes merged to integration branch.");
+
         emitRunComplete({
           runSlug,
           success: true,
@@ -1115,6 +1183,9 @@ class AgentOrchestrator {
           newStatus: "conflict",
           timestamp: new Date().toISOString(),
         });
+
+        // Emit mission progress: failed due to conflict
+        this.emitMissionProgressUpdate(runSlug, "failed", `Merge conflict detected in lane ${mergeResult.conflict.laneId}`);
       } else {
         // Non-conflict failure
         console.error(`[AgentOrchestrator] Auto-merge failed for run ${runSlug}: ${mergeResult.error}`);
@@ -1238,6 +1309,10 @@ class AgentOrchestrator {
 
     runState.status = "stopped";
     runState.stoppedAt = new Date().toISOString();
+
+    // Emit mission progress: stopped
+    this.emitMissionProgressUpdate(runSlug, "stopped", "Mission stopped by user");
+
     console.log(`[AgentOrchestrator] Run ${runSlug} stopped`);
   }
 

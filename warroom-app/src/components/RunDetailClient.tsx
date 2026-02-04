@@ -9,6 +9,8 @@ import { ConnectionStatusIndicator } from "./ConnectionStatusIndicator";
 import { DiffPreviewModal } from "./DiffPreviewModal";
 import { ActivityFeed } from "./ActivityFeed";
 import { useActivityFeed } from "@/hooks/useActivityFeed";
+import { MissionPhase, MissionProgressEvent } from "@/lib/websocket/types";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 interface RunDetailClientProps {
   lanes: Lane[];
@@ -46,6 +48,27 @@ interface LaunchAllSummary {
 // Notification types for auto-merge proposal
 interface MergeNotification {
   type: "success" | "warning" | "error";
+  message: string;
+  details?: string;
+}
+
+// Mission state for one-click Start Mission
+interface MissionState {
+  isRunning: boolean;
+  phase: MissionPhase | null;
+  message: string;
+  overallProgress: number;
+  lanesLaunched: number;
+  lanesRunning: number;
+  lanesComplete: number;
+  lanesFailed: number;
+  lanesMerged: number;
+  totalLanes: number;
+}
+
+// Notification for mission events
+interface MissionNotification {
+  type: "success" | "warning" | "error" | "info";
   message: string;
   details?: string;
 }
@@ -126,6 +149,172 @@ export function RunDetailClient({
 
   // Diff preview modal state
   const [previewLaneId, setPreviewLaneId] = useState<string | null>(null);
+
+  // Mission state for one-click Start Mission
+  const [missionState, setMissionState] = useState<MissionState>({
+    isRunning: false,
+    phase: null,
+    message: "",
+    overallProgress: 0,
+    lanesLaunched: 0,
+    lanesRunning: 0,
+    lanesComplete: 0,
+    lanesFailed: 0,
+    lanesMerged: 0,
+    totalLanes: lanes.length,
+  });
+  const [missionNotification, setMissionNotification] = useState<MissionNotification | null>(null);
+  const [isStartingMission, setIsStartingMission] = useState(false);
+  const [isStoppingMission, setIsStoppingMission] = useState(false);
+
+  // Handle mission progress events from WebSocket
+  const handleMissionProgress = useCallback((event: MissionProgressEvent) => {
+    setMissionState({
+      isRunning: event.phase !== "complete" && event.phase !== "failed" && event.phase !== "stopped",
+      phase: event.phase,
+      message: event.message,
+      overallProgress: event.overallProgress,
+      lanesLaunched: event.lanesLaunched,
+      lanesRunning: event.lanesRunning,
+      lanesComplete: event.lanesComplete,
+      lanesFailed: event.lanesFailed,
+      lanesMerged: event.lanesMerged,
+      totalLanes: event.totalLanes,
+    });
+
+    // Show notification for final states
+    if (event.phase === "complete") {
+      setMissionNotification({
+        type: "success",
+        message: "Mission complete!",
+        details: event.message,
+      });
+    } else if (event.phase === "failed") {
+      setMissionNotification({
+        type: "error",
+        message: "Mission failed",
+        details: event.message,
+      });
+    } else if (event.phase === "stopped") {
+      setMissionNotification({
+        type: "warning",
+        message: "Mission stopped",
+        details: "Mission was stopped by user",
+      });
+    }
+  }, []);
+
+  // WebSocket for mission progress events
+  useWebSocket({
+    runSlug: slug,
+    enabled: true,
+    onMissionProgress: handleMissionProgress,
+  });
+
+  // Fetch mission status on mount to check if mission is already running
+  useEffect(() => {
+    const fetchMissionStatus = async () => {
+      try {
+        const response = await fetch(`/api/runs/${slug}/start-mission`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.isRunning) {
+            setMissionState((prev) => ({
+              ...prev,
+              isRunning: true,
+              phase: data.status as MissionPhase || "running",
+              message: `Mission ${data.status}`,
+            }));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch mission status:", error);
+      }
+    };
+    fetchMissionStatus();
+  }, [slug]);
+
+  // Start mission handler
+  const handleStartMission = useCallback(async () => {
+    setIsStartingMission(true);
+    setMissionNotification(null);
+
+    try {
+      const response = await fetch(`/api/runs/${slug}/start-mission`, {
+        method: "POST",
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to start mission");
+      }
+
+      setMissionState((prev) => ({
+        ...prev,
+        isRunning: true,
+        phase: "launching",
+        message: "Launching lanes...",
+        totalLanes: lanes.length,
+      }));
+
+      setMissionNotification({
+        type: "info",
+        message: "Mission started",
+        details: "Launching all lanes in dependency order...",
+      });
+    } catch (error) {
+      console.error("Start mission error:", error);
+      setMissionNotification({
+        type: "error",
+        message: "Failed to start mission",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setIsStartingMission(false);
+    }
+  }, [slug, lanes.length]);
+
+  // Stop mission handler
+  const handleStopMission = useCallback(async () => {
+    setIsStoppingMission(true);
+
+    try {
+      const response = await fetch(`/api/runs/${slug}/start-mission`, {
+        method: "DELETE",
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to stop mission");
+      }
+
+      setMissionState((prev) => ({
+        ...prev,
+        isRunning: false,
+        phase: "stopped",
+        message: "Mission stopped",
+      }));
+    } catch (error) {
+      console.error("Stop mission error:", error);
+      setMissionNotification({
+        type: "error",
+        message: "Failed to stop mission",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setIsStoppingMission(false);
+    }
+  }, [slug]);
+
+  // Clear mission notification after 10 seconds (for success/info notifications only)
+  useEffect(() => {
+    if (missionNotification && (missionNotification.type === "success" || missionNotification.type === "info")) {
+      const timeout = setTimeout(() => {
+        setMissionNotification(null);
+      }, 10000);
+      return () => clearTimeout(timeout);
+    }
+  }, [missionNotification]);
 
   // Auto-generate merge proposal when all lanes become complete
   useEffect(() => {
@@ -480,6 +669,63 @@ export function RunDetailClient({
               </span>
             )}
 
+            {/* Start Mission Button - Primary autonomous control */}
+            {missionState.isRunning ? (
+              <button
+                onClick={handleStopMission}
+                disabled={isStoppingMission}
+                className="btn btn--danger btn--sm"
+                title="Stop the running mission"
+              >
+                {isStoppingMission ? (
+                  <>
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Stopping...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Stop Mission
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={handleStartMission}
+                disabled={isStartingMission || progress.completed === progress.total}
+                className={`btn btn--primary btn--sm ${
+                  (isStartingMission || progress.completed === progress.total) ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+                title={
+                  progress.completed === progress.total
+                    ? "All lanes are already complete"
+                    : "Start the mission - launches all lanes autonomously"
+                }
+              >
+                {isStartingMission ? (
+                  <>
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Starting...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Start Mission
+                  </>
+                )}
+              </button>
+            )}
+
             {/* Launch All Ready Button */}
             {launchAllProgress.isLaunching ? (
               <span className="flex items-center gap-2 text-sm font-mono" style={{ color: "var(--accent)" }}>
@@ -585,6 +831,127 @@ export function RunDetailClient({
             </span>
           </div>
         </div>
+
+        {/* Mission Progress Display */}
+        {missionState.isRunning && (
+          <div className="mb-5 p-4 rounded border border-[rgba(6,182,212,0.3)] bg-[rgba(6,182,212,0.08)]">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 text-[var(--cyan)] animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span className="font-medium text-[var(--cyan)]">
+                  {missionState.phase === "launching" ? "Phase 1/4: Launching lanes..." :
+                   missionState.phase === "running" ? "Phase 2/4: Lanes executing..." :
+                   missionState.phase === "committing" ? "Phase 3/4: Committing work..." :
+                   missionState.phase === "merging" ? "Phase 4/4: Merging lanes..." :
+                   "Mission in progress..."}
+                </span>
+              </div>
+              <span className="text-sm font-mono text-[var(--cyan)]">
+                {missionState.overallProgress}%
+              </span>
+            </div>
+            {/* Progress bar */}
+            <div className="w-full h-2 bg-[rgba(0,0,0,0.3)] rounded overflow-hidden mb-3">
+              <div
+                className="h-full bg-[var(--cyan)] transition-all duration-500 ease-out"
+                style={{ width: `${missionState.overallProgress}%` }}
+              />
+            </div>
+            {/* Status counts */}
+            <div className="flex items-center gap-4 text-sm font-mono">
+              <span className="text-[var(--text-secondary)]">
+                <span className="text-[var(--cyan)]">{missionState.lanesLaunched}</span> launched
+              </span>
+              <span className="text-[var(--text-secondary)]">
+                <span className="text-[var(--status-info)]">{missionState.lanesRunning}</span> running
+              </span>
+              <span className="text-[var(--text-secondary)]">
+                <span className="text-[var(--status-success)]">{missionState.lanesComplete}</span> complete
+              </span>
+              {missionState.lanesFailed > 0 && (
+                <span className="text-[var(--text-secondary)]">
+                  <span className="text-[var(--status-danger)]">{missionState.lanesFailed}</span> failed
+                </span>
+              )}
+              {missionState.phase === "merging" && (
+                <span className="text-[var(--text-secondary)]">
+                  <span className="text-[var(--status-success)]">{missionState.lanesMerged}</span> merged
+                </span>
+              )}
+            </div>
+            {missionState.message && (
+              <div className="mt-2 text-sm text-[var(--text-ghost)]">
+                {missionState.message}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Mission Notification */}
+        {missionNotification && (
+          <div
+            className={`mb-5 p-4 rounded border ${
+              missionNotification.type === "success"
+                ? "border-[rgba(34,197,94,0.3)] bg-[rgba(34,197,94,0.08)]"
+                : missionNotification.type === "warning"
+                ? "border-[rgba(234,179,8,0.3)] bg-[rgba(234,179,8,0.08)]"
+                : missionNotification.type === "error"
+                ? "border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.08)]"
+                : "border-[rgba(6,182,212,0.3)] bg-[rgba(6,182,212,0.08)]"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              {missionNotification.type === "success" ? (
+                <svg className="w-5 h-5 text-[var(--status-success)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : missionNotification.type === "warning" ? (
+                <svg className="w-5 h-5 text-[var(--status-warning)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              ) : missionNotification.type === "error" ? (
+                <svg className="w-5 h-5 text-[var(--status-danger)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-[var(--cyan)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              <div className="flex-1">
+                <div
+                  className={`font-medium ${
+                    missionNotification.type === "success"
+                      ? "text-[var(--status-success)]"
+                      : missionNotification.type === "warning"
+                      ? "text-[var(--status-warning)]"
+                      : missionNotification.type === "error"
+                      ? "text-[var(--status-danger)]"
+                      : "text-[var(--cyan)]"
+                  }`}
+                >
+                  {missionNotification.message}
+                </div>
+                {missionNotification.details && (
+                  <div className="text-sm text-[var(--text-secondary)] mt-1">
+                    {missionNotification.details}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setMissionNotification(null)}
+                className="btn-ghost p-1 text-[var(--text-ghost)] hover:text-[var(--text-secondary)]"
+                title="Dismiss"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
 
         <LanesManager
           lanes={lanes}

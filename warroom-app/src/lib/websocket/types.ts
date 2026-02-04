@@ -10,6 +10,7 @@ export interface ServerToClientEvents {
   "merge-ready": (data: MergeReadyEvent) => void;
   "merge-progress": (data: MergeProgressEvent) => void;
   "run-complete": (data: RunCompleteEvent) => void;
+  "mission-progress": (data: MissionProgressEvent) => void;
   "connection-status": (data: ConnectionStatusEvent) => void;
 }
 
@@ -92,6 +93,34 @@ export interface RunCompleteEvent {
 export interface ConnectionStatusEvent {
   connected: boolean;
   serverTime: string;
+}
+
+// Mission-level progress event for one-click Start Mission
+export type MissionPhase =
+  | "launching"    // Phase 1: Starting lanes
+  | "running"      // Phase 2: Lanes are executing
+  | "committing"   // Phase 3: Auto-committing completed lanes
+  | "merging"      // Phase 4: Merging lanes to integration branch
+  | "complete"     // All done
+  | "failed"       // Mission failed
+  | "stopped";     // User stopped the mission
+
+export interface MissionProgressEvent {
+  runSlug: string;
+  phase: MissionPhase;
+  // Human-readable message for the current phase
+  message: string;
+  // Progress counts
+  lanesLaunched: number;
+  lanesRunning: number;
+  lanesComplete: number;
+  lanesFailed: number;
+  totalLanes: number;
+  // Merging progress
+  lanesMerged: number;
+  // Overall percent (0-100)
+  overallProgress: number;
+  timestamp: string;
 }
 
 // Socket data stored per connection
