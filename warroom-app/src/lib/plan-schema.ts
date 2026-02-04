@@ -83,12 +83,23 @@ export interface WarRoomPlan {
 
 export type LaneStatus = "pending" | "in_progress" | "complete" | "failed";
 
+// Auto-completion detection log entry
+export interface CompletionDetection {
+  detected: boolean;
+  reason?: string; // Primary reason for auto-completion
+  signals: string[]; // All detected signals
+  detectedAt?: string; // ISO-8601 timestamp when completion was auto-detected
+  autoMarked?: boolean; // True if lane was automatically marked complete
+}
+
 export interface LaneStatusEntry {
   staged: boolean;
   status: LaneStatus;
   autonomy?: LaneAutonomy;
   commitsAtLaunch?: number; // Track commit count when lane was launched
   suggestionDismissed?: boolean; // True if user dismissed completion suggestion
+  lastActivityAt?: string; // ISO-8601 timestamp of last file activity in worktree
+  completionDetection?: CompletionDetection; // Auto-completion detection log
 }
 
 export interface StatusJson {

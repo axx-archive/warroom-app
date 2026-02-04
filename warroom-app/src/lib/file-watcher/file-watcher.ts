@@ -1,11 +1,14 @@
 // FileWatcher class for monitoring lane worktree directories
 // Watches for file changes and emits events via WebSocket
+// Also tracks last activity timestamps for auto-completion detection
 
 import { watch, FSWatcher } from "fs";
-import { existsSync, statSync } from "fs";
+import { existsSync, statSync, readFileSync, writeFileSync } from "fs";
 import * as path from "path";
+import * as os from "os";
 import { emitLaneActivity } from "@/lib/websocket/server";
 import { LaneActivityEvent } from "@/lib/websocket/types";
+import { StatusJson } from "@/lib/plan-schema";
 
 interface FileChangeEvent {
   type: "file-created" | "file-modified" | "file-deleted";
@@ -252,6 +255,11 @@ export class FileWatcher {
     lane.pendingEvents.clear();
     lane.debounceTimer = null;
 
+    const timestamp = new Date().toISOString();
+
+    // Update last activity timestamp in status.json
+    this.updateLastActivityTimestamp(lane.laneId, timestamp);
+
     // Emit each event via WebSocket
     for (const event of events) {
       const activityEvent: LaneActivityEvent = {
@@ -259,13 +267,60 @@ export class FileWatcher {
         laneId: event.laneId,
         type: event.type,
         path: event.path,
-        timestamp: new Date().toISOString(),
+        timestamp,
       };
 
       emitLaneActivity(activityEvent);
       console.log(
         `[FileWatcher] Emitted ${event.type} for ${event.path} in lane ${event.laneId}`
       );
+    }
+  }
+
+  /**
+   * Update the lastActivityAt timestamp for a lane in status.json
+   * Used for auto-completion detection based on inactivity
+   */
+  private updateLastActivityTimestamp(laneId: string, timestamp: string): void {
+    try {
+      const statusPath = path.join(
+        os.homedir(),
+        ".openclaw/workspace/warroom/runs",
+        this.runSlug,
+        "status.json"
+      );
+
+      // Read current status.json
+      let statusJson: StatusJson;
+      try {
+        const content = readFileSync(statusPath, "utf-8");
+        statusJson = JSON.parse(content);
+      } catch {
+        // No status.json exists yet, can't update
+        return;
+      }
+
+      // Ensure lanes object exists
+      if (!statusJson.lanes) {
+        statusJson.lanes = {};
+      }
+
+      // Update the lane's lastActivityAt timestamp
+      if (statusJson.lanes[laneId]) {
+        statusJson.lanes[laneId].lastActivityAt = timestamp;
+      } else {
+        statusJson.lanes[laneId] = {
+          staged: false,
+          status: "pending",
+          lastActivityAt: timestamp,
+        };
+      }
+
+      // Write back to status.json
+      writeFileSync(statusPath, JSON.stringify(statusJson, null, 2));
+      console.log(`[FileWatcher] Updated lastActivityAt for lane ${laneId}`);
+    } catch (error) {
+      console.error(`[FileWatcher] Failed to update lastActivityAt:`, error);
     }
   }
 }

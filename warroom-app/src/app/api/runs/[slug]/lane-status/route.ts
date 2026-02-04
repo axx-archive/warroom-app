@@ -1,5 +1,6 @@
 // API route to get uncommitted changes, commit counts, and completion suggestions per lane
 // GET /api/runs/[slug]/lane-status - returns uncommitted file counts, file lists, commits since launch, and completion signals per lane
+// Also performs auto-completion detection and marking when autonomy is enabled
 
 import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
@@ -7,7 +8,9 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { WarRoomPlan, Lane, StatusJson } from "@/lib/plan-schema";
+import { WarRoomPlan, Lane, StatusJson, CompletionDetection } from "@/lib/plan-schema";
+import { detectLaneCompletion } from "@/lib/completion-detector";
+import { emitLaneStatusChange } from "@/lib/websocket";
 
 const execAsync = promisify(exec);
 
@@ -37,6 +40,9 @@ interface LaneUncommittedStatus {
   branch?: string;
   // Completion suggestion
   completionSuggestion?: CompletionSuggestion;
+  // Auto-completion detection
+  completionDetection?: CompletionDetection;
+  autoMarkedComplete?: boolean; // True if lane was auto-marked complete this poll cycle
 }
 
 export interface LaneStatusResponse {
@@ -207,6 +213,8 @@ export async function GET(
 
     // Get uncommitted files, commit counts, and completion suggestions for each lane
     const laneStatuses: Record<string, LaneUncommittedStatus> = {};
+    const statusPath = path.join(runDir, "status.json");
+    let statusUpdated = false;
 
     await Promise.all(
       plan.lanes.map(async (lane: Lane) => {
@@ -234,6 +242,58 @@ export async function GET(
           );
         }
 
+        // Auto-completion detection
+        // Check if autonomy is enabled for this lane
+        const autonomyEnabled = lane.autonomy?.dangerouslySkipPermissions ?? false;
+        const { detection, shouldAutoMark } = await detectLaneCompletion(
+          lane.worktreePath,
+          laneStatusEntry,
+          commitsSinceLaunch,
+          autonomyEnabled
+        );
+
+        let autoMarkedComplete = false;
+
+        // If auto-mark should happen, update status.json
+        if (shouldAutoMark && statusJson) {
+          if (!statusJson.lanes) {
+            statusJson.lanes = {};
+          }
+
+          const previousStatus = statusJson.lanes[lane.laneId]?.status ?? "pending";
+
+          statusJson.lanes[lane.laneId] = {
+            ...statusJson.lanes[lane.laneId],
+            staged: statusJson.lanes[lane.laneId]?.staged ?? false,
+            status: "complete",
+            completionDetection: detection,
+          };
+
+          // Also update lanesCompleted array for backwards compatibility
+          if (!statusJson.lanesCompleted) {
+            statusJson.lanesCompleted = [];
+          }
+          if (!statusJson.lanesCompleted.includes(lane.laneId)) {
+            statusJson.lanesCompleted.push(lane.laneId);
+          }
+
+          statusUpdated = true;
+          autoMarkedComplete = true;
+
+          console.log(
+            `[Auto-completion] Lane ${lane.laneId} auto-marked complete. Reason: ${detection.reason}`
+          );
+
+          // Emit WebSocket event for status change
+          emitLaneStatusChange({
+            runSlug: slug,
+            laneId: lane.laneId,
+            previousStatus,
+            newStatus: "complete",
+            timestamp: new Date().toISOString(),
+          });
+        }
+
         laneStatuses[lane.laneId] = {
           laneId: lane.laneId,
           uncommittedCount: files.length,
@@ -245,9 +305,17 @@ export async function GET(
           currentCommits: currentCommits ?? undefined,
           branch: lane.branch,
           completionSuggestion,
+          completionDetection: detection.detected ? detection : undefined,
+          autoMarkedComplete,
         };
       })
     );
+
+    // Write updated status.json if any lane was auto-marked
+    if (statusUpdated && statusJson) {
+      statusJson.updatedAt = new Date().toISOString();
+      await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
+    }
 
     const response: LaneStatusResponse = {
       success: true,
