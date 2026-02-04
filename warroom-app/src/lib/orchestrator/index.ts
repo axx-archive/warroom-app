@@ -61,8 +61,15 @@ export {
   getUncommittedFileCount,
   readLaneStatus,
   isLaneStatusComplete,
+  autoMergeLanes,
+  mergeLaneBranch,
+  abortAutoMerge,
+  getMainBranch,
+  integrationBranchExists,
 } from "./git-operations";
 
 export type {
   AutoCommitResult,
+  AutoMergeResult,
+  MergeLaneResult,
 } from "./git-operations";

@@ -6,8 +6,8 @@ import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
 import readline from "readline";
-import { LaneStatus, WarRoomPlan, StatusJson, Lane, LaunchMode, RetryState, RetryAttempt } from "../plan-schema";
-import { emitLaneStatusChange, emitLaneActivity } from "../websocket/server";
+import { LaneStatus, WarRoomPlan, StatusJson, Lane, LaunchMode, RetryState, RetryAttempt, MergeState } from "../plan-schema";
+import { emitLaneStatusChange, emitLaneActivity, emitMergeProgress, emitMergeReady, emitRunComplete } from "../websocket/server";
 import {
   spawnTerminal as spawnTerminalWindow,
   isTerminalWindowOpen,
@@ -26,6 +26,7 @@ import {
 } from "./output-buffer";
 import {
   autoCommitLaneWork,
+  autoMergeLanes,
 } from "./git-operations";
 
 // Retry configuration constants
@@ -59,10 +60,12 @@ export interface LaneProcessState {
 // Run orchestration state
 export interface RunOrchestrationState {
   runSlug: string;
-  status: "idle" | "starting" | "running" | "stopping" | "stopped" | "complete" | "failed";
+  status: "idle" | "starting" | "running" | "merging" | "stopping" | "stopped" | "complete" | "failed";
   lanes: Map<string, LaneProcessState>;
   startedAt?: string;
   stoppedAt?: string;
+  // Auto-merge state
+  mergeState?: MergeState;
 }
 
 // Orchestrator status response
@@ -751,18 +754,257 @@ class AgentOrchestrator {
       // Try to start more lanes
       await this.startReadyLanes(runSlug, plan, statusJson);
 
-      // Check if all lanes are complete (excluding retrying lanes)
-      const allComplete = Array.from(runState.lanes.values()).every(
+      // Check if all lanes are complete (all successful)
+      const allSuccessfullyComplete = Array.from(runState.lanes.values()).every(
+        (lane) => lane.status === "complete"
+      );
+
+      // Check if all lanes are finished (complete or permanently failed)
+      const allFinished = Array.from(runState.lanes.values()).every(
         (lane) => lane.status === "complete" || (lane.status === "failed" && lane.retryState?.status === "exhausted")
       );
 
-      if (allComplete) {
-        runState.status = "complete";
+      if (allSuccessfullyComplete) {
+        console.log(`[AgentOrchestrator] All lanes complete for run ${runSlug}, starting auto-merge`);
+
+        // Emit merge-ready event
+        const completedLanes = Array.from(runState.lanes.values())
+          .filter((l) => l.status === "complete")
+          .map((l) => l.laneId);
+        emitMergeReady({
+          runSlug,
+          lanesComplete: completedLanes,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Start auto-merge process
+        await this.startAutoMerge(runSlug, plan, statusJson);
+      } else if (allFinished) {
+        // Some lanes failed - mark run as failed
+        runState.status = "failed";
         runState.stoppedAt = new Date().toISOString();
-        console.log(`[AgentOrchestrator] Run ${runSlug} complete`);
+        console.log(`[AgentOrchestrator] Run ${runSlug} failed - some lanes could not complete`);
+
+        emitRunComplete({
+          runSlug,
+          success: false,
+          message: "Some lanes failed to complete",
+          timestamp: new Date().toISOString(),
+        });
       }
     } catch (error) {
       console.error(`[AgentOrchestrator] Failed to update status after lane completion:`, error);
+    }
+  }
+
+  // Start auto-merge process when all lanes are complete
+  private async startAutoMerge(
+    runSlug: string,
+    plan: WarRoomPlan,
+    statusJson: StatusJson
+  ): Promise<void> {
+    const runState = this.runs.get(runSlug);
+    if (!runState) return;
+
+    // Initialize merge state
+    runState.status = "merging";
+    runState.mergeState = {
+      status: "in_progress",
+      mergedLanes: [],
+      updatedAt: new Date().toISOString(),
+    };
+
+    console.log(`[AgentOrchestrator] Starting auto-merge for run ${runSlug}`);
+
+    // Emit merge started event
+    emitMergeProgress({
+      runSlug,
+      status: "started",
+      mergedLanes: [],
+      timestamp: new Date().toISOString(),
+    });
+
+    try {
+      // Get completed lane info for merging
+      const lanesToMerge = plan.lanes
+        .filter((lane) => statusJson.lanesCompleted?.includes(lane.laneId))
+        .map((lane) => ({
+          laneId: lane.laneId,
+          branch: lane.branch,
+          dependsOn: lane.dependsOn,
+        }));
+
+      // Execute auto-merge
+      const mergeResult = await autoMergeLanes(
+        plan.repo.path,
+        plan.integrationBranch,
+        lanesToMerge,
+        plan.merge.method
+      );
+
+      if (mergeResult.success) {
+        // All lanes merged successfully
+        runState.mergeState = {
+          status: "complete",
+          mergedLanes: mergeResult.mergedLanes,
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Update status.json with merge state
+        await this.updateMergeStateInStatusJson(runSlug, runState.mergeState);
+
+        // Emit merge complete event
+        emitMergeProgress({
+          runSlug,
+          status: "complete",
+          mergedLanes: mergeResult.mergedLanes,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Run is now waiting for human gate to merge to main
+        runState.status = "complete";
+        runState.stoppedAt = new Date().toISOString();
+        console.log(`[AgentOrchestrator] Auto-merge complete for run ${runSlug}. Awaiting human gate for main merge.`);
+
+        emitRunComplete({
+          runSlug,
+          success: true,
+          message: "All lanes merged to integration branch. Awaiting human approval to merge to main.",
+          timestamp: new Date().toISOString(),
+        });
+      } else if (mergeResult.conflict) {
+        // Conflict detected - stop and mark lane as conflict
+        console.log(`[AgentOrchestrator] Merge conflict detected in lane ${mergeResult.conflict.laneId}`);
+
+        runState.mergeState = {
+          status: "conflict",
+          mergedLanes: mergeResult.mergedLanes,
+          conflictInfo: mergeResult.conflict,
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Update the conflicting lane's status
+        const conflictingLaneState = runState.lanes.get(mergeResult.conflict.laneId);
+        if (conflictingLaneState) {
+          conflictingLaneState.status = "failed";
+          conflictingLaneState.error = "Merge conflict";
+        }
+
+        // Update status.json
+        await this.updateMergeStateInStatusJson(runSlug, runState.mergeState);
+        await this.updateLaneStatusInStatusJson(
+          runSlug,
+          mergeResult.conflict.laneId,
+          "conflict"
+        );
+
+        // Emit conflict event
+        emitMergeProgress({
+          runSlug,
+          status: "conflict",
+          mergedLanes: mergeResult.mergedLanes,
+          conflictInfo: mergeResult.conflict,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Emit lane status change for conflict
+        emitLaneStatusChange({
+          runSlug,
+          laneId: mergeResult.conflict.laneId,
+          previousStatus: "complete",
+          newStatus: "conflict",
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        // Non-conflict failure
+        console.error(`[AgentOrchestrator] Auto-merge failed for run ${runSlug}: ${mergeResult.error}`);
+
+        runState.mergeState = {
+          status: "failed",
+          mergedLanes: mergeResult.mergedLanes,
+          error: mergeResult.error,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await this.updateMergeStateInStatusJson(runSlug, runState.mergeState);
+
+        emitMergeProgress({
+          runSlug,
+          status: "failed",
+          mergedLanes: mergeResult.mergedLanes,
+          error: mergeResult.error,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[AgentOrchestrator] Auto-merge error for run ${runSlug}:`, error);
+
+      runState.mergeState = {
+        status: "failed",
+        mergedLanes: [],
+        error: errorMessage,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await this.updateMergeStateInStatusJson(runSlug, runState.mergeState);
+
+      emitMergeProgress({
+        runSlug,
+        status: "failed",
+        mergedLanes: [],
+        error: errorMessage,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  // Update merge state in status.json
+  private async updateMergeStateInStatusJson(
+    runSlug: string,
+    mergeState: MergeState
+  ): Promise<void> {
+    try {
+      const runDir = path.join(os.homedir(), ".openclaw/workspace/warroom/runs", runSlug);
+      const statusPath = path.join(runDir, "status.json");
+      const statusContent = await fs.readFile(statusPath, "utf-8");
+      const statusJson: StatusJson = JSON.parse(statusContent);
+
+      statusJson.mergeState = mergeState;
+      statusJson.updatedAt = new Date().toISOString();
+
+      // Update run status based on merge state
+      if (mergeState.status === "complete") {
+        statusJson.status = "merging"; // Waiting for human gate to merge to main
+      }
+
+      await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
+    } catch (error) {
+      console.error(`[AgentOrchestrator] Failed to update merge state in status.json:`, error);
+    }
+  }
+
+  // Update a lane's status in status.json
+  private async updateLaneStatusInStatusJson(
+    runSlug: string,
+    laneId: string,
+    status: LaneStatus
+  ): Promise<void> {
+    try {
+      const runDir = path.join(os.homedir(), ".openclaw/workspace/warroom/runs", runSlug);
+      const statusPath = path.join(runDir, "status.json");
+      const statusContent = await fs.readFile(statusPath, "utf-8");
+      const statusJson: StatusJson = JSON.parse(statusContent);
+
+      if (!statusJson.lanes) statusJson.lanes = {};
+      if (!statusJson.lanes[laneId]) statusJson.lanes[laneId] = { staged: true, status: "pending" };
+
+      statusJson.lanes[laneId].status = status;
+      statusJson.updatedAt = new Date().toISOString();
+
+      await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
+    } catch (error) {
+      console.error(`[AgentOrchestrator] Failed to update lane status in status.json:`, error);
     }
   }
 

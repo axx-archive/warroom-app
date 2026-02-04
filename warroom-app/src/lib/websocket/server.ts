@@ -11,6 +11,7 @@ import {
   LaneStatusChangeEvent,
   LaneProgressEvent,
   MergeReadyEvent,
+  MergeProgressEvent,
   RunCompleteEvent,
 } from "./types";
 
@@ -114,6 +115,14 @@ export function emitMergeReady(event: MergeReadyEvent): void {
   const server = getSocketServer();
   if (server) {
     server.to(`run:${event.runSlug}`).emit("merge-ready", event);
+  }
+}
+
+// Emit merge progress event to subscribed clients
+export function emitMergeProgress(event: MergeProgressEvent): void {
+  const server = getSocketServer();
+  if (server) {
+    server.to(`run:${event.runSlug}`).emit("merge-progress", event);
   }
 }
 

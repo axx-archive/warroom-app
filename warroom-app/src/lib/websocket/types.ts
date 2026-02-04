@@ -8,6 +8,7 @@ export interface ServerToClientEvents {
   "lane-status-change": (data: LaneStatusChangeEvent) => void;
   "lane-progress": (data: LaneProgressEvent) => void;
   "merge-ready": (data: MergeReadyEvent) => void;
+  "merge-progress": (data: MergeProgressEvent) => void;
   "run-complete": (data: RunCompleteEvent) => void;
   "connection-status": (data: ConnectionStatusEvent) => void;
 }
@@ -57,6 +58,22 @@ export interface LaneProgressEvent {
 export interface MergeReadyEvent {
   runSlug: string;
   lanesComplete: string[];
+  timestamp: string;
+}
+
+// Event emitted during auto-merge process
+export interface MergeProgressEvent {
+  runSlug: string;
+  status: "started" | "merging" | "complete" | "conflict" | "failed";
+  currentLane?: string;
+  mergedLanes: string[];
+  // Conflict info if status is "conflict"
+  conflictInfo?: {
+    laneId: string;
+    branch: string;
+    conflictingFiles: string[];
+  };
+  error?: string;
   timestamp: string;
 }
 

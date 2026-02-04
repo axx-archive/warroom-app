@@ -81,7 +81,27 @@ export interface WarRoomPlan {
   merge: MergeConfig;
 }
 
-export type LaneStatus = "pending" | "in_progress" | "complete" | "failed";
+export type LaneStatus = "pending" | "in_progress" | "complete" | "failed" | "conflict";
+
+// Auto-merge state tracking
+export interface MergeState {
+  // Current merge status
+  status: "idle" | "in_progress" | "complete" | "conflict" | "failed";
+  // Lane currently being merged
+  currentLane?: string;
+  // Lanes that have been merged successfully
+  mergedLanes: string[];
+  // Conflict info if status is "conflict"
+  conflictInfo?: {
+    laneId: string;
+    branch: string;
+    conflictingFiles: string[];
+  };
+  // Error message if status is "failed"
+  error?: string;
+  // Timestamp of last update
+  updatedAt: string;
+}
 
 // Launch mode determines how the lane is opened
 export type LaunchMode = "cursor" | "terminal";
@@ -137,6 +157,7 @@ export interface StatusJson {
   currentLane?: string;
   lanesCompleted?: string[];
   lanes?: Record<string, LaneStatusEntry>;
+  mergeState?: MergeState;
   updatedAt: string;
 }
 

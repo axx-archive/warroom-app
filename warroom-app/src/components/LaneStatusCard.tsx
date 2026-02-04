@@ -43,6 +43,12 @@ const STATUS_CONFIG: Record<LaneStatus, { color: string; bgColor: string; border
     borderColor: "rgba(239, 68, 68, 0.3)",
     label: "Failed",
   },
+  conflict: {
+    color: "var(--status-warning)",
+    bgColor: "rgba(234, 179, 8, 0.08)",
+    borderColor: "rgba(234, 179, 8, 0.3)",
+    label: "Merge Conflict",
+  },
 };
 
 // Helper function to calculate time remaining

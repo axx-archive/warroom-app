@@ -9,6 +9,7 @@ import {
   LaneStatusChangeEvent,
   LaneProgressEvent,
   MergeReadyEvent,
+  MergeProgressEvent,
   RunCompleteEvent,
 } from "@/lib/websocket/types";
 
@@ -25,6 +26,7 @@ interface UseWebSocketOptions {
   onLaneStatusChange?: (event: LaneStatusChangeEvent) => void;
   onLaneProgress?: (event: LaneProgressEvent) => void;
   onMergeReady?: (event: MergeReadyEvent) => void;
+  onMergeProgress?: (event: MergeProgressEvent) => void;
   onRunComplete?: (event: RunCompleteEvent) => void;
 }
 
@@ -42,6 +44,7 @@ export function useWebSocket({
   onLaneStatusChange,
   onLaneProgress,
   onMergeReady,
+  onMergeProgress,
   onRunComplete,
 }: UseWebSocketOptions): UseWebSocketReturn {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
@@ -59,6 +62,7 @@ export function useWebSocket({
   const onLaneStatusChangeRef = useRef(onLaneStatusChange);
   const onLaneProgressRef = useRef(onLaneProgress);
   const onMergeReadyRef = useRef(onMergeReady);
+  const onMergeProgressRef = useRef(onMergeProgress);
   const onRunCompleteRef = useRef(onRunComplete);
 
   // Update refs when handlers change
@@ -67,8 +71,9 @@ export function useWebSocket({
     onLaneStatusChangeRef.current = onLaneStatusChange;
     onLaneProgressRef.current = onLaneProgress;
     onMergeReadyRef.current = onMergeReady;
+    onMergeProgressRef.current = onMergeProgress;
     onRunCompleteRef.current = onRunComplete;
-  }, [onLaneActivity, onLaneStatusChange, onLaneProgress, onMergeReady, onRunComplete]);
+  }, [onLaneActivity, onLaneStatusChange, onLaneProgress, onMergeReady, onMergeProgress, onRunComplete]);
 
   // Cleanup function
   const cleanup = useCallback(() => {
@@ -169,6 +174,12 @@ export function useWebSocket({
     socket.on("merge-ready", (event) => {
       if (event.runSlug === runSlug && onMergeReadyRef.current) {
         onMergeReadyRef.current(event);
+      }
+    });
+
+    socket.on("merge-progress", (event) => {
+      if (event.runSlug === runSlug && onMergeProgressRef.current) {
+        onMergeProgressRef.current(event);
       }
     });
 
@@ -274,6 +285,12 @@ export function useWebSocket({
       socket.on("merge-ready", (event) => {
         if (event.runSlug === runSlug && onMergeReadyRef.current) {
           onMergeReadyRef.current(event);
+        }
+      });
+
+      socket.on("merge-progress", (event) => {
+        if (event.runSlug === runSlug && onMergeProgressRef.current) {
+          onMergeProgressRef.current(event);
         }
       });
 

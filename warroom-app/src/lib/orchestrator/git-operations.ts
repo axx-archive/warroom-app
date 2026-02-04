@@ -1,11 +1,11 @@
-// Git operations for auto-committing lane work
-// Handles automatic commits when lanes signal completion
+// Git operations for auto-committing lane work and merging
+// Handles automatic commits when lanes signal completion and auto-merge functionality
 
 import { exec as execCallback } from "child_process";
 import { promisify } from "util";
 import { existsSync, readFileSync } from "fs";
 import path from "path";
-import { LaneAgentStatus } from "../plan-schema";
+import { LaneAgentStatus, MergeMethod } from "../plan-schema";
 
 const exec = promisify(execCallback);
 
@@ -174,4 +174,349 @@ export function isLaneStatusComplete(worktreePath: string): boolean {
   // Valid completion phases: "complete", "completed", "completing", "done", "finished"
   const completionPhases = ["complete", "completed", "completing", "done", "finished"];
   return completionPhases.includes(agentStatus.phase.toLowerCase());
+}
+
+// ============ Auto-Merge Operations ============
+
+// Result of a lane merge operation
+export interface MergeLaneResult {
+  success: boolean;
+  laneId: string;
+  branch: string;
+  method: MergeMethod;
+  error?: string;
+  conflictingFiles?: string[];
+}
+
+// Result of the full auto-merge process
+export interface AutoMergeResult {
+  success: boolean;
+  mergedLanes: string[];
+  conflict?: {
+    laneId: string;
+    branch: string;
+    conflictingFiles: string[];
+  };
+  error?: string;
+}
+
+/**
+ * Execute git command with error handling
+ */
+async function gitExec(
+  cmd: string,
+  cwd: string
+): Promise<{ stdout: string; stderr: string; success: boolean; error?: string }> {
+  try {
+    const { stdout, stderr } = await exec(cmd, {
+      cwd,
+      timeout: 60000, // 60 second timeout for git operations
+    });
+    return { stdout, stderr, success: true };
+  } catch (err: unknown) {
+    const error = err as { stdout?: string; stderr?: string; message?: string };
+    return {
+      stdout: error.stdout || "",
+      stderr: error.stderr || "",
+      success: false,
+      error: error.message || "Git command failed",
+    };
+  }
+}
+
+/**
+ * Check if there are merge conflicts
+ */
+async function checkForConflicts(repoPath: string): Promise<string[]> {
+  const { stdout } = await gitExec(
+    `git diff --name-only --diff-filter=U`,
+    repoPath
+  );
+  return stdout
+    .trim()
+    .split("\n")
+    .filter((f) => f.length > 0);
+}
+
+/**
+ * Abort an in-progress merge
+ */
+async function abortMerge(repoPath: string): Promise<void> {
+  await gitExec(`git merge --abort`, repoPath);
+}
+
+/**
+ * Get the main branch name (main or master)
+ */
+export async function getMainBranch(repoPath: string): Promise<string | null> {
+  const mainCheck = await gitExec(
+    `git show-ref --verify --quiet refs/heads/main && echo "main" || (git show-ref --verify --quiet refs/heads/master && echo "master" || echo "none")`,
+    repoPath
+  );
+  const branch = mainCheck.stdout.trim();
+  return branch === "none" ? null : branch;
+}
+
+/**
+ * Check if integration branch exists
+ */
+export async function integrationBranchExists(
+  repoPath: string,
+  integrationBranch: string
+): Promise<boolean> {
+  const result = await gitExec(
+    `git show-ref --verify --quiet refs/heads/${integrationBranch}`,
+    repoPath
+  );
+  return result.success;
+}
+
+/**
+ * Create or checkout integration branch
+ */
+async function ensureIntegrationBranch(
+  repoPath: string,
+  integrationBranch: string
+): Promise<{ success: boolean; error?: string }> {
+  // First try to checkout existing branch
+  const checkoutResult = await gitExec(
+    `git checkout ${integrationBranch}`,
+    repoPath
+  );
+
+  if (checkoutResult.success) {
+    return { success: true };
+  }
+
+  // Branch doesn't exist, create it from main/master
+  const mainBranch = await getMainBranch(repoPath);
+  if (!mainBranch) {
+    return { success: false, error: "No main or master branch found to branch from" };
+  }
+
+  // First checkout main
+  const checkoutMain = await gitExec(`git checkout ${mainBranch}`, repoPath);
+  if (!checkoutMain.success) {
+    return { success: false, error: `Failed to checkout ${mainBranch}: ${checkoutMain.error}` };
+  }
+
+  // Create new integration branch
+  const createResult = await gitExec(
+    `git checkout -b ${integrationBranch}`,
+    repoPath
+  );
+
+  if (!createResult.success) {
+    return { success: false, error: `Failed to create integration branch: ${createResult.error}` };
+  }
+
+  return { success: true };
+}
+
+/**
+ * Merge a single lane branch into the integration branch
+ */
+export async function mergeLaneBranch(
+  repoPath: string,
+  integrationBranch: string,
+  laneBranch: string,
+  method: MergeMethod,
+  laneId: string
+): Promise<MergeLaneResult> {
+  console.log(`[GitOperations] Merging lane ${laneId} (${laneBranch}) into ${integrationBranch} using ${method}`);
+
+  // Ensure we're on the integration branch
+  const branchResult = await ensureIntegrationBranch(repoPath, integrationBranch);
+  if (!branchResult.success) {
+    return {
+      success: false,
+      laneId,
+      branch: laneBranch,
+      method,
+      error: branchResult.error,
+    };
+  }
+
+  // Determine merge command based on method
+  let mergeCmd: string;
+  switch (method) {
+    case "squash":
+      mergeCmd = `git merge --squash ${laneBranch}`;
+      break;
+    case "merge":
+      mergeCmd = `git merge --no-ff ${laneBranch} -m "Merge ${laneId} (${laneBranch}) into ${integrationBranch}"`;
+      break;
+    case "cherry-pick":
+      // For cherry-pick, fall back to merge for now
+      mergeCmd = `git merge --no-ff ${laneBranch} -m "Merge ${laneId} (${laneBranch}) into ${integrationBranch}"`;
+      break;
+    default:
+      mergeCmd = `git merge --no-ff ${laneBranch} -m "Merge ${laneId} (${laneBranch}) into ${integrationBranch}"`;
+  }
+
+  const mergeResult = await gitExec(mergeCmd, repoPath);
+
+  if (!mergeResult.success) {
+    // Check if it's a conflict
+    const conflictingFiles = await checkForConflicts(repoPath);
+    if (conflictingFiles.length > 0) {
+      console.log(`[GitOperations] Merge conflict detected for lane ${laneId}`);
+      return {
+        success: false,
+        laneId,
+        branch: laneBranch,
+        method,
+        error: "Merge conflict",
+        conflictingFiles,
+      };
+    }
+    return {
+      success: false,
+      laneId,
+      branch: laneBranch,
+      method,
+      error: mergeResult.error || "Merge failed",
+    };
+  }
+
+  // For squash merges, we need to commit
+  if (method === "squash") {
+    const statusResult = await gitExec(`git status --porcelain`, repoPath);
+    if (statusResult.stdout.trim().length > 0) {
+      const commitResult = await gitExec(
+        `git commit -m "Squash merge ${laneId} (${laneBranch}) into ${integrationBranch}"`,
+        repoPath
+      );
+      if (!commitResult.success) {
+        return {
+          success: false,
+          laneId,
+          branch: laneBranch,
+          method,
+          error: `Squash commit failed: ${commitResult.error}`,
+        };
+      }
+    }
+  }
+
+  console.log(`[GitOperations] Successfully merged lane ${laneId}`);
+  return {
+    success: true,
+    laneId,
+    branch: laneBranch,
+    method,
+  };
+}
+
+/**
+ * Auto-merge all completed lanes in dependency order
+ */
+export async function autoMergeLanes(
+  repoPath: string,
+  integrationBranch: string,
+  lanes: Array<{ laneId: string; branch: string; dependsOn: string[] }>,
+  defaultMethod: MergeMethod = "merge"
+): Promise<AutoMergeResult> {
+  console.log(`[GitOperations] Starting auto-merge of ${lanes.length} lanes into ${integrationBranch}`);
+
+  const mergedLanes: string[] = [];
+
+  // Sort lanes by dependencies (topological sort)
+  const sortedLanes = topologicalSort(lanes);
+
+  for (const lane of sortedLanes) {
+    const result = await mergeLaneBranch(
+      repoPath,
+      integrationBranch,
+      lane.branch,
+      defaultMethod,
+      lane.laneId
+    );
+
+    if (!result.success) {
+      if (result.conflictingFiles && result.conflictingFiles.length > 0) {
+        // Conflict detected - stop and return conflict info
+        return {
+          success: false,
+          mergedLanes,
+          conflict: {
+            laneId: lane.laneId,
+            branch: lane.branch,
+            conflictingFiles: result.conflictingFiles,
+          },
+        };
+      }
+
+      // Non-conflict failure
+      return {
+        success: false,
+        mergedLanes,
+        error: `Failed to merge lane ${lane.laneId}: ${result.error}`,
+      };
+    }
+
+    mergedLanes.push(lane.laneId);
+  }
+
+  console.log(`[GitOperations] Auto-merge complete: ${mergedLanes.length} lanes merged`);
+  return {
+    success: true,
+    mergedLanes,
+  };
+}
+
+/**
+ * Topological sort of lanes based on dependencies
+ */
+function topologicalSort(
+  lanes: Array<{ laneId: string; branch: string; dependsOn: string[] }>
+): Array<{ laneId: string; branch: string; dependsOn: string[] }> {
+  const result: Array<{ laneId: string; branch: string; dependsOn: string[] }> = [];
+  const visited = new Set<string>();
+  const inStack = new Set<string>();
+  const laneMap = new Map(lanes.map((l) => [l.laneId, l]));
+
+  function visit(laneId: string): void {
+    if (visited.has(laneId)) return;
+    if (inStack.has(laneId)) {
+      // Cycle detected - just continue (shouldn't happen with valid dependencies)
+      console.warn(`[GitOperations] Dependency cycle detected involving ${laneId}`);
+      return;
+    }
+
+    const lane = laneMap.get(laneId);
+    if (!lane) return;
+
+    inStack.add(laneId);
+
+    // Visit dependencies first
+    for (const depId of lane.dependsOn) {
+      visit(depId);
+    }
+
+    inStack.delete(laneId);
+    visited.add(laneId);
+    result.push(lane);
+  }
+
+  for (const lane of lanes) {
+    visit(lane.laneId);
+  }
+
+  return result;
+}
+
+/**
+ * Abort any in-progress merge (for conflict resolution)
+ */
+export async function abortAutoMerge(repoPath: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await abortMerge(repoPath);
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
