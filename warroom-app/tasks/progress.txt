@@ -248,3 +248,23 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Terminal mode lanes can't be paused/resumed with SIGSTOP/SIGCONT - must be stopped by closing window
   - `closeTerminalWindow()` sends AppleScript `close window id N` command to terminate
 ---
+
+## 2026-02-04 - US-303: Process monitoring with stdout capture
+- Implemented stdout/stderr capture and output buffer management for Claude Code processes
+- Files changed:
+  - `src/lib/orchestrator/output-buffer.ts` - New OutputBuffer class with line management, progress parsing, error detection
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Integrated stdout/stderr capture using readline, added output retrieval methods
+  - `src/lib/orchestrator/index.ts` - Exported new output buffer functions and types
+  - `src/lib/websocket/types.ts` - Added "output" type to LaneActivityEvent, added details field
+  - `src/hooks/useActivityFeed.ts` - Extended ActivityEvent type to include output events
+  - `src/app/api/runs/[slug]/lanes/[laneId]/output/route.ts` - New API endpoint for retrieving lane output
+- **Learnings for future iterations:**
+  - Use Node.js `readline` module with `createInterface()` for line-by-line stream processing
+  - OutputBuffer uses singleton pattern with nested Maps: runSlug -> laneId -> buffer
+  - Progress patterns: `75%`, `[3/5]`, `step X of Y`, `processing X of Y`, `completed X of Y`
+  - Error patterns to detect: api errors, rate limits, auth failures, connection errors, timeouts, crashes, signals, OOM, permission denied
+  - Clear output buffer when lane starts to avoid stale data from previous runs
+  - API supports query modes: `full` (all state), `recent` (last N lines), `errors` (only errors)
+  - Emit "output" type lane-activity events with `details: { stream, line }` for real-time updates
+  - Terminal mode processes can't capture stdout - only direct spawn() processes
+---
