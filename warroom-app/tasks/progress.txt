@@ -11,6 +11,7 @@ Started: Wed Feb  4 08:01:43 PST 2026
 - Export shared types (like `LaneUncommittedStatus`) from hooks for use in components
 - Use `useRef` for popover triggers to handle click-outside detection properly
 - Use `getFileWatcher(runSlug)` from `@/lib/file-watcher` to get/create watchers - singleton per run
+- Use `detectLaneCompletion()` from `@/lib/completion-detector` for auto-completion detection (checks marker files, commits, inactivity)
 
 ---
 
@@ -128,4 +129,20 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Ready lanes = pending/in_progress lanes where all dependencies are complete
   - Use `useRef` for abort flag to allow cancellation of sequential operations
   - Autonomy settings are respected per-lane by reading from `laneStates[laneId].autonomy`
+---
+
+## 2026-02-04 - US-202: Auto-detect lane completion
+- Implemented automatic completion detection for lanes with autonomy enabled
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `CompletionDetection` interface and `lastActivityAt`, `completionDetection` fields to `LaneStatusEntry`
+  - `src/lib/completion-detector.ts` - New service with completion detection logic (marker files, commit messages, inactivity)
+  - `src/lib/file-watcher/file-watcher.ts` - Added `lastActivityAt` tracking, updates status.json on file changes
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Integrated auto-completion detection, auto-marks lanes when autonomy enabled
+- **Learnings for future iterations:**
+  - Completion detection rules: REVIEW.md/FINDINGS.md marker files, commit message patterns (complete/done/finished/ready for review/final), 5+ minute inactivity
+  - Auto-marking requires: autonomy enabled + completion detected + not already auto-marked (prevents re-marking if user changes status back)
+  - Store `lastActivityAt` in status.json via FileWatcher to track inactivity
+  - Use synchronous fs functions (readFileSync/writeFileSync) in FileWatcher to avoid race conditions
+  - `CompletionDetection` interface stores: detected, reason, signals[], detectedAt, autoMarked
+  - Only check for completion on lanes with status="in_progress" to avoid wasted work
 ---
