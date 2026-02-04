@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { Lane, LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
 import { LaneStatusCard } from "./LaneStatusCard";
+import { LaneUncommittedStatus } from "@/hooks/useStatusPolling";
 
 interface LaneState {
   status: LaneStatus;
@@ -14,6 +15,7 @@ interface LanesManagerProps {
   lanes: Lane[];
   slug: string;
   laneStates: Record<string, LaneState>; // Controlled state from parent (polling)
+  laneUncommitted?: Record<string, LaneUncommittedStatus>; // Uncommitted file data from polling
   onStatusChange?: (laneId: string, newStatus: LaneStatus) => void;
 }
 
@@ -21,6 +23,7 @@ export function LanesManager({
   lanes,
   slug,
   laneStates,
+  laneUncommitted = {},
   onStatusChange,
 }: LanesManagerProps) {
   // Get list of completed lane IDs
@@ -41,6 +44,7 @@ export function LanesManager({
           staged: false,
           autonomy: { dangerouslySkipPermissions: false },
         };
+        const uncommitted = laneUncommitted[lane.laneId];
         return (
           <LaneStatusCard
             key={lane.laneId}
@@ -50,6 +54,7 @@ export function LanesManager({
             initialStaged={state.staged}
             initialAutonomy={state.autonomy}
             completedLanes={completedLanes}
+            uncommittedStatus={uncommitted}
             onStatusChange={handleStatusChange}
           />
         );

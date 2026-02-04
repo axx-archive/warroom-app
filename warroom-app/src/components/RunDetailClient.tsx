@@ -28,6 +28,7 @@ export function RunDetailClient({
   // Use polling hook for real-time status updates
   const {
     laneStates,
+    laneUncommitted,
     isRefreshing,
     updateLaneState,
   } = useStatusPolling({
@@ -209,6 +210,7 @@ export function RunDetailClient({
           lanes={lanes}
           slug={slug}
           laneStates={laneStates}
+          laneUncommitted={laneUncommitted}
           onStatusChange={handleStatusChange}
         />
       </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useCallback, useRef, useEffect } from "react";
 import { Lane, LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
+import { LaneUncommittedStatus, UncommittedFile } from "@/hooks/useStatusPolling";
 
 interface LaneStatusCardProps {
   lane: Lane;
@@ -10,6 +11,7 @@ interface LaneStatusCardProps {
   initialStaged: boolean;
   initialAutonomy: LaneAutonomy;
   completedLanes?: string[]; // List of completed lane IDs to check dependencies
+  uncommittedStatus?: LaneUncommittedStatus; // Uncommitted files data from polling
   onStatusChange?: (laneId: string, newStatus: LaneStatus) => void; // Callback when status changes
 }
 
@@ -40,6 +42,118 @@ const STATUS_CONFIG: Record<LaneStatus, { color: string; bgColor: string; border
   },
 };
 
+// Uncommitted files popover component
+function UncommittedFilesPopover({
+  files,
+  isOpen,
+  onClose,
+  triggerRef,
+}: {
+  files: UncommittedFile[];
+  isOpen: boolean;
+  onClose: () => void;
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
+}) {
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Close popover when clicking outside
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as Node) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target as Node)
+      ) {
+        onClose();
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen, onClose, triggerRef]);
+
+  if (!isOpen) return null;
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "M":
+        return "Modified";
+      case "A":
+        return "Added";
+      case "D":
+        return "Deleted";
+      case "??":
+        return "Untracked";
+      case "R":
+        return "Renamed";
+      case "C":
+        return "Copied";
+      default:
+        return status;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "M":
+        return "var(--status-warning)"; // Orange
+      case "A":
+        return "var(--status-success)"; // Green
+      case "D":
+        return "var(--status-error)"; // Red
+      case "??":
+        return "var(--text-muted)"; // Gray
+      default:
+        return "var(--text-secondary)";
+    }
+  };
+
+  return (
+    <div
+      ref={popoverRef}
+      className="absolute z-50 mt-2 right-0 w-80 max-h-64 overflow-auto rounded-lg shadow-lg border"
+      style={{
+        backgroundColor: "var(--panel)",
+        borderColor: "var(--border)",
+      }}
+    >
+      <div
+        className="px-3 py-2 border-b"
+        style={{ borderColor: "var(--border)" }}
+      >
+        <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+          Uncommitted Files
+        </span>
+      </div>
+      <div className="py-1">
+        {files.map((file, idx) => (
+          <div
+            key={idx}
+            className="px-3 py-1.5 flex items-center gap-2 hover:bg-[var(--bg-hover)]"
+          >
+            <span
+              className="text-xs font-mono w-16 shrink-0"
+              style={{ color: getStatusColor(file.status) }}
+            >
+              {getStatusLabel(file.status)}
+            </span>
+            <span
+              className="text-xs font-mono truncate"
+              style={{ color: "var(--text-secondary)" }}
+              title={file.path}
+            >
+              {file.path}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function LaneStatusCard({
   lane,
   slug,
@@ -47,6 +161,7 @@ export function LaneStatusCard({
   initialStaged,
   initialAutonomy,
   completedLanes = [],
+  uncommittedStatus,
   onStatusChange,
 }: LaneStatusCardProps) {
   const [status, setStatus] = useState<LaneStatus>(initialStatus);
@@ -57,9 +172,12 @@ export function LaneStatusCard({
   const [launchStatus, setLaunchStatus] = useState<"idle" | "copied" | "error">("idle");
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitStatus, setCommitStatus] = useState<"idle" | "success" | "nochanges" | "error">("idle");
+  const [showUncommittedPopover, setShowUncommittedPopover] = useState(false);
+  const uncommittedBadgeRef = useRef<HTMLButtonElement>(null);
 
   const isComplete = status === "complete";
   const config = STATUS_CONFIG[status];
+  const hasUncommittedFiles = uncommittedStatus && uncommittedStatus.uncommittedCount > 0;
 
   // Check if all dependencies are complete
   const dependenciesMet = lane.dependsOn.length === 0 ||
@@ -271,6 +389,30 @@ export function LaneStatusCard({
                 <span className="badge badge--running">
                   staged
                 </span>
+              )}
+              {/* Uncommitted files badge */}
+              {hasUncommittedFiles && (
+                <div className="relative">
+                  <button
+                    ref={uncommittedBadgeRef}
+                    onClick={() => setShowUncommittedPopover(!showUncommittedPopover)}
+                    className="badge cursor-pointer hover:opacity-80 transition-opacity"
+                    style={{
+                      backgroundColor: "rgba(249, 115, 22, 0.15)",
+                      color: "#f97316",
+                      borderColor: "rgba(249, 115, 22, 0.4)",
+                    }}
+                    title={`${uncommittedStatus!.uncommittedCount} uncommitted file${uncommittedStatus!.uncommittedCount === 1 ? "" : "s"} - click to view`}
+                  >
+                    {uncommittedStatus!.uncommittedCount} uncommitted file{uncommittedStatus!.uncommittedCount === 1 ? "" : "s"}
+                  </button>
+                  <UncommittedFilesPopover
+                    files={uncommittedStatus!.uncommittedFiles}
+                    isOpen={showUncommittedPopover}
+                    onClose={() => setShowUncommittedPopover(false)}
+                    triggerRef={uncommittedBadgeRef}
+                  />
+                </div>
               )}
             </div>
             <p className="mono small mt-1" style={{ color: "var(--muted)" }}>

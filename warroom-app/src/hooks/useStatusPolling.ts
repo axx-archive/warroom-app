@@ -5,6 +5,18 @@ import { StatusJson, LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
 
 const POLL_INTERVAL = 5000; // 5 seconds
 
+export interface UncommittedFile {
+  status: string; // e.g. "M", "A", "D", "??"
+  path: string;
+}
+
+export interface LaneUncommittedStatus {
+  uncommittedCount: number;
+  uncommittedFiles: UncommittedFile[];
+  worktreeExists: boolean;
+  error?: string;
+}
+
 export interface LaneState {
   status: LaneStatus;
   staged: boolean;
@@ -14,6 +26,7 @@ export interface LaneState {
 export interface PollingState {
   status: StatusJson | null;
   laneStates: Record<string, LaneState>;
+  laneUncommitted: Record<string, LaneUncommittedStatus>;
   isRefreshing: boolean;
   error: string | null;
   lastUpdated: Date | null;
@@ -33,6 +46,7 @@ export function useStatusPolling({
   const [state, setState] = useState<PollingState>({
     status: null,
     laneStates: initialLaneStates,
+    laneUncommitted: {},
     isRefreshing: false,
     error: null,
     lastUpdated: null,
@@ -45,14 +59,20 @@ export function useStatusPolling({
     setState((prev) => ({ ...prev, isRefreshing: true }));
 
     try {
-      const response = await fetch(`/api/runs/${slug}/status`);
-      const data = await response.json();
+      // Fetch both status and uncommitted data in parallel
+      const [statusResponse, uncommittedResponse] = await Promise.all([
+        fetch(`/api/runs/${slug}/status`),
+        fetch(`/api/runs/${slug}/lane-status`),
+      ]);
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to fetch status");
+      const statusData = await statusResponse.json();
+      const uncommittedData = await uncommittedResponse.json();
+
+      if (!statusResponse.ok) {
+        throw new Error(statusData.error || "Failed to fetch status");
       }
 
-      const statusData: StatusJson = data.status;
+      const status: StatusJson = statusData.status;
 
       // Convert status.json lanes to LaneState format
       const newLaneStates: Record<string, LaneState> = {};
@@ -64,8 +84,8 @@ export function useStatusPolling({
       }
 
       // Update with data from status.json
-      if (statusData.lanes) {
-        for (const [laneId, laneEntry] of Object.entries(statusData.lanes)) {
+      if (status.lanes) {
+        for (const [laneId, laneEntry] of Object.entries(status.lanes)) {
           newLaneStates[laneId] = {
             status: laneEntry.status,
             staged: laneEntry.staged,
@@ -75,17 +95,37 @@ export function useStatusPolling({
       }
 
       // Also check lanesCompleted for backwards compatibility
-      if (statusData.lanesCompleted) {
-        for (const laneId of statusData.lanesCompleted) {
+      if (status.lanesCompleted) {
+        for (const laneId of status.lanesCompleted) {
           if (newLaneStates[laneId]) {
             newLaneStates[laneId].status = "complete";
           }
         }
       }
 
+      // Process uncommitted data
+      const newLaneUncommitted: Record<string, LaneUncommittedStatus> = {};
+      if (uncommittedResponse.ok && uncommittedData.success && uncommittedData.lanes) {
+        for (const [laneId, laneData] of Object.entries(uncommittedData.lanes)) {
+          const data = laneData as {
+            uncommittedCount: number;
+            uncommittedFiles: UncommittedFile[];
+            worktreeExists: boolean;
+            error?: string;
+          };
+          newLaneUncommitted[laneId] = {
+            uncommittedCount: data.uncommittedCount,
+            uncommittedFiles: data.uncommittedFiles,
+            worktreeExists: data.worktreeExists,
+            error: data.error,
+          };
+        }
+      }
+
       setState({
-        status: statusData,
+        status,
         laneStates: newLaneStates,
+        laneUncommitted: newLaneUncommitted,
         isRefreshing: false,
         error: null,
         lastUpdated: new Date(),
