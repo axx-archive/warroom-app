@@ -115,3 +115,17 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - File existence check after `rename` event determines if it was create vs delete
   - Worktrees stored in `~/.openclaw/workspace/warroom/worktrees/{runSlug}/{laneName}`
 ---
+
+## 2026-02-04 - US-201: Launch All Ready Lanes button
+- Implemented "Launch All Ready" button for batch lane launching
+- Files changed:
+  - `src/components/RunDetailClient.tsx` - Added Launch All Ready button, progress indicator, and summary display
+- **Learnings for future iterations:**
+  - Button displays count of ready lanes: "Launch All Ready (3)" for clear feedback
+  - Sequential launching uses 2-second delays via `setTimeout` in async loop
+  - Progress indicator shows "Launching X of Y..." during multi-lane launch
+  - Summary shows launched count, blocked count, and failed count after completion
+  - Ready lanes = pending/in_progress lanes where all dependencies are complete
+  - Use `useRef` for abort flag to allow cancellation of sequential operations
+  - Autonomy settings are respected per-lane by reading from `laneStates[laneId].autonomy`
+---
