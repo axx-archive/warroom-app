@@ -1,315 +1,498 @@
 {
-  "project": "War Room",
-  "branchName": "ralph/war-room-hybrid-mission-control",
-  "description": "War Room (Hybrid Mission Control) - A local webapp for generating/importing plans, staging lanes with git worktrees + Cursor windows, tracking status/artifacts, and merge choreography.",
+  "project": "War Room v2.0 - Full Orchestration Platform",
+  "branchName": "ralph/warroom-v2-orchestration",
+  "description": "Transform War Room from a manual mission control interface into a fully autonomous AI agent orchestration platform. Launch, monitor, and merge parallel Claude Code agent work with minimal human intervention. macOS only, auto-retry with exponential backoff, fully autonomous default, in-app notifications only.",
   "userStories": [
     {
-      "id": "WR-001",
-      "title": "Verify canonical app root and build hygiene",
-      "description": "As AJ, I want a single canonical War Room Next.js app with working builds so development is deterministic.",
+      "id": "US-101",
+      "title": "Real-time status polling",
+      "description": "As a user, I want lane statuses to auto-refresh so I don't have to manually reload the page.",
       "acceptanceCriteria": [
-        "warroom-app/ is the single canonical Next.js app directory",
-        "npm run dev works from warroom-app/",
-        "npm run typecheck passes",
-        "npm run lint passes",
-        "npm run build passes"
+        "Poll /api/runs/[slug]/status every 5 seconds when run page is open",
+        "Update lane cards, progress counter, and merge readiness without full reload",
+        "Show subtle 'refreshing...' indicator during poll",
+        "Pause polling when browser tab is hidden (visibility API)",
+        "Resume polling when tab becomes visible",
+        "Typecheck passes"
       ],
       "priority": 1,
+      "phase": 1,
       "passes": true,
-      "notes": "Verified 2026-02-02: All criteria passing"
+      "notes": ""
     },
     {
-      "id": "WR-002",
-      "title": "Fix Node/bin-link reliability",
-      "description": "As AJ, I want deterministic tsc/eslint/next execution so installs don't randomly break.",
+      "id": "US-102",
+      "title": "Uncommitted changes detection",
+      "description": "As a user, I want to see which lanes have uncommitted work so I know what needs attention.",
       "acceptanceCriteria": [
-        "Fresh npm install works and npm run typecheck|lint|build run successfully",
-        "If Node pinning is used: .nvmrc or .tool-versions exists",
+        "New API endpoint: GET /api/runs/[slug]/lane-status returns uncommitted file counts per lane",
+        "Display orange badge on lane card: '3 uncommitted files'",
+        "Badge updates via polling",
+        "Clicking badge shows list of changed files in tooltip/popover",
         "Typecheck passes"
       ],
       "priority": 2,
+      "phase": 1,
       "passes": true,
-      "notes": "Verified 2026-02-02: .nvmrc pins Node 25, engines field requires >=20"
+      "notes": ""
     },
     {
-      "id": "WR-003",
-      "title": "Gitignore baseline for build artifacts",
-      "description": "As AJ, I want generated build artifacts ignored so I don't get accidental commits.",
+      "id": "US-103",
+      "title": "New commits detection",
+      "description": "As a user, I want to see when a lane has new commits since launch so I can track progress.",
       "acceptanceCriteria": [
-        ".gitignore includes .next/, node_modules/, dist/, and logs",
-        "Repo has no tracked .next/ or node_modules/ files",
+        "Track 'commits at launch' in status.json when lane is launched",
+        "API returns commits count since launch per lane",
+        "Display green badge: '+2 commits' when new commits exist",
+        "Badge links to git log for that lane's branch",
         "Typecheck passes"
       ],
       "priority": 3,
+      "phase": 1,
       "passes": true,
-      "notes": "Verified 2026-02-02: Added /dist and /logs + *.log patterns"
+      "notes": ""
     },
     {
-      "id": "WR-010",
-      "title": "Runs dashboard lists run folders",
-      "description": "As AJ, I want War Room to list runs from ~/.openclaw/workspace/warroom/runs/ so I can see what's happening.",
+      "id": "US-104",
+      "title": "Ready to complete? smart suggestions",
+      "description": "As a user, I want the system to suggest when a lane looks complete so I can quickly verify and mark it done.",
       "acceptanceCriteria": [
-        "UI shows list of runs with slug, status, startMode, updatedAt",
-        "Clicking a run navigates to run detail view",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Detect lane completion signals: REVIEW.md exists, FINDINGS.md exists, specific commit message patterns",
+        "Show suggestion banner on lane card: 'This lane looks complete. Mark as done?'",
+        "One-click 'Mark Complete' button in suggestion banner",
+        "Suggestion dismissible (don't show again for this lane)",
+        "Typecheck passes"
       ],
       "priority": 4,
+      "phase": 1,
       "passes": true,
-      "notes": "Verified 2026-02-03: /runs page lists runs, /runs/[slug] shows detail view"
+      "notes": ""
     },
     {
-      "id": "WR-011",
-      "title": "Read and render run folder plan/status",
-      "description": "As AJ, I want the UI to render from plan.json and status.json so UI is always consistent with file truth.",
+      "id": "US-105",
+      "title": "WebSocket layer for live updates",
+      "description": "As a user, I want instant updates without polling delay so the UI feels responsive.",
       "acceptanceCriteria": [
-        "UI reads plan.json from disk (server-side) and renders plan summary",
-        "UI reads status.json from disk and renders lane completion status",
-        "Lane list shows each lane with its status",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Add Socket.io server to Next.js app (custom server or API route with upgrade)",
+        "Emit events: lane-activity, lane-status-change, merge-ready, run-complete",
+        "Client connects on run detail page mount",
+        "Graceful fallback to polling if WebSocket fails",
+        "Connection status indicator in UI footer",
+        "Typecheck passes"
       ],
       "priority": 5,
+      "phase": 1,
       "passes": true,
-      "notes": "Verified 2026-02-03: StatusJson supports both lanes object and lanesCompleted array formats"
+      "notes": ""
     },
     {
-      "id": "WR-012",
-      "title": "Status update API for lane completion",
-      "description": "As AJ, I want to mark lanes complete in the UI so progress persists.",
+      "id": "US-106",
+      "title": "File watcher service",
+      "description": "As a system, I need to watch worktree directories for changes to trigger real-time updates.",
       "acceptanceCriteria": [
-        "API endpoint POST /api/runs/[slug]/status updates status.json",
-        "API updates lanesCompleted array, status field, and updatedAt timestamp",
-        "UI can toggle lane complete via checkbox or button",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "FileWatcher class that watches all lane worktrees for a run",
+        "Debounce file change events (100ms)",
+        "Emit events via WebSocket when files change",
+        "Start watching when run page opens, stop when closes",
+        "Handle worktree not existing gracefully",
+        "Typecheck passes"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": "Verified 2026-02-03: LaneStatusCard component with checkbox toggle, API updates both formats"
+      "phase": 1,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-020",
-      "title": "Generate plan stub writes plan.json and packets",
-      "description": "As AJ, I want Generate Plan to write plan.json + packets to a run directory.",
+      "id": "US-201",
+      "title": "Launch All Ready Lanes button",
+      "description": "As a user, I want to launch all unblocked lanes at once so I don't have to click each one.",
       "acceptanceCriteria": [
-        "POST /api/generate-plan accepts goal and returns {plan, runDir}",
-        "Run folder created at ~/.openclaw/workspace/warroom/runs/<runSlug>/",
-        "plan.json written with correct schema",
-        "packets/*.md generated for each lane",
+        "Button in Agent Lanes header: 'Launch All Ready'",
+        "Launches all lanes where dependencies are met and status is pending",
+        "Sequential launch with 2-second delay between (avoid overwhelming system)",
+        "Progress indicator: 'Launching 3 of 5...'",
+        "Shows summary when complete: 'Launched 4 lanes, 1 blocked'",
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": "Verified 2026-02-03: Full implementation in place - API endpoint, plan-generator, run-manager, packet-templates"
+      "phase": 2,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-021",
-      "title": "Copy PM Prompt panel for manual kickoff",
-      "description": "As AJ, I want War Room to generate a copy/paste prompt for Claude Code PM so I can manually kick off planning.",
+      "id": "US-202",
+      "title": "Auto-detect lane completion",
+      "description": "As a system, I want to automatically detect when a lane's work is complete so users don't have to manually check.",
       "acceptanceCriteria": [
-        "UI shows 'Copy PM Prompt' button on plan creation screen",
-        "Prompt includes /warroom-plan command reference",
-        "Prompt includes repoPath, goal, and constraints",
-        "Copy button copies text to clipboard",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Completion detection rules (configurable): REVIEW.md or FINDINGS.md exists in worktree root, commit message contains 'complete'/'done'/'finished', no file changes for 5+ minutes after commits",
+        "Auto-mark lane as complete when rules match (if autonomy enabled)",
+        "Log completion detection reason in status.json",
+        "Typecheck passes"
       ],
       "priority": 8,
-      "passes": true,
-      "notes": "Verified 2026-02-03: Copy PM Prompt button in PlanViewer with /warroom-plan reference, repo path, goal, constraints"
+      "phase": 2,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-022",
-      "title": "Import plan.json via paste",
-      "description": "As AJ, I want to paste a JSON plan into War Room to create a run.",
+      "id": "US-203",
+      "title": "Auto-generate merge proposal",
+      "description": "As a system, I want to automatically generate merge proposals when all lanes are complete so the merge process starts immediately.",
       "acceptanceCriteria": [
-        "UI has 'Import Plan' button that opens a modal with textarea",
-        "Import accepts valid JSON and writes to new run folder",
-        "Packets auto-generated if not provided in JSON",
-        "Validation errors shown for invalid JSON",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Trigger merge proposal generation when last lane marked complete",
+        "Show notification: 'All lanes complete. Merge proposal generated.'",
+        "Auto-scroll to Merge Readiness section",
+        "If conflicts detected, show warning and stop auto-progression",
+        "Typecheck passes"
       ],
       "priority": 9,
-      "passes": true,
-      "notes": "Verified 2026-02-03: ImportPlanModal with validation, API endpoint, auto-generated lanes and packets"
+      "phase": 2,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-023",
-      "title": "Import run folder by path",
-      "description": "As AJ, I want to point War Room at an existing run folder and have it render.",
+      "id": "US-204",
+      "title": "Diff preview modal",
+      "description": "As a user, I want to preview all changes in a lane before marking it complete so I can verify the work.",
       "acceptanceCriteria": [
-        "UI can open an existing runDir via path input",
-        "Existing plan.json and status.json are read and rendered",
-        "Error shown if path invalid or missing required files",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "'Preview Changes' button on each lane card",
+        "Modal showing full diff of all changes in worktree",
+        "Syntax highlighting for code files",
+        "File tree navigation in modal sidebar",
+        "'Approve & Mark Complete' button in modal",
+        "Typecheck passes"
       ],
       "priority": 10,
-      "passes": true,
-      "notes": "Verified 2026-02-03: ImportRunFolderModal with path input, API validates and reads files, navigates to run detail"
+      "phase": 2,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-030",
-      "title": "Stage lanes creates git worktrees",
-      "description": "As AJ, I want War Room to create git worktrees for each lane.",
+      "id": "US-205",
+      "title": "Lane activity feed",
+      "description": "As a user, I want to see a live feed of activity across all lanes so I can monitor progress at a glance.",
       "acceptanceCriteria": [
-        "API endpoint POST /api/runs/[slug]/stage creates worktrees",
-        "Worktrees created at lane.worktreePath for each lane",
-        "Branches created per lane if they don't exist",
-        "Errors handled and surfaced in API response",
+        "Collapsible activity feed panel on run detail page",
+        "Events: file created/modified/deleted, commits, lane status changes",
+        "Timestamp and lane ID for each event",
+        "Filter by lane",
+        "Auto-scroll to newest (with pause on hover)",
+        "Maximum 100 events retained (older ones pruned)",
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": true,
-      "notes": "Verified 2026-02-03: POST /api/runs/[slug]/stage creates worktrees, branches, and updates status.json"
+      "phase": 2,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-031",
-      "title": "Stage lanes opens Cursor windows",
-      "description": "As AJ, I want War Room to open Cursor windows per lane so it feels like a team.",
+      "id": "US-206",
+      "title": "Launch mode selector per lane",
+      "description": "As a user, I want to choose whether a lane opens in Cursor (supervised) or Terminal (autonomous) so I can control my workflow.",
       "acceptanceCriteria": [
-        "Stage API runs /usr/local/bin/cursor -n <worktreePath> for each lane",
-        "UI shows 'staged' status after successful staging",
-        "Errors from cursor command surfaced appropriately",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Dropdown on lane card: 'Cursor' | 'Terminal (Claude Code)'",
+        "Default based on run autonomy setting",
+        "Persist choice in status.json per lane",
+        "Terminal mode spawns iTerm2 window with Claude Code command",
+        "Cursor mode works as current implementation",
+        "Typecheck passes"
       ],
       "priority": 12,
-      "passes": true,
-      "notes": "Verified 2026-02-03: Stage API opens Cursor windows with -n flag, tracks cursorOpened/cursorErrors in response"
+      "phase": 2,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-032",
-      "title": "Stage lanes writes WARROOM_PACKET.md to worktrees",
-      "description": "As AJ, I want each lane worktree to contain a ready-to-paste packet file.",
+      "id": "US-301",
+      "title": "AgentOrchestrator class",
+      "description": "As a system, I need a singleton orchestrator that manages the lifecycle of all Claude Code processes for a run.",
       "acceptanceCriteria": [
-        "WARROOM_PACKET.md written to root of each worktree",
-        "Content matches corresponding packet in run folder packets/",
-        "File written during stage operation",
+        "AgentOrchestrator class in src/lib/orchestrator/agent-orchestrator.ts",
+        "Methods: startRun(), stopRun(), pauseLane(), resumeLane(), getStatus()",
+        "Maintains Map of laneId -> ChildProcess",
+        "Singleton pattern (one orchestrator per app instance)",
+        "Graceful shutdown on app termination (SIGTERM handler)",
         "Typecheck passes"
       ],
       "priority": 13,
-      "passes": true,
-      "notes": "Verified 2026-02-03: Stage API writes WARROOM_PACKET.md from packets/<laneId>.md to worktree root"
+      "phase": 3,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-033",
-      "title": "Optional autonomy toggle for skip-permissions",
-      "description": "As AJ, I want to toggle 'skip permissions prompts' so I don't click approvals constantly.",
+      "id": "US-302",
+      "title": "Terminal spawning via AppleScript",
+      "description": "As a system, I need to spawn iTerm2 or Terminal.app windows with Claude Code running for each lane.",
       "acceptanceCriteria": [
-        "UI toggle for autonomy mode on run/lane view",
-        "Toggle sets lane.autonomy.dangerouslySkipPermissions in status",
-        "Packets include instruction to run claude --dangerously-skip-permissions when enabled",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "spawnTerminal(worktreePath: string, command: string) function",
+        "Prefer iTerm2 if installed, fall back to Terminal.app",
+        "Window title set to lane ID for identification",
+        "Command: cd ${worktreePath} && claude --dangerously-skip-permissions",
+        "Return process handle for monitoring",
+        "Typecheck passes"
       ],
       "priority": 14,
-      "passes": true,
-      "notes": "Verified 2026-02-03: Autonomy toggle in LaneStatusCard, status API handles autonomy, packets include skip-permissions instruction"
+      "phase": 3,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-040",
-      "title": "Foundation lane enforcement in plan generation",
-      "description": "As AJ, I want the plan generator to enforce a foundation lane for scaffolding tasks so later lanes don't create conflicting app structure.",
+      "id": "US-303",
+      "title": "Process monitoring with stdout capture",
+      "description": "As a system, I need to capture Claude Code output to track progress and detect completion/errors.",
       "acceptanceCriteria": [
-        "Plan generator detects if goal involves scaffolding/foundation changes",
-        "If scaffolding needed, lane-1 is marked as foundation lane",
-        "Non-foundation lanes include dependency on foundation lane",
+        "Capture stdout/stderr from spawned processes",
+        "Parse output for progress indicators (percentage, step names)",
+        "Detect error patterns (API errors, crashes, rate limits)",
+        "Store last 1000 lines of output per lane in memory",
+        "Expose output via API: GET /api/runs/[slug]/lanes/[laneId]/output",
         "Typecheck passes"
       ],
       "priority": 15,
-      "passes": true,
-      "notes": "Verified 2026-02-03: FOUNDATION_KEYWORDS array detects scaffolding goals, lane-1 gets foundation:true flag, all other lanes depend on lane-1"
+      "phase": 3,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-041",
-      "title": "Allowed paths in packets for lane guardrails",
-      "description": "As AJ, I want packets to include Allowed Paths so each lane stays in its lane.",
+      "id": "US-304",
+      "title": "Structured status protocol (LANE_STATUS.json)",
+      "description": "As a system, I need a protocol for Claude Code agents to report their progress so the orchestrator can track them.",
       "acceptanceCriteria": [
-        "Packets include 'Allowed Paths' section listing permitted directories/files",
-        "Packets include rule: 'git diff --stat must stay within allowed paths'",
-        "Plan generator assigns non-overlapping paths to parallel lanes",
+        "Update packet template to instruct agents to write LANE_STATUS.json",
+        "Schema: { phase: string, completedSteps: string[], currentStep: string, progress: number, blockers: string[] }",
+        "File watcher detects LANE_STATUS.json changes",
+        "Parse and emit status updates via WebSocket",
+        "Display current step and progress bar on lane card",
         "Typecheck passes"
       ],
       "priority": 16,
-      "passes": true,
-      "notes": "Verified 2026-02-03: AGENT_ALLOWED_PATHS per agent, DEVELOPER_PATH_SUBDIVISIONS for parallel devs, packet guardrail rule"
+      "phase": 3,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-042",
-      "title": "Hard ignore of .next/ in lane commits",
-      "description": "As AJ, I want to prevent .next/ from being committed so merges stay clean.",
+      "id": "US-305",
+      "title": "Auto-retry with exponential backoff",
+      "description": "As a system, I need to automatically retry failed lanes so transient errors don't require human intervention.",
       "acceptanceCriteria": [
-        ".next/ is in .gitignore",
-        "Packets include explicit warning: 'Never commit .next/ or other generated artifacts'",
+        "Detect lane failure (process exit code != 0, error in output)",
+        "Retry up to 3 times with backoff: 30s, 2min, 10min",
+        "Log retry attempts in status.json",
+        "Show retry status on lane card: 'Retry 2/3 in 1:45...'",
+        "After max retries, mark lane as failed and alert user",
         "Typecheck passes"
       ],
       "priority": 17,
-      "passes": true,
-      "notes": "Verified 2026-02-03: .next/ in .gitignore, packet templates include explicit warning about generated artifacts"
+      "phase": 3,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-060",
-      "title": "Merge screen shows lane readiness",
-      "description": "As AJ, I want War Room to show which lanes have commits and are ready to merge.",
+      "id": "US-306",
+      "title": "Auto-commit lane work",
+      "description": "As a system, I need to automatically commit lane work when the agent signals completion so changes are preserved.",
       "acceptanceCriteria": [
-        "Merge view shows per-lane commit count ahead of integration branch",
-        "UI highlights potential conflict risk based on file overlap heuristic",
-        "Lanes marked complete are shown as merge candidates",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Detect completion signal (LANE_STATUS.json phase = 'complete' or process exits cleanly)",
+        "Run git add -A && git commit -m 'feat(laneId): <summary from status>' in worktree",
+        "Skip if no uncommitted changes",
+        "Update lane status to 'complete' after successful commit",
+        "Emit completion event via WebSocket",
+        "Typecheck passes"
       ],
       "priority": 18,
-      "passes": true,
-      "notes": "Verified 2026-02-03: MergeView component shows commit counts, file overlap risk, and merge candidates"
+      "phase": 3,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-061",
-      "title": "Propose merge plan via PM prompt",
-      "description": "As AJ, I want War Room to generate a merge order proposal for review.",
+      "id": "US-307",
+      "title": "Auto-merge with human gates",
+      "description": "As a system, I need to automatically merge completed lanes but stop for conflicts or main branch merges.",
       "acceptanceCriteria": [
-        "UI button generates merge proposal based on lane dependencies and conflicts",
-        "Proposal includes merge order and method (merge/rebase/squash)",
-        "Proposal stored in run artifacts as merge-proposal.json",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "When all lanes complete, automatically start merge process",
+        "Merge each lane to integration branch in dependency order",
+        "If conflict detected: stop, mark lane as 'conflict', alert user",
+        "Conflict resolution requires human (open in Cursor)",
+        "After integration branch complete, prompt for main merge (human gate)",
+        "Typecheck passes"
       ],
       "priority": 19,
-      "passes": true,
-      "notes": "Verified 2026-02-03: Generate Merge Proposal button, topological sort, merge-proposal.json storage, Copy PM Prompt"
+      "phase": 3,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-062",
-      "title": "Execute merge with checkpoints",
-      "description": "As AJ, I want War Room to execute merges into integration branch with checkpoints.",
+      "id": "US-308",
+      "title": "Git push automation",
+      "description": "As a system, I need to push completed work to remote so it's backed up and available.",
       "acceptanceCriteria": [
-        "API endpoint POST /api/runs/[slug]/merge executes merges in proposed order",
-        "On conflict: merge stops and returns conflict info",
-        "UI shows 'Open in Cursor' for manual conflict resolution",
-        "Merge to main requires explicit confirmation checkbox",
+        "Option to auto-push lane branches after commit",
+        "Option to auto-push integration branch after merge",
+        "Main branch push always requires human confirmation",
+        "Handle push failures gracefully (auth errors, protected branches)",
+        "Show push status in UI",
         "Typecheck passes"
       ],
       "priority": 20,
-      "passes": true,
-      "notes": "Verified 2026-02-03: POST /api/runs/[slug]/merge endpoint, conflict detection, Open in Cursor button, confirmation checkbox"
+      "phase": 3,
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "WR-070",
-      "title": "Improve War Room UI clarity with next steps",
-      "description": "As AJ, I want the UI to clearly explain what War Room does vs what I do next.",
+      "id": "US-309",
+      "title": "One-click Start Mission",
+      "description": "As a user, I want to start an entire run with one click and have the system handle everything.",
       "acceptanceCriteria": [
-        "Plan viewer shows 'Next steps' checklist after plan generation",
-        "'Copy PM Prompt' button is prominently displayed for manual mode",
-        "'Stage Lanes' button explains: opens Cursor windows and writes packets",
-        "Each action has brief description of what will happen",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "'Start Mission' button on run detail page (replaces individual launch buttons in autonomous mode)",
+        "Spawns all lanes respecting dependency order",
+        "Monitors all processes",
+        "Auto-commits, auto-merges",
+        "Shows overall mission progress: 'Phase 2/4: Merging lanes...'",
+        "Completion notification when done",
+        "Typecheck passes"
       ],
       "priority": 21,
-      "passes": true,
-      "notes": "Verified 2026-02-03: Next Steps panel with two-column layout, Stage Lanes button with description, numbered checklist"
+      "phase": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-401",
+      "title": "Lane reset/restart mechanism",
+      "description": "As a user, I want to reset a failed lane to try again with a clean slate.",
+      "acceptanceCriteria": [
+        "'Reset Lane' button on failed/complete lanes",
+        "Resets worktree to branch base: git checkout . && git clean -fd",
+        "Clears LANE_STATUS.json and output files",
+        "Resets lane status to 'pending'",
+        "Confirmation dialog before reset",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "phase": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-402",
+      "title": "Add lane mid-run",
+      "description": "As a user, I want to add new lanes to an in-progress run without starting over.",
+      "acceptanceCriteria": [
+        "'Add Lane' button in Agent Lanes header",
+        "Modal to configure new lane (agent type, branch name, dependencies)",
+        "Creates worktree and packet for new lane",
+        "Updates plan.json with new lane",
+        "New lane appears in UI immediately",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "phase": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-403",
+      "title": "Cost/token tracking",
+      "description": "As a user, I want to see estimated API costs per lane so I can monitor spending.",
+      "acceptanceCriteria": [
+        "Parse Claude Code output for token usage (if available)",
+        "Estimate cost based on model and token counts",
+        "Display per-lane cost estimate on lane card",
+        "Total run cost in header",
+        "Cost tracking persisted in status.json",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "phase": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-404",
+      "title": "Plan templates",
+      "description": "As a user, I want to save successful plans as templates so I can reuse them for similar projects.",
+      "acceptanceCriteria": [
+        "'Save as Template' button on run detail page",
+        "Template stores: lane configuration, agent types, dependency structure (not repo-specific paths)",
+        "Templates saved to ~/.openclaw/workspace/warroom/templates/",
+        "'New from Template' option on home page",
+        "Template picker modal with preview",
+        "Typecheck passes"
+      ],
+      "priority": 25,
+      "phase": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-405",
+      "title": "History/audit log",
+      "description": "As a user, I want a complete log of all actions so I can debug issues and understand what happened.",
+      "acceptanceCriteria": [
+        "Log all significant events: lane launched, commits, status changes, merges, errors",
+        "Store in history.jsonl (append-only) in run directory",
+        "'History' tab on run detail page",
+        "Filterable by event type and lane",
+        "Exportable as JSON",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "phase": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-406",
+      "title": "Progress timeline view",
+      "description": "As a user, I want a visual timeline showing lane progress and dependencies so I can see the big picture.",
+      "acceptanceCriteria": [
+        "Gantt-chart style visualization",
+        "Lanes as horizontal bars",
+        "Dependency arrows between lanes",
+        "Color coding: pending (gray), in-progress (blue), complete (green), failed (red)",
+        "Time axis showing elapsed time",
+        "Hover shows lane details",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "phase": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-407",
+      "title": "In-app notifications",
+      "description": "As a user, I want to receive notifications for important events so I don't have to watch the screen constantly.",
+      "acceptanceCriteria": [
+        "Browser Notification API integration (request permission on first run)",
+        "Notifications for: lane complete, lane failed, all lanes complete, merge conflict",
+        "Toast notifications in-app (bottom-right corner)",
+        "Notification center panel showing recent notifications",
+        "Notification preferences (which events to notify)",
+        "Typecheck passes"
+      ],
+      "priority": 28,
+      "phase": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-408",
+      "title": "Keyboard shortcuts",
+      "description": "As a user, I want keyboard shortcuts for common actions so I can work faster.",
+      "acceptanceCriteria": [
+        "Cmd+Shift+L - Launch all ready lanes",
+        "Cmd+Shift+M - Generate merge proposal",
+        "Cmd+Shift+R - Refresh status",
+        "Cmd+1-9 - Focus lane N",
+        "? - Show keyboard shortcut help modal",
+        "Shortcuts shown in tooltips",
+        "Typecheck passes"
+      ],
+      "priority": 29,
+      "phase": 4,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
