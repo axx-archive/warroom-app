@@ -513,3 +513,21 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Collapsible panels: use button with full-width click area, toggle internal state
   - For in_progress lanes, add animate-pulse class to progress indicator
 ---
+
+## 2026-02-04 - US-407: In-app notifications
+- Implemented comprehensive notification system with toasts and notification center
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added notification types and interfaces
+  - `src/hooks/useNotifications.ts` - New hook for notification state management
+  - `src/components/ToastNotifications.tsx` - New component for toast display (bottom-right)
+  - `src/components/NotificationCenter.tsx` - New component for notification panel with preferences
+  - `src/components/RunDetailClient.tsx` - Integrated notification system
+- **Learnings for future iterations:**
+  - Use lazy state initialization for localStorage/browser API reads to avoid SSR issues and lint errors
+  - Browser Notification API: check permission with `Notification.permission`, request with `Notification.requestPermission()`
+  - Toast pattern: fixed bottom-right position, auto-dismiss with `setTimeout`, store timers in ref for cleanup
+  - Notification preferences stored in localStorage with `PREFERENCES_KEY` constant
+  - Copy timer ref to local variable in cleanup to avoid stale ref warning
+  - LaneStatusChangeEvent from websocket/types.ts includes runSlug and timestamp fields
+  - Use notification helper methods (notifyLaneComplete, etc.) for consistent notification creation
+---
