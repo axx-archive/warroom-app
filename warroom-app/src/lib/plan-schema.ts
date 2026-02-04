@@ -543,3 +543,55 @@ export type HistoryEvent =
   | MissionCompleteEvent
   | LaneResetEvent
   | LaneAddedEvent;
+
+// In-app notification types
+export type NotificationType = "success" | "warning" | "error" | "info";
+
+// Notification event types that trigger notifications
+export type NotificationEventType =
+  | "lane_complete"
+  | "lane_failed"
+  | "all_lanes_complete"
+  | "merge_conflict"
+  | "mission_complete"
+  | "mission_failed"
+  | "push_complete"
+  | "push_failed";
+
+// A single notification
+export interface AppNotification {
+  // Unique notification ID
+  id: string;
+  // Notification type (determines color/icon)
+  type: NotificationType;
+  // Short title
+  title: string;
+  // Optional detailed message
+  message?: string;
+  // Associated lane ID (if lane-specific)
+  laneId?: string;
+  // Timestamp when notification was created
+  createdAt: string;
+  // Whether the notification has been read/dismissed
+  read: boolean;
+  // Whether to show as a toast (auto-dismiss)
+  showToast: boolean;
+  // Duration before auto-dismiss (ms) - only for toast notifications
+  duration?: number;
+  // Event type that triggered this notification
+  eventType?: NotificationEventType;
+}
+
+// Notification preferences - which events to notify for
+export interface NotificationPreferences {
+  // Lane complete notifications
+  laneComplete: boolean;
+  // Lane failed notifications
+  laneFailed: boolean;
+  // All lanes complete notification
+  allLanesComplete: boolean;
+  // Merge conflict notification
+  mergeConflict: boolean;
+  // Enable browser notifications (requires permission)
+  browserNotifications: boolean;
+}
