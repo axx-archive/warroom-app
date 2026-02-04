@@ -231,3 +231,20 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Dependency-ordered lane starting: check completedLanes set before starting each lane
   - Auto-start next lanes when a lane completes successfully
 ---
+
+## 2026-02-04 - US-302: Terminal spawning via AppleScript
+- Implemented dedicated terminal spawner module for iTerm2/Terminal.app window spawning
+- Files changed:
+  - `src/lib/orchestrator/terminal-spawner.ts` - New module with spawnTerminal function and helper utilities
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Integrated terminal spawning, added terminal mode support with window monitoring
+  - `src/lib/orchestrator/index.ts` - Exported new terminal spawner functions and types
+- **Learnings for future iterations:**
+  - AppleScript via `osascript` can create terminal windows and return window IDs for tracking
+  - Use `escapeForAppleScript()` - replace single quotes with `'\''` pattern for shell escaping
+  - iTerm2 uses `write text` command to send text to session; Terminal.app uses `do script`
+  - Window title set via: iTerm2 `set name to`, Terminal.app `set custom title of front window to`
+  - Terminal windows don't have direct process handles - monitor by polling window existence with `isTerminalWindowOpen()`
+  - For status output, use `const { process: _process, ...rest }` pattern to intentionally omit fields while avoiding lint warnings
+  - Terminal mode lanes can't be paused/resumed with SIGSTOP/SIGCONT - must be stopped by closing window
+  - `closeTerminalWindow()` sends AppleScript `close window id N` command to terminate
+---
