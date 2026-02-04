@@ -8,7 +8,7 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { WarRoomPlan, Lane, StatusJson, CompletionDetection, LaunchMode } from "@/lib/plan-schema";
+import { WarRoomPlan, Lane, StatusJson, CompletionDetection, LaunchMode, LaneAgentStatus } from "@/lib/plan-schema";
 import { detectLaneCompletion } from "@/lib/completion-detector";
 import { emitLaneStatusChange } from "@/lib/websocket";
 
@@ -45,6 +45,8 @@ interface LaneUncommittedStatus {
   autoMarkedComplete?: boolean; // True if lane was auto-marked complete this poll cycle
   // Launch mode preference
   launchMode?: LaunchMode; // 'cursor' or 'terminal'
+  // Agent progress from LANE_STATUS.json
+  agentStatus?: LaneAgentStatus;
 }
 
 export interface LaneStatusResponse {
@@ -90,6 +92,32 @@ async function getCommitCount(worktreePath: string): Promise<number | null> {
     const { stdout } = await execAsync("git rev-list --count HEAD", { cwd: worktreePath });
     return parseInt(stdout.trim(), 10) || 0;
   } catch {
+    return null;
+  }
+}
+
+// Read LANE_STATUS.json from a worktree (agent progress status)
+async function readLaneAgentStatus(worktreePath: string): Promise<LaneAgentStatus | null> {
+  try {
+    const statusPath = path.join(worktreePath, "LANE_STATUS.json");
+    const content = await fs.readFile(statusPath, "utf-8");
+    const agentStatus: LaneAgentStatus = JSON.parse(content);
+
+    // Validate required fields
+    if (
+      typeof agentStatus.phase !== "string" ||
+      !Array.isArray(agentStatus.completedSteps) ||
+      typeof agentStatus.currentStep !== "string" ||
+      typeof agentStatus.progress !== "number" ||
+      !Array.isArray(agentStatus.blockers)
+    ) {
+      console.warn(`[lane-status] Invalid LANE_STATUS.json format at ${statusPath}`);
+      return null;
+    }
+
+    return agentStatus;
+  } catch {
+    // File doesn't exist or couldn't be read - this is normal for lanes that haven't started
     return null;
   }
 }
@@ -222,6 +250,7 @@ export async function GET(
       plan.lanes.map(async (lane: Lane) => {
         const { files, error } = await getUncommittedFiles(lane.worktreePath);
         const currentCommits = await getCommitCount(lane.worktreePath);
+        const agentStatus = await readLaneAgentStatus(lane.worktreePath);
 
         // Get lane-specific data from status.json
         const laneStatusEntry = statusJson?.lanes?.[lane.laneId];
@@ -311,6 +340,7 @@ export async function GET(
           completionDetection: detection.detected ? detection : undefined,
           autoMarkedComplete,
           launchMode,
+          agentStatus: agentStatus ?? undefined,
         };
       })
     );

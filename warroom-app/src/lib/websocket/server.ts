@@ -9,6 +9,7 @@ import {
   SocketData,
   LaneActivityEvent,
   LaneStatusChangeEvent,
+  LaneProgressEvent,
   MergeReadyEvent,
   RunCompleteEvent,
 } from "./types";
@@ -97,6 +98,14 @@ export function emitLaneStatusChange(event: LaneStatusChangeEvent): void {
   const server = getSocketServer();
   if (server) {
     server.to(`run:${event.runSlug}`).emit("lane-status-change", event);
+  }
+}
+
+// Emit lane progress event (from LANE_STATUS.json changes) to subscribed clients
+export function emitLaneProgress(event: LaneProgressEvent): void {
+  const server = getSocketServer();
+  if (server) {
+    server.to(`run:${event.runSlug}`).emit("lane-progress", event);
   }
 }
 

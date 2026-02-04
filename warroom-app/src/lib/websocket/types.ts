@@ -1,11 +1,12 @@
 // WebSocket event types for War Room real-time updates
 
-import { LaneStatus } from "@/lib/plan-schema";
+import { LaneStatus, LaneAgentStatus } from "@/lib/plan-schema";
 
 // Events emitted from server to client
 export interface ServerToClientEvents {
   "lane-activity": (data: LaneActivityEvent) => void;
   "lane-status-change": (data: LaneStatusChangeEvent) => void;
+  "lane-progress": (data: LaneProgressEvent) => void;
   "merge-ready": (data: MergeReadyEvent) => void;
   "run-complete": (data: RunCompleteEvent) => void;
   "connection-status": (data: ConnectionStatusEvent) => void;
@@ -37,6 +38,14 @@ export interface LaneStatusChangeEvent {
   laneId: string;
   previousStatus: LaneStatus;
   newStatus: LaneStatus;
+  timestamp: string;
+}
+
+// Event emitted when LANE_STATUS.json is updated by an agent
+export interface LaneProgressEvent {
+  runSlug: string;
+  laneId: string;
+  agentStatus: LaneAgentStatus;
   timestamp: string;
 }
 

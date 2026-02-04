@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode } from "@/lib/plan-schema";
+import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode, LaneAgentStatus } from "@/lib/plan-schema";
 
 const POLL_INTERVAL = 5000; // 5 seconds
 
@@ -32,6 +32,8 @@ export interface LaneUncommittedStatus {
   completionSuggestion?: CompletionSuggestion;
   // Launch mode preference
   launchMode?: LaunchMode;
+  // Agent progress from LANE_STATUS.json
+  agentStatus?: LaneAgentStatus;
 }
 
 export interface LaneState {
@@ -120,7 +122,7 @@ export function useStatusPolling({
         }
       }
 
-      // Process uncommitted data (including commits info and completion suggestions)
+      // Process uncommitted data (including commits info, completion suggestions, and agent status)
       const newLaneUncommitted: Record<string, LaneUncommittedStatus> = {};
       if (uncommittedResponse.ok && uncommittedData.success && uncommittedData.lanes) {
         for (const [laneId, laneData] of Object.entries(uncommittedData.lanes)) {
@@ -135,6 +137,7 @@ export function useStatusPolling({
             branch?: string;
             completionSuggestion?: CompletionSuggestion;
             launchMode?: LaunchMode;
+            agentStatus?: LaneAgentStatus;
           };
           newLaneUncommitted[laneId] = {
             uncommittedCount: data.uncommittedCount,
@@ -147,6 +150,7 @@ export function useStatusPolling({
             branch: data.branch,
             completionSuggestion: data.completionSuggestion,
             launchMode: data.launchMode,
+            agentStatus: data.agentStatus,
           };
         }
       }

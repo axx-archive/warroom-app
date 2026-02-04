@@ -217,17 +217,41 @@ ${config.defaultStopConditions.map((s) => `- ${s}`).join("\n")}
 ## Dependencies
 - ${dependsOnText}
 
+## Progress Reporting (LANE_STATUS.json)
+**IMPORTANT:** Throughout your work, you MUST maintain a \`LANE_STATUS.json\` file in the worktree root to report your progress:
+
+\`\`\`json
+{
+  "phase": "implementing",
+  "completedSteps": ["Analyzed requirements", "Designed solution"],
+  "currentStep": "Implementing core functionality",
+  "progress": 45,
+  "blockers": [],
+  "updatedAt": "2024-01-15T10:30:00Z",
+  "summary": "Currently implementing the main feature logic"
+}
+\`\`\`
+
+**Update this file:**
+- When starting a new phase of work
+- After completing significant steps
+- When encountering blockers
+- Every few minutes during active work
+
+**Phase values:** "analyzing", "designing", "implementing", "testing", "reviewing", "completing"
+
 ## Completion Checklist
 **IMPORTANT:** When your work is complete, you MUST:
 
-1. **Run verification commands** (see Verification section above)
-2. **Stage and commit your changes:**
+1. **Update LANE_STATUS.json** with phase: "complete" and progress: 100
+2. **Run verification commands** (see Verification section above)
+3. **Stage and commit your changes:**
    \`\`\`bash
    git add -A
    git status  # Verify only your files are staged
    git commit -m "feat(${lane.laneId}): <brief description of work done>"
    \`\`\`
-3. **Create an output summary** (if applicable):
+4. **Create an output summary** (if applicable):
    - For reviews: Create \`REVIEW.md\` with findings
    - For implementations: Document key changes made
    - For QA: Create \`FINDINGS.md\` with test results

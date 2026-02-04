@@ -156,3 +156,22 @@ export interface MergeProposal {
   warnings: string[];
   pmPrompt: string;
 }
+
+// LANE_STATUS.json - Structured progress protocol for Claude Code agents
+// Agents write this file to report their progress to the orchestrator
+export interface LaneAgentStatus {
+  // Current phase of work (e.g., "analyzing", "implementing", "testing", "completing")
+  phase: string;
+  // Steps that have been completed
+  completedSteps: string[];
+  // Currently executing step
+  currentStep: string;
+  // Overall progress percentage (0-100)
+  progress: number;
+  // Any blockers or issues the agent has encountered
+  blockers: string[];
+  // Timestamp of last update (ISO-8601)
+  updatedAt: string;
+  // Optional: summary of recent work
+  summary?: string;
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode } from "@/lib/plan-schema";
+import { StatusJson, LaneStatus, LaneAutonomy, LaunchMode, LaneAgentStatus } from "@/lib/plan-schema";
 import { useWebSocket, ConnectionStatus } from "./useWebSocket";
 import { LaneStatusChangeEvent, LaneActivityEvent } from "@/lib/websocket/types";
 
@@ -35,6 +35,8 @@ export interface LaneUncommittedStatus {
   completionSuggestion?: CompletionSuggestion;
   // Launch mode preference
   launchMode?: LaunchMode;
+  // Agent progress from LANE_STATUS.json
+  agentStatus?: LaneAgentStatus;
 }
 
 export interface LaneState {
@@ -188,7 +190,7 @@ export function useRealtimeStatus({
         }
       }
 
-      // Process uncommitted data (including commits info and completion suggestions)
+      // Process uncommitted data (including commits info, completion suggestions, and agent status)
       const newLaneUncommitted: Record<string, LaneUncommittedStatus> = {};
       if (uncommittedResponse.ok && uncommittedData.success && uncommittedData.lanes) {
         for (const [laneId, laneData] of Object.entries(uncommittedData.lanes)) {
@@ -203,6 +205,7 @@ export function useRealtimeStatus({
             branch?: string;
             completionSuggestion?: CompletionSuggestion;
             launchMode?: LaunchMode;
+            agentStatus?: LaneAgentStatus;
           };
           newLaneUncommitted[laneId] = {
             uncommittedCount: data.uncommittedCount,
@@ -215,6 +218,7 @@ export function useRealtimeStatus({
             branch: data.branch,
             completionSuggestion: data.completionSuggestion,
             launchMode: data.launchMode,
+            agentStatus: data.agentStatus,
           };
         }
       }

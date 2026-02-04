@@ -1,14 +1,15 @@
 // FileWatcher class for monitoring lane worktree directories
 // Watches for file changes and emits events via WebSocket
 // Also tracks last activity timestamps for auto-completion detection
+// Detects LANE_STATUS.json changes and emits progress events
 
 import { watch, FSWatcher } from "fs";
 import { existsSync, statSync, readFileSync, writeFileSync } from "fs";
 import * as path from "path";
 import * as os from "os";
-import { emitLaneActivity } from "@/lib/websocket/server";
+import { emitLaneActivity, emitLaneProgress } from "@/lib/websocket/server";
 import { LaneActivityEvent } from "@/lib/websocket/types";
-import { StatusJson } from "@/lib/plan-schema";
+import { StatusJson, LaneAgentStatus } from "@/lib/plan-schema";
 
 interface FileChangeEvent {
   type: "file-created" | "file-modified" | "file-deleted";
@@ -260,6 +261,14 @@ export class FileWatcher {
     // Update last activity timestamp in status.json
     this.updateLastActivityTimestamp(lane.laneId, timestamp);
 
+    // Check for LANE_STATUS.json changes and emit progress events
+    const laneStatusEvent = events.find(
+      (e) => e.path === "LANE_STATUS.json" && e.type !== "file-deleted"
+    );
+    if (laneStatusEvent) {
+      this.handleLaneStatusChange(lane, timestamp);
+    }
+
     // Emit each event via WebSocket
     for (const event of events) {
       const activityEvent: LaneActivityEvent = {
@@ -273,6 +282,53 @@ export class FileWatcher {
       emitLaneActivity(activityEvent);
       console.log(
         `[FileWatcher] Emitted ${event.type} for ${event.path} in lane ${event.laneId}`
+      );
+    }
+  }
+
+  /**
+   * Handle LANE_STATUS.json changes - parse and emit progress event
+   */
+  private handleLaneStatusChange(lane: WatchedLane, timestamp: string): void {
+    const laneStatusPath = path.join(lane.worktreePath, "LANE_STATUS.json");
+
+    try {
+      if (!existsSync(laneStatusPath)) {
+        return;
+      }
+
+      const content = readFileSync(laneStatusPath, "utf-8");
+      const agentStatus: LaneAgentStatus = JSON.parse(content);
+
+      // Validate required fields
+      if (
+        typeof agentStatus.phase !== "string" ||
+        !Array.isArray(agentStatus.completedSteps) ||
+        typeof agentStatus.currentStep !== "string" ||
+        typeof agentStatus.progress !== "number" ||
+        !Array.isArray(agentStatus.blockers)
+      ) {
+        console.warn(
+          `[FileWatcher] Invalid LANE_STATUS.json format in lane ${lane.laneId}`
+        );
+        return;
+      }
+
+      // Emit progress event
+      emitLaneProgress({
+        runSlug: this.runSlug,
+        laneId: lane.laneId,
+        agentStatus,
+        timestamp,
+      });
+
+      console.log(
+        `[FileWatcher] Emitted lane-progress for lane ${lane.laneId}: phase=${agentStatus.phase}, progress=${agentStatus.progress}%`
+      );
+    } catch (error) {
+      console.error(
+        `[FileWatcher] Error parsing LANE_STATUS.json for lane ${lane.laneId}:`,
+        error
       );
     }
   }

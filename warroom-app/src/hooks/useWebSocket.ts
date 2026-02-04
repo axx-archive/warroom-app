@@ -7,6 +7,7 @@ import {
   ClientToServerEvents,
   LaneActivityEvent,
   LaneStatusChangeEvent,
+  LaneProgressEvent,
   MergeReadyEvent,
   RunCompleteEvent,
 } from "@/lib/websocket/types";
@@ -22,6 +23,7 @@ interface UseWebSocketOptions {
   enabled?: boolean;
   onLaneActivity?: (event: LaneActivityEvent) => void;
   onLaneStatusChange?: (event: LaneStatusChangeEvent) => void;
+  onLaneProgress?: (event: LaneProgressEvent) => void;
   onMergeReady?: (event: MergeReadyEvent) => void;
   onRunComplete?: (event: RunCompleteEvent) => void;
 }
@@ -38,6 +40,7 @@ export function useWebSocket({
   enabled = true,
   onLaneActivity,
   onLaneStatusChange,
+  onLaneProgress,
   onMergeReady,
   onRunComplete,
 }: UseWebSocketOptions): UseWebSocketReturn {
@@ -54,6 +57,7 @@ export function useWebSocket({
   // Store event handlers in refs to avoid stale closures
   const onLaneActivityRef = useRef(onLaneActivity);
   const onLaneStatusChangeRef = useRef(onLaneStatusChange);
+  const onLaneProgressRef = useRef(onLaneProgress);
   const onMergeReadyRef = useRef(onMergeReady);
   const onRunCompleteRef = useRef(onRunComplete);
 
@@ -61,9 +65,10 @@ export function useWebSocket({
   useEffect(() => {
     onLaneActivityRef.current = onLaneActivity;
     onLaneStatusChangeRef.current = onLaneStatusChange;
+    onLaneProgressRef.current = onLaneProgress;
     onMergeReadyRef.current = onMergeReady;
     onRunCompleteRef.current = onRunComplete;
-  }, [onLaneActivity, onLaneStatusChange, onMergeReady, onRunComplete]);
+  }, [onLaneActivity, onLaneStatusChange, onLaneProgress, onMergeReady, onRunComplete]);
 
   // Cleanup function
   const cleanup = useCallback(() => {
@@ -152,6 +157,12 @@ export function useWebSocket({
     socket.on("lane-status-change", (event) => {
       if (event.runSlug === runSlug && onLaneStatusChangeRef.current) {
         onLaneStatusChangeRef.current(event);
+      }
+    });
+
+    socket.on("lane-progress", (event) => {
+      if (event.runSlug === runSlug && onLaneProgressRef.current) {
+        onLaneProgressRef.current(event);
       }
     });
 
@@ -251,6 +262,12 @@ export function useWebSocket({
       socket.on("lane-status-change", (event) => {
         if (event.runSlug === runSlug && onLaneStatusChangeRef.current) {
           onLaneStatusChangeRef.current(event);
+        }
+      });
+
+      socket.on("lane-progress", (event) => {
+        if (event.runSlug === runSlug && onLaneProgressRef.current) {
+          onLaneProgressRef.current(event);
         }
       });
 
