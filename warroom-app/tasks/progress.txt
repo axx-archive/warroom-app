@@ -160,3 +160,20 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Auto-scroll pattern: `scrollIntoView({ behavior: "smooth", block: "start" })` with setTimeout delay for React re-render
   - In-app notification banner: colored borders/backgrounds using design system variables (--status-success, --status-warning, --status-danger)
 ---
+
+## 2026-02-04 - US-204: Diff preview modal
+- Implemented diff preview modal for lane changes
+- Files changed:
+  - `src/app/api/runs/[slug]/lane-diff/route.ts` - New API endpoint for fetching diff data per lane
+  - `src/components/DiffPreviewModal.tsx` - New modal component with file tree sidebar and diff viewer
+  - `src/components/LaneStatusCard.tsx` - Added "Preview Changes" button when uncommitted files exist
+  - `src/components/LanesManager.tsx` - Added `onPreviewChanges` prop to pass through
+  - `src/components/RunDetailClient.tsx` - Added modal state management and handlers
+- **Learnings for future iterations:**
+  - Use `git status --porcelain` for machine-readable file status, then `git diff HEAD` for content
+  - For untracked files, read the file content and format as pseudo-diff with `+` prefix
+  - Diff line highlighting: additions (+) green bg, deletions (-) red bg, headers (@@) purple bg
+  - File tree pattern: build nested tree structure from flat paths, use recursive component rendering
+  - Modal sizing: use max-width/height with flex layout for responsive sizing
+  - Pass callbacks through component hierarchy: LaneStatusCard -> LanesManager -> RunDetailClient
+---
