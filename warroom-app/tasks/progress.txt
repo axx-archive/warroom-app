@@ -471,3 +471,45 @@ Started: Wed Feb  4 08:01:43 PST 2026
   - Template picker shows split view: list on left, preview on right
   - Modal pattern: flex layout with overflow-hidden parent, overflow-y-auto children for scrollable panes
 ---
+
+## 2026-02-04 - US-405
+- What was implemented:
+  - History/audit log system with append-only logging to history.jsonl
+  - 19 event types: lane_launched, lane_status_change, commit, merge_*, push_*, error, retry_*, mission_*, lane_reset, lane_added
+  - History utilities in src/lib/history.ts with typed event creation helpers
+  - GET /api/runs/[slug]/history API endpoint with filtering and pagination
+  - HistoryTab component with event type filter chips, lane filter, and export functionality
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added HistoryEventType, HistoryEvent and all specific event interfaces
+  - `src/lib/history.ts` - New file with append/read utilities and typed event creation helpers
+  - `src/app/api/runs/[slug]/history/route.ts` - New API endpoint for history queries
+  - `src/components/HistoryTab.tsx` - New component for viewing/filtering history
+  - `src/components/RunDetailClient.tsx` - Added HistoryTab import and usage
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added history logging for commits, merges, pushes, retries, errors, status changes, mission complete
+  - `src/app/api/runs/[slug]/launch/route.ts` - Added lane_launched and status change logging
+  - `src/app/api/runs/[slug]/reset-lane/route.ts` - Added lane_reset logging
+  - `src/app/api/runs/[slug]/add-lane/route.ts` - Added lane_added logging
+  - `src/app/api/runs/[slug]/start-mission/route.ts` - Added mission_started and mission_stopped logging
+- **Learnings for future iterations:**
+  - History stored as JSONL (JSON Lines) format - append-only, one event per line
+  - Each event has: id (UUID), type, timestamp, optional laneId, message, and type-specific details
+  - Helper functions like logCommit(), logMergeComplete() encapsulate event creation and appending
+  - Filter chips use toggle pattern - clicking adds/removes from selected list
+  - For large objects in API routes, use type-specific event interfaces to ensure proper typing
+  - getRunDir() helper method in orchestrator simplifies passing runDir to history functions
+---
+
+## 2026-02-04 - US-406: Progress timeline view
+- Implemented Gantt-chart style visualization showing lane progress and dependencies
+- Files changed:
+  - `src/components/TimelineView.tsx` - New component with SVG-based timeline visualization
+  - `src/components/RunDetailClient.tsx` - Integrated TimelineView component
+- **Learnings for future iterations:**
+  - Use history events (lane_launched, lane_status_change) to derive lane timing data
+  - SVG bezier curves for dependency arrows: calculate control points based on Y distance
+  - Time axis intervals should scale dynamically: 10s for <1min, 30s for <5min, 5min for <30min, etc.
+  - Status colors pattern: { bar: "var(--color)", bg: "rgba(r,g,b,0.15)", border: "rgba(r,g,b,0.4)" }
+  - Fixed tooltips with mouse position tracking via onMouseMove/onMouseLeave handlers
+  - Collapsible panels: use button with full-width click area, toggle internal state
+  - For in_progress lanes, add animate-pulse class to progress indicator
+---
