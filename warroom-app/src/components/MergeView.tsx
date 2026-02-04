@@ -820,7 +820,7 @@ function MergeProposalDisplay({
           )}
         </div>
 
-        {/* Execute Button */}
+        {/* Execute Button with Copy as secondary action */}
         <div className="flex items-center gap-3">
           <button
             onClick={onExecuteMerge}
@@ -861,45 +861,36 @@ function MergeProposalDisplay({
               </>
             )}
           </button>
+
+          {/* Secondary: Copy prompt only (icon button) */}
+          <button
+            onClick={onCopy}
+            className="btn-ghost p-2"
+            title={copyState === "copied" ? "Copied!" : "Copy prompt to clipboard"}
+          >
+            {copyState === "copied" ? (
+              <svg className="w-4 h-4 text-[var(--status-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            )}
+          </button>
+
           {mergeToMain && !confirmMergeToMain && (
             <span className="text-xs text-[var(--status-warning)]">
               Check the confirmation box to enable merge to main
             </span>
           )}
         </div>
-      </div>
 
-      {/* Copy PM Prompt Button */}
-      <div className="flex items-center gap-3 pt-5 border-t border-[var(--border-subtle)]">
-        <button
-          onClick={onCopy}
-          className={copyState === "copied" ? "btn-success" : "btn-secondary"}
-        >
-          {copyState === "copied" ? (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              Copied!
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              Copy PM Prompt
-            </>
-          )}
-        </button>
-        <span className="text-xs text-[var(--text-ghost)]">
+        <div className="text-xs text-[var(--text-ghost)]">
           Generated: {new Date(proposal.createdAt).toLocaleString()}
-        </span>
+        </div>
       </div>
 
-      {/* Saved location */}
-      <div className="text-xs text-[var(--text-ghost)]">
-        Proposal saved to: <code className="font-mono text-[var(--amber)]">merge-proposal.json</code>
-      </div>
     </div>
   );
 }
