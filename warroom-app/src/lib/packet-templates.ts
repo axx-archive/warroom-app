@@ -217,6 +217,26 @@ ${config.defaultStopConditions.map((s) => `- ${s}`).join("\n")}
 ## Dependencies
 - ${dependsOnText}
 
+## Completion Checklist
+**IMPORTANT:** When your work is complete, you MUST:
+
+1. **Run verification commands** (see Verification section above)
+2. **Stage and commit your changes:**
+   \`\`\`bash
+   git add -A
+   git status  # Verify only your files are staged
+   git commit -m "feat(${lane.laneId}): <brief description of work done>"
+   \`\`\`
+3. **Create an output summary** (if applicable):
+   - For reviews: Create \`REVIEW.md\` with findings
+   - For implementations: Document key changes made
+   - For QA: Create \`FINDINGS.md\` with test results
+
+**DO NOT:**
+- Leave uncommitted changes
+- Commit to main or integration branch
+- Commit node_modules, .next, or generated files
+
 ## Notes
 - Run ID: ${plan.runId}
 - Created: ${plan.createdAt}
