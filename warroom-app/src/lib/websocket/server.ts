@@ -29,6 +29,11 @@ export function getSocketServer(): SocketIOServer<ClientToServerEvents, ServerTo
     return null;
   }
 
+  // Never start a listener during build/SSR compilation.
+  if (process.env.NEXT_PHASE === "phase-production-build" || process.env.npm_lifecycle_event === "build") {
+    return null;
+  }
+
   if (io) {
     return io;
   }

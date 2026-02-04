@@ -16,6 +16,12 @@ export function initializeWebSocketServer(): void {
     return; // Already initialized
   }
 
+  // Never start a listener during build/SSR compilation.
+  // Next sets NEXT_PHASE=phase-production-build during `next build`.
+  if (process.env.NEXT_PHASE === "phase-production-build" || process.env.npm_lifecycle_event === "build") {
+    return;
+  }
+
   const server = getSocketServer();
   if (server) {
     initialized = true;
@@ -23,7 +29,7 @@ export function initializeWebSocketServer(): void {
   }
 }
 
-// Auto-initialize when imported on server
+// Auto-initialize when imported on server (but not during build)
 if (typeof window === "undefined") {
   initializeWebSocketServer();
 }
