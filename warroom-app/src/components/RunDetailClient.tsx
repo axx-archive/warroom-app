@@ -4,7 +4,8 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { Lane, LaneStatus } from "@/lib/plan-schema";
 import { LanesManager } from "./LanesManager";
 import { MergeView } from "./MergeView";
-import { useStatusPolling, LaneState } from "@/hooks/useStatusPolling";
+import { useRealtimeStatus, LaneState } from "@/hooks/useRealtimeStatus";
+import { ConnectionStatusIndicator } from "./ConnectionStatusIndicator";
 
 interface RunDetailClientProps {
   lanes: Lane[];
@@ -25,13 +26,16 @@ export function RunDetailClient({
   slug,
   initialStates,
 }: RunDetailClientProps) {
-  // Use polling hook for real-time status updates
+  // Use real-time status hook (WebSocket with polling fallback)
   const {
     laneStates,
     laneUncommitted,
     isRefreshing,
     updateLaneState,
-  } = useStatusPolling({
+    connectionStatus,
+    usingWebSocket,
+    reconnect,
+  } = useRealtimeStatus({
     slug,
     initialLaneStates: initialStates,
     enabled: true,
@@ -217,6 +221,13 @@ export function RunDetailClient({
 
       {/* Merge Readiness - key forces refresh on status change */}
       <MergeView key={mergeViewKey} slug={slug} />
+
+      {/* Connection status indicator */}
+      <ConnectionStatusIndicator
+        status={connectionStatus}
+        usingWebSocket={usingWebSocket}
+        onReconnect={reconnect}
+      />
     </>
   );
 }

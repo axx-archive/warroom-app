@@ -7,6 +7,10 @@ import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
 import { StatusJson, LaneStatus, RunStatus, LaneAutonomy } from "@/lib/plan-schema";
+import { emitLaneStatusChange, initializeWebSocketServer } from "@/lib/websocket";
+
+// Initialize WebSocket server on module load
+initializeWebSocketServer();
 
 // GET handler for polling status
 export async function GET(
@@ -128,6 +132,7 @@ export async function POST(
         currentStatus.lanes = {};
       }
 
+      const previousStatus = currentStatus.lanes[body.laneId]?.status ?? "pending";
       const isComplete = body.laneStatus === "complete";
       currentStatus.lanes[body.laneId] = {
         staged: currentStatus.lanes[body.laneId]?.staged ?? false,
@@ -146,6 +151,17 @@ export async function POST(
         currentStatus.lanesCompleted = currentStatus.lanesCompleted.filter(
           (id) => id !== body.laneId
         );
+      }
+
+      // Emit WebSocket event if status actually changed
+      if (previousStatus !== body.laneStatus) {
+        emitLaneStatusChange({
+          runSlug: slug,
+          laneId: body.laneId,
+          previousStatus,
+          newStatus: body.laneStatus,
+          timestamp: new Date().toISOString(),
+        });
       }
     }
 
