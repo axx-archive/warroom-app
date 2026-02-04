@@ -7,6 +7,7 @@ import { WarRoomPlan, StatusJson } from "@/lib/plan-schema";
 import type { LaneStatus, LaneAutonomy } from "@/lib/plan-schema";
 import { RunDetailClient } from "@/components/RunDetailClient";
 import { DeleteRunButton } from "@/components/DeleteRunButton";
+import { RunSidebarActions } from "@/components/RunSidebarActions";
 
 export const dynamic = "force-dynamic";
 
@@ -334,6 +335,9 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
                 </dl>
               </div>
             )}
+
+            {/* Quick Actions - Save as Template */}
+            {plan && <RunSidebarActions plan={plan} />}
           </div>
         </div>
       </main>

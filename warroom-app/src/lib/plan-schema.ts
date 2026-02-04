@@ -274,3 +274,43 @@ export interface CostTracking {
   // Whether the cost is an estimate or exact (some outputs may not provide full details)
   isEstimate: boolean;
 }
+
+// Template lane configuration (stripped of repo-specific paths)
+export interface TemplateLane {
+  // Lane identifier (may be modified when creating from template)
+  laneId: string;
+  // Agent type for the lane
+  agent: AgentType;
+  // Dependencies on other lanes (by laneId)
+  dependsOn: string[];
+  // Autonomy settings
+  autonomy: LaneAutonomy;
+  // Verification commands (templates, not path-specific)
+  verify: LaneVerify;
+  // Whether this is a foundation lane
+  foundation?: boolean;
+  // Allowed paths pattern (optional, can be customized when applying template)
+  allowedPaths?: string[];
+}
+
+// Plan template for reuse
+export interface PlanTemplate {
+  // Unique template ID (UUID)
+  id: string;
+  // Human-readable template name
+  name: string;
+  // Description of what this template is good for
+  description: string;
+  // Template lanes (without repo-specific paths)
+  lanes: TemplateLane[];
+  // Default merge method
+  mergeMethod: MergeMethod;
+  // Merge notes
+  mergeNotes: string;
+  // When the template was created
+  createdAt: string;
+  // Source run slug (for reference)
+  sourceRunSlug?: string;
+  // Tags for categorization
+  tags?: string[];
+}

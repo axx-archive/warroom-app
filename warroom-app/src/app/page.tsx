@@ -3,11 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { WarRoomPlan } from "@/lib/plan-schema";
+import { WarRoomPlan, PlanTemplate } from "@/lib/plan-schema";
 import { PlanGenerator } from "@/components/PlanGenerator";
 import { PlanViewer } from "@/components/PlanViewer";
 import { ImportPlanModal } from "@/components/ImportPlanModal";
 import { ImportRunFolderModal } from "@/components/ImportRunFolderModal";
+import { TemplatePickerModal } from "@/components/TemplatePickerModal";
 
 export default function Home() {
   const router = useRouter();
@@ -17,6 +18,8 @@ export default function Home() {
   } | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showImportFolderModal, setShowImportFolderModal] = useState(false);
+  const [showTemplatePickerModal, setShowTemplatePickerModal] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<PlanTemplate | null>(null);
 
   const handlePlanGenerated = (plan: WarRoomPlan, runDir: string) => {
     setGeneratedPlan({ plan, runDir });
@@ -33,8 +36,14 @@ export default function Home() {
     router.push(`/runs/${slug}`);
   };
 
+  const handleTemplateSelected = (template: PlanTemplate) => {
+    setSelectedTemplate(template);
+    setShowTemplatePickerModal(false);
+  };
+
   const handleReset = () => {
     setGeneratedPlan(null);
+    setSelectedTemplate(null);
   };
 
   return (
@@ -64,6 +73,15 @@ export default function Home() {
             </Link>
             {!generatedPlan && (
               <>
+                <button
+                  onClick={() => setShowTemplatePickerModal(true)}
+                  className="btn-ghost"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
+                  New from Template
+                </button>
                 <button
                   onClick={() => setShowImportFolderModal(true)}
                   className="btn-ghost"
@@ -128,6 +146,8 @@ export default function Home() {
                   ? `${process.env.HOME}/.openclaw/workspace`
                   : ""
               }
+              selectedTemplate={selectedTemplate}
+              onClearTemplate={() => setSelectedTemplate(null)}
             />
 
             {/* Quick Actions Rail - secondary navigation */}
@@ -161,6 +181,31 @@ export default function Home() {
                     </svg>
                   </div>
                 </Link>
+
+                {/* New from Template tile */}
+                <button
+                  onClick={() => setShowTemplatePickerModal(true)}
+                  className="quick-action-tile group text-left"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded bg-[var(--amber-glow)] border border-[var(--amber-dim)] flex items-center justify-center flex-shrink-0 transition-all group-hover:border-[var(--amber)] group-hover:shadow-[0_0_12px_var(--amber-glow)]">
+                      <svg className="w-5 h-5 text-[var(--amber)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-medium text-[var(--text-primary)] mb-1 leading-tight">
+                        New from Template
+                      </h3>
+                      <p className="text-xs text-[var(--text-tertiary)] leading-relaxed">
+                        Start with a saved plan configuration
+                      </p>
+                    </div>
+                    <svg className="w-4 h-4 text-[var(--text-ghost)] group-hover:text-[var(--amber)] transition-colors flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
 
                 {/* Import Plan tile */}
                 <button
@@ -270,6 +315,13 @@ export default function Home() {
         <ImportRunFolderModal
           onClose={() => setShowImportFolderModal(false)}
           onImported={handleRunFolderImported}
+        />
+      )}
+
+      {showTemplatePickerModal && (
+        <TemplatePickerModal
+          onClose={() => setShowTemplatePickerModal(false)}
+          onSelect={handleTemplateSelected}
         />
       )}
     </div>
