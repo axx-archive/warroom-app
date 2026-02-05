@@ -18,9 +18,12 @@ const execAsync = promisify(exec);
 // Patterns for build artifacts and generated files that should be excluded from uncommitted files display
 const BUILD_ARTIFACT_PATTERNS = [
   /^\.next\//,
+  /\.next\//,
   /^node_modules\//,
+  /node_modules\//,
   /\.tsbuildinfo$/,
-  /next-env\.d\.ts$/, // Match anywhere in path (not just root)
+  /next-env\.d\.ts$/, // Full filename
+  /ext-env\.d\.ts$/, // In case first char is stripped by parsing
   /^\.turbo\//,
   /^\.swc\//,
   /^dist\//,
