@@ -1,3 +1,17 @@
+# warroom-app (repo)
+
+This repository contains the War Room application under `./warroom-app/`.
+
+- App README: `warroom-app/README.md`
+- Architecture: `docs/ARCHITECTURE.md`
+- Design system: `docs/DESIGN_SYSTEM.md`
+- PRDs / planning: `docs/`
+
+## Why is the repo structured this way?
+
+We keep the product code in the `warroom-app/` directory.
+
+Anything that looks like assistant “memory” / personal workspace logs should **never** be committed here (especially for public/open-source repos). Those live in a central private location (e.g. `~/.openclaw/workspace/memory/`).
 # War Room App
 
 War Room is a **local mission-control UI** for orchestrating multi-lane Claude Code runs against a repo (launch lanes, watch progress, auto-commit, merge, and push), with an audit/history trail.
@@ -32,8 +46,8 @@ npm run build
 
 ## Architecture docs
 
-- **System architecture:** `../docs/ARCHITECTURE.md`
-- **UI design system:** `../docs/DESIGN_SYSTEM.md`
+- **System architecture:** `docs/ARCHITECTURE.md`
+- **UI design system:** `docs/DESIGN_SYSTEM.md`
 
 ## Ports
 - App: `3000`
@@ -60,4 +74,4 @@ If you expose it beyond localhost (or run it on a shared machine), you must firs
 - add auth/CSRF protections
 - validate all slugs/paths and avoid shell interpolation in command execution
 
-See `../docs/ARCHITECTURE.md` for the hardening checklist.
+See `docs/ARCHITECTURE.md` for the hardening checklist.
