@@ -321,6 +321,19 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
     fetchExistingProposal();
   }, [fetchMergeInfo, fetchExistingProposal]);
 
+  // Auto-generate proposal when full autonomy is enabled and lanes are ready
+  useEffect(() => {
+    if (
+      autoPushOptions.fullAutonomyMode &&
+      mergeInfo &&
+      !proposal &&
+      !proposalLoading &&
+      mergeInfo.lanes.some((l) => l.isMergeCandidate)
+    ) {
+      generateProposal();
+    }
+  }, [autoPushOptions.fullAutonomyMode, mergeInfo, proposal, proposalLoading, generateProposal]);
+
   if (loading) {
     return (
       <div className="panel-bracketed p-6">
@@ -515,31 +528,57 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
           <h4 className="text-sm font-medium text-[var(--text-primary)]">
             Merge Proposal
           </h4>
-          <button
-            onClick={generateProposal}
-            disabled={proposalLoading || mergeCandidates.length === 0}
-            className="btn-primary text-sm"
-          >
-            {proposalLoading ? (
-              <>
+          {/* In full autonomy mode, proposal auto-generates - only show regenerate option */}
+          {autoPushOptions.fullAutonomyMode ? (
+            proposalLoading ? (
+              <span className="text-xs text-[var(--text-tertiary)] flex items-center gap-2">
                 <span className="spinner" />
-                Generating...
-              </>
+                Auto-generating...
+              </span>
             ) : proposal ? (
-              "Regenerate Proposal"
-            ) : (
-              "Generate Merge Proposal"
-            )}
-          </button>
+              <button
+                onClick={generateProposal}
+                className="btn-ghost text-xs"
+                title="Regenerate proposal"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            ) : null
+          ) : (
+            <button
+              onClick={generateProposal}
+              disabled={proposalLoading || mergeCandidates.length === 0}
+              className="btn-primary text-sm"
+            >
+              {proposalLoading ? (
+                <>
+                  <span className="spinner" />
+                  Generating...
+                </>
+              ) : proposal ? (
+                "Regenerate Proposal"
+              ) : (
+                "Generate Merge Proposal"
+              )}
+            </button>
+          )}
         </div>
 
         {proposalError && (
           <div className="mb-4 text-sm text-[var(--status-danger)]">{proposalError}</div>
         )}
 
-        {mergeCandidates.length === 0 && (
+        {mergeCandidates.length === 0 && !autoPushOptions.fullAutonomyMode && (
           <div className="text-sm text-[var(--text-tertiary)]">
             No lanes are ready to merge yet. Complete at least one lane to generate a merge proposal.
+          </div>
+        )}
+
+        {mergeCandidates.length === 0 && autoPushOptions.fullAutonomyMode && (
+          <div className="text-sm text-[var(--text-tertiary)]">
+            Waiting for lanes to complete. Proposal will auto-generate when ready.
           </div>
         )}
 
