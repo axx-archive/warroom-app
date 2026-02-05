@@ -32,8 +32,8 @@ npm run build
 
 ## Architecture docs
 
-- **System architecture:** `docs/ARCHITECTURE.md`
-- **UI design system:** `docs/DESIGN_SYSTEM.md`
+- **System architecture:** `../docs/ARCHITECTURE.md`
+- **UI design system:** `../docs/DESIGN_SYSTEM.md`
 
 ## Ports
 - App: `3000`
@@ -60,4 +60,4 @@ If you expose it beyond localhost (or run it on a shared machine), you must firs
 - add auth/CSRF protections
 - validate all slugs/paths and avoid shell interpolation in command execution
 
-See `docs/ARCHITECTURE.md` for the hardening checklist.
+See `../docs/ARCHITECTURE.md` for the hardening checklist.
