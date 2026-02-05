@@ -100,9 +100,10 @@ async function getUncommittedFiles(worktreePath: string): Promise<{ files: Uncom
       .split("\n")
       .filter(Boolean)
       .map((line) => {
-        // Format is "XY path" where XY is status codes
+        // Format is "XY path" where XY is status codes, followed by space(s) and path
         const status = line.substring(0, 2).trim();
-        const filePath = line.substring(3);
+        // Path starts after position 2, but may have leading spaces
+        const filePath = line.substring(3).trimStart();
         return { status, path: filePath };
       })
       .filter((file) => !isBuildArtifact(file.path));
