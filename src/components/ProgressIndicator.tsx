@@ -43,23 +43,56 @@ export function ProgressIndicator({
       onMouseEnter={() => setShowDetails(true)}
       onMouseLeave={() => setShowDetails(false)}
     >
-      {/* Main indicator - Bold Instrument Panel */}
-      <div className="flex items-center gap-4 px-5 py-3 bg-[var(--bg-deep)] border border-[var(--border-strong)] rounded-lg instrument-panel cursor-default transition-all duration-200 hover:border-[var(--accent-border)]">
+      {/* Main indicator - Tactical Telemetry Panel */}
+      <div className="flex items-center gap-5 px-6 py-3 bg-[var(--bg-elevated)] border border-[var(--border-strong)] rounded-lg cursor-default transition-all duration-200 hover:border-[var(--accent-border)] hover:shadow-[0_0_20px_rgba(139,92,246,0.1)]">
+        {/* Progress circle */}
+        <div className="relative w-12 h-12 flex-shrink-0">
+          <svg className="w-12 h-12 transform -rotate-90">
+            <circle
+              cx="24"
+              cy="24"
+              r="20"
+              fill="none"
+              stroke="var(--border)"
+              strokeWidth="4"
+            />
+            <circle
+              cx="24"
+              cy="24"
+              r="20"
+              fill="none"
+              stroke={isComplete ? "var(--success)" : "var(--accent)"}
+              strokeWidth="4"
+              strokeDasharray={`${progress * 1.256} 125.6`}
+              strokeLinecap="round"
+              className="transition-all duration-500"
+              style={{
+                filter: lanesRunning > 0 ? "drop-shadow(0 0 8px var(--accent-glow))" : "none",
+              }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs font-mono font-bold text-[var(--text)] tabular-nums">
+              {Math.round(progress)}%
+            </span>
+          </div>
+        </div>
+
         {/* Completion metric */}
         <div className="flex flex-col">
-          <span className="telemetry-label">Completion</span>
-          <span className="text-xl font-bold text-white leading-none font-mono tabular-nums">
-            {completed} <span className="text-[var(--text-ghost)]">/</span> {total}
+          <span className="telemetry-label">LANES</span>
+          <span className="text-2xl font-bold text-white leading-none font-mono tabular-nums">
+            {completed}<span className="text-[var(--text-ghost)]">/</span>{total}
           </span>
         </div>
 
         {/* Divider */}
-        <div className="w-px h-8 bg-[var(--border)]" />
+        <div className="w-px h-10 bg-[var(--border)]" />
 
         {/* Cost metric */}
         <div className="flex flex-col">
-          <span className="telemetry-label">Resource Burn</span>
-          <span className={`text-xl font-bold leading-none font-mono tabular-nums flex items-center gap-1 ${costUsd > 0 ? "text-[var(--success)]" : "text-[var(--text-ghost)]"}`}>
+          <span className="telemetry-label">BURN RATE</span>
+          <span className={`text-2xl font-bold leading-none font-mono tabular-nums flex items-center gap-1.5 ${costUsd > 0 ? "text-[var(--success)]" : "text-[var(--text-ghost)]"}`}>
             {formatCost(costUsd)}
             {lanesRunning > 0 && (
               <svg className="w-4 h-4 text-[var(--success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -72,14 +105,30 @@ export function ProgressIndicator({
         {/* Running indicator */}
         {lanesRunning > 0 && (
           <>
-            <div className="w-px h-8 bg-[var(--border)]" />
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--accent)] opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--accent)]" />
-              </span>
-              <span className="text-xs font-mono font-bold text-[var(--accent)] uppercase tracking-tight">
-                {lanesRunning} Active
+            <div className="w-px h-10 bg-[var(--border)]" />
+            <div className="flex flex-col">
+              <span className="telemetry-label">ACTIVE</span>
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--accent)] opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--accent)]" />
+                </span>
+                <span className="text-2xl font-bold font-mono text-[var(--accent)] tabular-nums">
+                  {lanesRunning}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Failed indicator */}
+        {lanesFailed > 0 && (
+          <>
+            <div className="w-px h-10 bg-[var(--border)]" />
+            <div className="flex flex-col">
+              <span className="telemetry-label text-[var(--error)]">FAILED</span>
+              <span className="text-2xl font-bold font-mono text-[var(--error)] tabular-nums">
+                {lanesFailed}
               </span>
             </div>
           </>

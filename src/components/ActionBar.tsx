@@ -153,9 +153,27 @@ export function ActionBar({
   };
 
   return (
-    <div className="flex items-center justify-between gap-4 py-3">
+    <div className="flex items-center justify-between gap-4 py-4 px-5 bg-[var(--bg-deep)] border border-[var(--border)] rounded-lg instrument-panel">
       {/* Primary actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        {/* Mission state indicator */}
+        <div className="flex items-center gap-2 mr-2">
+          <span
+            className={`status-dot status-dot--sm ${
+              missionState === "running"
+                ? "status-dot--active status-dot--dramatic"
+                : missionState === "complete"
+                ? "status-dot--success"
+                : "status-dot--idle"
+            }`}
+          />
+          <span className="telemetry-label">
+            {missionState === "running" ? "ACTIVE" : missionState === "complete" ? "COMPLETE" : "READY"}
+          </span>
+        </div>
+
+        <div className="w-px h-8 bg-[var(--border)]" />
+
         {/* Primary CTA */}
         {renderPrimaryAction()}
 
@@ -164,7 +182,7 @@ export function ActionBar({
           <DropdownMenu
             trigger={
               <DropdownTriggerButton
-                label="More"
+                label="Actions"
                 icon={
                   <svg
                     className="w-4 h-4"
@@ -188,7 +206,7 @@ export function ActionBar({
       </div>
 
       {/* Secondary info */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         {/* Progress indicator */}
         <ProgressIndicator
           completed={completed}
