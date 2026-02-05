@@ -20,7 +20,7 @@ const BUILD_ARTIFACT_PATTERNS = [
   /^\.next\//,
   /^node_modules\//,
   /\.tsbuildinfo$/,
-  /^next-env\.d\.ts$/,
+  /next-env\.d\.ts$/, // Match anywhere in path (not just root)
   /^\.turbo\//,
   /^\.swc\//,
   /^dist\//,
