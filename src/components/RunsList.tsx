@@ -36,12 +36,12 @@ const STATUS_CONFIG: Record<string, { color: string; bgColor: string; borderColo
     borderColor: "rgba(124, 58, 237, 0.3)",
   },
   merging: {
-    color: "var(--status-warning)",
+    color: "var(--warning)",
     bgColor: "rgba(249, 115, 22, 0.15)",
     borderColor: "rgba(249, 115, 22, 0.3)",
   },
   complete: {
-    color: "var(--status-success)",
+    color: "var(--success)",
     bgColor: "rgba(34, 197, 94, 0.15)",
     borderColor: "rgba(34, 197, 94, 0.3)",
   },
@@ -128,11 +128,19 @@ export function RunsList({ initialRuns }: RunsListProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="flex items-center gap-3" style={{ color: "var(--muted)" }}>
-          <span className="spinner" />
-          <span className="label">Loading missions...</span>
-        </div>
+      <div className="flex flex-col gap-3">
+        {/* Skeleton loading cards */}
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="skeleton-card" style={{ animationDelay: `${i * 100}ms` }}>
+            <div className="p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="skeleton-text" style={{ width: "180px" }} />
+                <div className="skeleton-badge" />
+              </div>
+              <div className="skeleton-text skeleton-text--medium" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -141,11 +149,11 @@ export function RunsList({ initialRuns }: RunsListProps) {
     return (
       <div className="card--static p-5" style={{ borderColor: "rgba(239, 68, 68, 0.3)", background: "rgba(239, 68, 68, 0.08)" }}>
         <div className="flex items-start gap-3">
-          <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "var(--status-error)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "var(--error)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <div>
-            <p className="small font-medium" style={{ color: "var(--status-error)" }}>Error Loading Missions</p>
+            <p className="small font-medium" style={{ color: "var(--error)" }}>Error Loading Missions</p>
             <p className="small mt-0.5" style={{ color: "var(--muted)" }}>{error}</p>
           </div>
         </div>
@@ -175,8 +183,8 @@ export function RunsList({ initialRuns }: RunsListProps) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {runs.map((run) => {
+    <div className="flex flex-col gap-3 stagger-children">
+      {runs.map((run, index) => {
         const statusConfig = STATUS_CONFIG[run.status?.status || "draft"] || STATUS_CONFIG.draft;
         const statusClass = getLaneStatusClass(run.status?.status);
 
@@ -184,7 +192,8 @@ export function RunsList({ initialRuns }: RunsListProps) {
           <Link
             key={run.runSlug}
             href={`/runs/${run.runSlug}`}
-            className={`lane-card ${statusClass} block group`}
+            className={`lane-card ${statusClass} block group card-hover-glow`}
+            style={{ "--stagger-index": index } as React.CSSProperties}
           >
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
@@ -235,7 +244,7 @@ export function RunsList({ initialRuns }: RunsListProps) {
                     title="Delete mission"
                     style={{ color: "var(--muted)" }}
                   >
-                    <svg className="w-4 h-4 hover:text-[var(--status-error)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 hover:text-[var(--error)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   </button>

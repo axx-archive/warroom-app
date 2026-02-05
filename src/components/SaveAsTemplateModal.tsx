@@ -61,21 +61,15 @@ export function SaveAsTemplateModal({
   const isValidName = name.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="relative bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal tech-corners max-w-lg">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border-subtle)]">
+        <div className="modal-header">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-[var(--amber-glow)] border border-[var(--amber-dim)] flex items-center justify-center">
+            <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}>
               <svg
-                className="w-4 h-4 text-[var(--amber)]"
+                className="w-4 h-4"
+                style={{ color: "var(--accent)" }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -88,13 +82,13 @@ export function SaveAsTemplateModal({
                 />
               </svg>
             </div>
-            <h2 className="text-lg font-medium text-[var(--text-primary)]">
+            <h2 className="text-heading" style={{ color: "var(--text)" }}>
               Save as Template
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="btn-ghost p-1.5 text-[var(--text-ghost)] hover:text-[var(--text-secondary)]"
+            className="btn btn--icon"
           >
             <svg
               className="w-5 h-5"
@@ -113,23 +107,23 @@ export function SaveAsTemplateModal({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="modal-body space-y-4">
           {/* Error message */}
           {error && (
-            <div className="p-3 rounded border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.08)] text-[var(--status-danger)] text-sm">
+            <div className="p-3 rounded border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.08)] text-[var(--error)] text-sm">
               {error}
             </div>
           )}
 
           {/* Template summary */}
-          <div className="p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)]">
+          <div className="p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-muted)]">
             <div className="text-xs text-[var(--text-ghost)] uppercase tracking-wider mb-2">
               Template Preview
             </div>
             <div className="space-y-1.5 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-[var(--text-secondary)]">Lanes:</span>
-                <span className="font-mono text-[var(--text-primary)]">
+                <span className="font-mono text-[var(--text)]">
                   {plan.lanes.length}
                 </span>
               </div>
@@ -137,7 +131,7 @@ export function SaveAsTemplateModal({
                 <span className="text-[var(--text-secondary)]">
                   Agent types:
                 </span>
-                <span className="font-mono text-[var(--text-primary)]">
+                <span className="font-mono text-[var(--text)]">
                   {[...new Set(plan.lanes.map((l) => l.agent))].length}
                 </span>
               </div>
@@ -145,7 +139,7 @@ export function SaveAsTemplateModal({
                 <span className="text-[var(--text-secondary)]">
                   Merge method:
                 </span>
-                <span className="font-mono text-[var(--text-primary)]">
+                <span className="font-mono text-[var(--text)]">
                   {plan.merge.method}
                 </span>
               </div>
@@ -158,7 +152,7 @@ export function SaveAsTemplateModal({
               htmlFor="templateName"
               className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5"
             >
-              Template Name <span className="text-[var(--status-danger)]">*</span>
+              Template Name <span className="text-[var(--error)]">*</span>
             </label>
             <input
               type="text"
@@ -166,9 +160,9 @@ export function SaveAsTemplateModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., feature-development-workflow"
-              className={`w-full px-3 py-2 rounded border bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder-[var(--text-ghost)] focus:outline-none focus:ring-1 ${
+              className={`w-full px-3 py-2 rounded border bg-[var(--bg-muted)] text-[var(--text)] placeholder-[var(--text-ghost)] focus:outline-none focus:ring-1 ${
                 !isValidName && name
-                  ? "border-[var(--status-danger)] focus:ring-[var(--status-danger)]"
+                  ? "border-[var(--error)] focus:ring-[var(--error)]"
                   : "border-[var(--border-subtle)] focus:ring-[var(--cyan)]"
               }`}
               required
@@ -192,7 +186,7 @@ export function SaveAsTemplateModal({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What is this template good for?"
               rows={3}
-              className="w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder-[var(--text-ghost)] focus:outline-none focus:ring-1 focus:ring-[var(--cyan)] resize-none"
+              className="w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-muted)] text-[var(--text)] placeholder-[var(--text-ghost)] focus:outline-none focus:ring-1 focus:ring-[var(--cyan)] resize-none"
             />
           </div>
 
@@ -213,7 +207,7 @@ export function SaveAsTemplateModal({
               value={tags}
               onChange={(e) => setTags(e.target.value)}
               placeholder="e.g., feature, review, security"
-              className="w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder-[var(--text-ghost)] focus:outline-none focus:ring-1 focus:ring-[var(--cyan)]"
+              className="w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-muted)] text-[var(--text)] placeholder-[var(--text-ghost)] focus:outline-none focus:ring-1 focus:ring-[var(--cyan)]"
             />
           </div>
 
@@ -222,16 +216,16 @@ export function SaveAsTemplateModal({
             <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
               Lane Configuration
             </label>
-            <div className="space-y-1 max-h-40 overflow-y-auto p-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)]">
+            <div className="space-y-1 max-h-40 overflow-y-auto p-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-muted)]">
               {plan.lanes.map((lane) => (
                 <div
                   key={lane.laneId}
                   className="flex items-center justify-between text-sm py-1"
                 >
-                  <span className="font-mono text-[var(--text-primary)]">
+                  <span className="font-mono text-[var(--text)]">
                     {lane.laneId}
                   </span>
-                  <span className="text-xs text-[var(--text-ghost)] bg-[var(--bg-secondary)] px-2 py-0.5 rounded">
+                  <span className="text-xs text-[var(--text-ghost)] bg-[var(--bg-surface)] px-2 py-0.5 rounded">
                     {lane.agent}
                   </span>
                 </div>
@@ -239,69 +233,49 @@ export function SaveAsTemplateModal({
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn btn--sm btn--secondary"
-              disabled={isSubmitting}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={`btn btn--sm btn--primary ${
-                isSubmitting || !isValidName
-                  ? "opacity-50 cursor-not-allowed"
-                  : ""
-              }`}
-              disabled={isSubmitting || !isValidName}
-            >
-              {isSubmitting ? (
-                <>
-                  <svg
-                    className="w-3 h-3 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="w-3 h-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  Save Template
-                </>
-              )}
-            </button>
-          </div>
         </form>
+
+        {/* Footer */}
+        <div className="modal-footer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn btn--ghost"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            onClick={handleSubmit}
+            className="btn btn--primary"
+            disabled={isSubmitting || !isValidName}
+          >
+            {isSubmitting ? (
+              <>
+                <span className="spinner" style={{ width: 12, height: 12 }} />
+                Saving...
+              </>
+            ) : (
+              <>
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+                Save Template
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -449,6 +449,155 @@ code, .code-inline {
 }
 
 /* -----------------------------------------------------------------------------
+   SKELETON LOADING SYSTEM
+   ----------------------------------------------------------------------------- */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-muted) 25%,
+    var(--bg-surface) 50%,
+    var(--bg-muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+.skeleton-card {
+  background: linear-gradient(
+    90deg,
+    var(--bg-muted) 25%,
+    var(--bg-surface) 50%,
+    var(--bg-muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  height: 80px;
+}
+
+.skeleton-text {
+  background: linear-gradient(
+    90deg,
+    var(--bg-muted) 25%,
+    var(--bg-surface) 50%,
+    var(--bg-muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+  height: 14px;
+  width: 100%;
+}
+
+.skeleton-text--short {
+  width: 60%;
+}
+
+.skeleton-text--medium {
+  width: 80%;
+}
+
+.skeleton-badge {
+  background: linear-gradient(
+    90deg,
+    var(--bg-muted) 25%,
+    var(--bg-surface) 50%,
+    var(--bg-muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+  height: 20px;
+  width: 64px;
+}
+
+/* -----------------------------------------------------------------------------
+   STATE CHANGE ANIMATIONS
+   ----------------------------------------------------------------------------- */
+@keyframes complete-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    transform: scale(1);
+  }
+}
+
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+@keyframes checkmark-draw {
+  0% {
+    stroke-dashoffset: 24;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.lane-card--just-completed {
+  animation: complete-pulse 0.6s var(--ease-out);
+}
+
+.lane-card--just-failed {
+  animation: error-shake 0.5s var(--ease-out);
+}
+
+.animate-error-shake {
+  animation: error-shake 0.5s var(--ease-out);
+}
+
+.animate-complete-pulse {
+  animation: complete-pulse 0.6s var(--ease-out);
+}
+
+/* Checkmark animation for completion */
+.checkmark-animated {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: checkmark-draw 0.3s var(--ease-out) forwards;
+}
+
+/* Stagger animation for lists */
+@keyframes stagger-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stagger-children > * {
+  animation: stagger-fade-in 0.3s var(--ease-out) forwards;
+  animation-delay: calc(var(--stagger-index, 0) * 50ms);
+  opacity: 0;
+}
+
+/* Card hover glow effect */
+.card-hover-glow {
+  transition: box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
+}
+
+.card-hover-glow:hover {
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.15), var(--shadow-md);
+  border-color: var(--accent-border);
+}
+
+/* -----------------------------------------------------------------------------
    LAYOUT CONTAINERS
    ----------------------------------------------------------------------------- */
 .wrap {
@@ -670,6 +819,20 @@ code, .code-inline {
 .btn--success:hover:not(:disabled) {
   background: #34d399;
   border-color: #34d399;
+  box-shadow: var(--shadow-md), 0 0 20px rgba(16, 185, 129, 0.4);
+}
+
+/* Info Button (Cyan) */
+.btn--info {
+  background: var(--info);
+  color: var(--bg);
+  border-color: var(--info);
+}
+
+.btn--info:hover:not(:disabled) {
+  background: #22d3ee;
+  border-color: #22d3ee;
+  box-shadow: var(--shadow-md), 0 0 20px rgba(6, 182, 212, 0.4);
 }
 
 /* Size variants */
@@ -1381,11 +1544,30 @@ code, .code-inline {
 }
 
 /* -----------------------------------------------------------------------------
-   FOCUS STATES
+   FOCUS STATES - Enhanced for accessibility
    ----------------------------------------------------------------------------- */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Enhanced focus states for interactive elements */
+.btn:focus-visible,
+.input:focus-visible,
+.textarea:focus-visible,
+.toggle:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--accent-subtle);
+}
+
+/* Remove default focus styles when using enhanced ones */
+.btn:focus:not(:focus-visible),
+.input:focus:not(:focus-visible),
+.textarea:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
 }
 
 /* -----------------------------------------------------------------------------

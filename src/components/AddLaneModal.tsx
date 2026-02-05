@@ -133,21 +133,15 @@ export function AddLaneModal({
   const laneIdExists = existingLanes.some((l) => l.laneId === laneId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="relative bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal tech-corners max-w-lg">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border-subtle)]">
+        <div className="modal-header">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-[var(--cyan-glow)] border border-[var(--cyan-dim)] flex items-center justify-center">
+            <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: "var(--info-dim)", border: "1px solid rgba(6, 182, 212, 0.3)" }}>
               <svg
-                className="w-4 h-4 text-[var(--cyan)]"
+                className="w-4 h-4"
+                style={{ color: "var(--info)" }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -160,13 +154,13 @@ export function AddLaneModal({
                 />
               </svg>
             </div>
-            <h2 className="text-lg font-medium text-[var(--text-primary)]">
+            <h2 className="text-heading" style={{ color: "var(--text)" }}>
               Add New Lane
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="btn-ghost p-1.5 text-[var(--text-ghost)] hover:text-[var(--text-secondary)]"
+            className="btn btn--icon"
           >
             <svg
               className="w-5 h-5"
@@ -185,10 +179,10 @@ export function AddLaneModal({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="modal-body space-y-4">
           {/* Error message */}
           {error && (
-            <div className="p-3 rounded border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.08)] text-[var(--status-danger)] text-sm">
+            <div className="p-3 rounded border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.08)] text-[var(--error)] text-sm">
               {error}
             </div>
           )}
@@ -199,7 +193,7 @@ export function AddLaneModal({
               htmlFor="laneId"
               className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5"
             >
-              Lane ID <span className="text-[var(--status-danger)]">*</span>
+              Lane ID <span className="text-[var(--error)]">*</span>
             </label>
             <input
               type="text"
@@ -207,22 +201,22 @@ export function AddLaneModal({
               value={laneId}
               onChange={(e) => setLaneId(e.target.value)}
               placeholder="e.g., fix-auth-bug"
-              className={`w-full px-3 py-2 rounded border bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder-[var(--text-ghost)] focus:outline-none focus:ring-1 ${
+              className={`w-full px-3 py-2 rounded border bg-[var(--bg-muted)] text-[var(--text)] placeholder-[var(--text-ghost)] focus:outline-none focus:ring-1 ${
                 laneId && !isValidLaneId
-                  ? "border-[var(--status-danger)] focus:ring-[var(--status-danger)]"
+                  ? "border-[var(--error)] focus:ring-[var(--error)]"
                   : laneIdExists
-                  ? "border-[var(--status-warning)] focus:ring-[var(--status-warning)]"
+                  ? "border-[var(--warning)] focus:ring-[var(--warning)]"
                   : "border-[var(--border-subtle)] focus:ring-[var(--cyan)]"
               }`}
               required
             />
             {laneId && !isValidLaneId && (
-              <p className="mt-1 text-xs text-[var(--status-danger)]">
+              <p className="mt-1 text-xs text-[var(--error)]">
                 Only letters, numbers, dashes, and underscores allowed
               </p>
             )}
             {laneIdExists && (
-              <p className="mt-1 text-xs text-[var(--status-warning)]">
+              <p className="mt-1 text-xs text-[var(--warning)]">
                 This lane ID already exists
               </p>
             )}
@@ -234,13 +228,13 @@ export function AddLaneModal({
               htmlFor="agent"
               className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5"
             >
-              Agent Type <span className="text-[var(--status-danger)]">*</span>
+              Agent Type <span className="text-[var(--error)]">*</span>
             </label>
             <select
               id="agent"
               value={agent}
               onChange={(e) => setAgent(e.target.value as AgentType)}
-              className="w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--cyan)]"
+              className="w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-muted)] text-[var(--text)] focus:outline-none focus:ring-1 focus:ring-[var(--cyan)]"
             >
               {AGENT_TYPES.map((type) => (
                 <option key={type.value} value={type.value}>
@@ -270,7 +264,7 @@ export function AddLaneModal({
               value={branchName}
               onChange={(e) => setBranchName(e.target.value)}
               placeholder={suggestedBranch || "Auto-generated if empty"}
-              className="w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder-[var(--text-ghost)] focus:outline-none focus:ring-1 focus:ring-[var(--cyan)]"
+              className="w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-muted)] text-[var(--text)] placeholder-[var(--text-ghost)] focus:outline-none focus:ring-1 focus:ring-[var(--cyan)]"
             />
             {!branchName && suggestedBranch && (
               <p className="mt-1 text-xs text-[var(--text-ghost)]">
@@ -288,7 +282,7 @@ export function AddLaneModal({
               </span>
             </label>
             {existingLanes.length > 0 ? (
-              <div className="space-y-2 max-h-32 overflow-y-auto p-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)]">
+              <div className="space-y-2 max-h-32 overflow-y-auto p-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-muted)]">
                 {existingLanes.map((lane) => (
                   <label
                     key={lane.laneId}
@@ -300,7 +294,7 @@ export function AddLaneModal({
                       onChange={() => toggleDependency(lane.laneId)}
                       className="w-4 h-4 rounded border-[var(--border-subtle)] bg-[var(--bg-primary)] text-[var(--cyan)] focus:ring-[var(--cyan)] focus:ring-offset-0"
                     />
-                    <span className="text-sm text-[var(--text-primary)]">
+                    <span className="text-sm text-[var(--text)]">
                       {lane.laneId}
                     </span>
                     <span className="text-xs text-[var(--text-ghost)]">
@@ -317,7 +311,7 @@ export function AddLaneModal({
           </div>
 
           {/* Autonomy Toggle */}
-          <div className="p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)]">
+          <div className="p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-muted)]">
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -326,7 +320,7 @@ export function AddLaneModal({
                 className="mt-0.5 w-4 h-4 rounded border-[var(--border-subtle)] bg-[var(--bg-primary)] text-[var(--cyan)] focus:ring-[var(--cyan)] focus:ring-offset-0"
               />
               <div>
-                <span className="text-sm font-medium text-[var(--text-primary)]">
+                <span className="text-sm font-medium text-[var(--text)]">
                   Enable Autonomous Mode
                 </span>
                 <p className="text-xs text-[var(--text-ghost)] mt-0.5">
@@ -336,69 +330,50 @@ export function AddLaneModal({
             </label>
           </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn btn--sm btn--secondary"
-              disabled={isSubmitting}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={`btn btn--sm btn--primary ${
-                isSubmitting || !laneId || !isValidLaneId || laneIdExists
-                  ? "opacity-50 cursor-not-allowed"
-                  : ""
-              }`}
-              disabled={isSubmitting || !laneId || !isValidLaneId || laneIdExists}
-            >
-              {isSubmitting ? (
-                <>
-                  <svg
-                    className="w-3 h-3 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="w-3 h-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                  Add Lane
-                </>
-              )}
-            </button>
-          </div>
         </form>
+
+        {/* Footer */}
+        <div className="modal-footer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn btn--ghost"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="add-lane-form"
+            onClick={handleSubmit}
+            className="btn btn--primary"
+            disabled={isSubmitting || !laneId || !isValidLaneId || laneIdExists}
+          >
+            {isSubmitting ? (
+              <>
+                <span className="spinner" style={{ width: 12, height: 12 }} />
+                Creating...
+              </>
+            ) : (
+              <>
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+                Add Lane
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

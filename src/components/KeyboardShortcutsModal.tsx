@@ -59,19 +59,20 @@ export function KeyboardShortcutsModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={modalRef}
-        className="bg-[var(--surface-secondary)] border border-[var(--border-dim)] rounded-lg shadow-xl max-w-lg w-full mx-4"
+        className="modal tech-corners max-w-lg"
         role="dialog"
         aria-labelledby="shortcuts-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border-dim)]">
+        <div className="modal-header">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-[var(--cyan-glow)] border border-[var(--cyan-dim)] flex items-center justify-center">
+            <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: "var(--info-dim)", border: "1px solid rgba(6, 182, 212, 0.3)" }}>
               <svg
-                className="w-4 h-4 text-[var(--cyan)]"
+                className="w-4 h-4"
+                style={{ color: "var(--info)" }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -86,14 +87,15 @@ export function KeyboardShortcutsModal({
             </div>
             <h2
               id="shortcuts-title"
-              className="text-lg font-medium text-[var(--text-primary)]"
+              className="text-heading"
+              style={{ color: "var(--text)" }}
             >
               Keyboard Shortcuts
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="btn-ghost p-2 text-[var(--text-ghost)] hover:text-[var(--text-secondary)]"
+            className="btn btn--icon"
             title="Close (Esc)"
           >
             <svg
@@ -113,7 +115,7 @@ export function KeyboardShortcutsModal({
         </div>
 
         {/* Content */}
-        <div className="p-4 max-h-[60vh] overflow-y-auto">
+        <div className="modal-body" style={{ maxHeight: "60vh", overflowY: "auto" }}>
           {/* Action shortcuts */}
           {actionShortcuts.length > 0 && (
             <div className="mb-6">
@@ -144,10 +146,10 @@ export function KeyboardShortcutsModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-[var(--border-dim)] bg-[var(--surface-primary)]">
-          <p className="text-sm text-[var(--text-ghost)] text-center">
+        <div className="modal-footer justify-center">
+          <p className="text-caption text-center" style={{ color: "var(--text-muted)" }}>
             Press{" "}
-            <kbd className="px-1.5 py-0.5 bg-[var(--surface-secondary)] border border-[var(--border-dim)] rounded text-[var(--text-secondary)] font-mono text-xs">
+            <kbd className="px-1.5 py-0.5 rounded font-mono text-xs" style={{ background: "var(--bg-muted)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
               Esc
             </kbd>{" "}
             to close
@@ -165,13 +167,13 @@ function ShortcutRow({ shortcut }: { shortcut: KeyboardShortcut }) {
         className={`text-sm ${
           shortcut.disabled
             ? "text-[var(--text-ghost)]"
-            : "text-[var(--text-primary)]"
+            : "text-[var(--text)]"
         }`}
       >
         {shortcut.description}
       </span>
       <kbd
-        className={`px-2 py-1 min-w-[2.5rem] text-center bg-[var(--surface-secondary)] border border-[var(--border-dim)] rounded font-mono text-sm ${
+        className={`px-2 py-1 min-w-[2.5rem] text-center bg-[var(--surface-secondary)] border border-[var(--border-subtle)] rounded font-mono text-sm ${
           shortcut.disabled
             ? "text-[var(--text-ghost)]"
             : "text-[var(--cyan)]"

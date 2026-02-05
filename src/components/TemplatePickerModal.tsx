@@ -92,21 +92,15 @@ export function TemplatePickerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="relative bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[85vh] flex flex-col">
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal tech-corners max-w-4xl" style={{ maxHeight: "85vh" }}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border-subtle)] flex-shrink-0">
+        <div className="modal-header flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-[var(--amber-glow)] border border-[var(--amber-dim)] flex items-center justify-center">
+            <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}>
               <svg
-                className="w-4 h-4 text-[var(--amber)]"
+                className="w-4 h-4"
+                style={{ color: "var(--accent)" }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -119,13 +113,13 @@ export function TemplatePickerModal({
                 />
               </svg>
             </div>
-            <h2 className="text-lg font-medium text-[var(--text-primary)]">
+            <h2 className="text-heading" style={{ color: "var(--text)" }}>
               New from Template
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="btn-ghost p-1.5 text-[var(--text-ghost)] hover:text-[var(--text-secondary)]"
+            className="btn btn--icon"
           >
             <svg
               className="w-5 h-5"
@@ -170,7 +164,7 @@ export function TemplatePickerModal({
                 </svg>
               </div>
             ) : error ? (
-              <div className="p-4 rounded border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.08)] text-[var(--status-danger)] text-sm">
+              <div className="p-4 rounded border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.08)] text-[var(--error)] text-sm">
                 {error}
               </div>
             ) : templates.length === 0 ? (
@@ -188,7 +182,7 @@ export function TemplatePickerModal({
                     d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
                   />
                 </svg>
-                <p className="text-[var(--text-tertiary)] mb-1">
+                <p className="text-[var(--text-muted)] mb-1">
                   No templates yet
                 </p>
                 <p className="text-xs text-[var(--text-ghost)]">
@@ -204,12 +198,12 @@ export function TemplatePickerModal({
                     className={`p-3 rounded border cursor-pointer transition-all ${
                       selectedTemplate?.id === template.id
                         ? "border-[var(--amber)] bg-[var(--amber-glow)]"
-                        : "border-[var(--border-subtle)] bg-[var(--bg-tertiary)] hover:border-[var(--border-default)]"
+                        : "border-[var(--border-subtle)] bg-[var(--bg-muted)] hover:border-[var(--border-default)]"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-[var(--text-primary)] truncate">
+                        <h4 className="font-medium text-[var(--text)] truncate">
                           {template.name}
                         </h4>
                         <p className="text-xs text-[var(--text-ghost)] mt-0.5 line-clamp-2">
@@ -219,7 +213,7 @@ export function TemplatePickerModal({
                       <button
                         onClick={(e) => handleDelete(template.id, e)}
                         disabled={deletingId === template.id}
-                        className="flex-shrink-0 p-1 rounded text-[var(--text-ghost)] hover:text-[var(--status-danger)] hover:bg-[rgba(239,68,68,0.1)] transition-colors"
+                        className="flex-shrink-0 p-1 rounded text-[var(--text-ghost)] hover:text-[var(--error)] hover:bg-[rgba(239,68,68,0.1)] transition-colors"
                         title="Delete template"
                       >
                         {deletingId === template.id ? (
@@ -267,7 +261,7 @@ export function TemplatePickerModal({
                         template.tags.slice(0, 2).map((tag) => (
                           <span
                             key={tag}
-                            className="text-xs text-[var(--text-ghost)] bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded"
+                            className="text-xs text-[var(--text-ghost)] bg-[var(--bg-surface)] px-1.5 py-0.5 rounded"
                           >
                             {tag}
                           </span>
@@ -280,11 +274,11 @@ export function TemplatePickerModal({
           </div>
 
           {/* Template Preview */}
-          <div className="w-1/2 overflow-y-auto p-4 bg-[var(--bg-tertiary)]">
+          <div className="w-1/2 overflow-y-auto p-4 bg-[var(--bg-muted)]">
             {selectedTemplate ? (
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-lg font-medium text-[var(--text-primary)]">
+                  <h3 className="text-lg font-medium text-[var(--text)]">
                     {selectedTemplate.name}
                   </h3>
                   <p className="text-sm text-[var(--text-secondary)] mt-1">
@@ -297,7 +291,7 @@ export function TemplatePickerModal({
                   {selectedTemplate.sourceRunSlug && (
                     <span>
                       From:{" "}
-                      <span className="font-mono text-[var(--text-tertiary)]">
+                      <span className="font-mono text-[var(--text-muted)]">
                         {selectedTemplate.sourceRunSlug}
                       </span>
                     </span>
@@ -310,7 +304,7 @@ export function TemplatePickerModal({
                     {selectedTemplate.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="text-xs text-[var(--text-secondary)] bg-[var(--bg-secondary)] border border-[var(--border-subtle)] px-2 py-0.5 rounded"
+                        className="text-xs text-[var(--text-secondary)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-2 py-0.5 rounded"
                       >
                         {tag}
                       </span>
@@ -320,17 +314,17 @@ export function TemplatePickerModal({
 
                 {/* Lane Configuration */}
                 <div>
-                  <h4 className="text-sm font-medium text-[var(--text-primary)] mb-2">
+                  <h4 className="text-sm font-medium text-[var(--text)] mb-2">
                     Lane Configuration
                   </h4>
                   <div className="space-y-2">
                     {selectedTemplate.lanes.map((lane) => (
                       <div
                         key={lane.laneId}
-                        className="p-2.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-secondary)]"
+                        className="p-2.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)]"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-mono text-sm text-[var(--text-primary)]">
+                          <span className="font-mono text-sm text-[var(--text)]">
                             {lane.laneId}
                           </span>
                           <span className="text-xs bg-[var(--cyan-glow)] text-[var(--cyan)] border border-[var(--cyan-dim)] px-2 py-0.5 rounded">
@@ -340,7 +334,7 @@ export function TemplatePickerModal({
                         {lane.dependsOn.length > 0 && (
                           <div className="mt-1.5 text-xs text-[var(--text-ghost)]">
                             Depends on:{" "}
-                            <span className="font-mono text-[var(--text-tertiary)]">
+                            <span className="font-mono text-[var(--text-muted)]">
                               {lane.dependsOn.join(", ")}
                             </span>
                           </div>
@@ -357,7 +351,7 @@ export function TemplatePickerModal({
 
                 {/* Merge Settings */}
                 <div>
-                  <h4 className="text-sm font-medium text-[var(--text-primary)] mb-2">
+                  <h4 className="text-sm font-medium text-[var(--text)] mb-2">
                     Merge Settings
                   </h4>
                   <div className="text-sm space-y-1">
@@ -365,7 +359,7 @@ export function TemplatePickerModal({
                       <span className="text-[var(--text-secondary)]">
                         Method:
                       </span>
-                      <span className="font-mono text-[var(--text-primary)]">
+                      <span className="font-mono text-[var(--text)]">
                         {selectedTemplate.mergeMethod}
                       </span>
                     </div>
@@ -398,7 +392,7 @@ export function TemplatePickerModal({
                     d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
                   />
                 </svg>
-                <p className="text-[var(--text-tertiary)]">
+                <p className="text-[var(--text-muted)]">
                   Select a template to preview
                 </p>
               </div>
@@ -407,19 +401,17 @@ export function TemplatePickerModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-4 border-t border-[var(--border-subtle)] flex-shrink-0">
-          <button onClick={onClose} className="btn btn--sm btn--secondary">
+        <div className="modal-footer flex-shrink-0">
+          <button onClick={onClose} className="btn btn--ghost">
             Cancel
           </button>
           <button
             onClick={handleSelect}
             disabled={!selectedTemplate}
-            className={`btn btn--sm btn--primary ${
-              !selectedTemplate ? "opacity-50 cursor-not-allowed" : ""
-            }`}
+            className="btn btn--primary"
           >
             <svg
-              className="w-3 h-3"
+              className="w-4 h-4"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

@@ -3,6 +3,7 @@
 import { useState, useTransition, useCallback, useRef, useEffect } from "react";
 import { Lane, LaneStatus, LaneAutonomy, LaunchMode, RetryState, PushState, CostTracking } from "@/lib/plan-schema";
 import { LaneUncommittedStatus, UncommittedFile } from "@/hooks/useStatusPolling";
+import { DropdownMenu, OverflowMenuTrigger, DropdownMenuGroup } from "./DropdownMenu";
 
 interface LaneStatusCardProps {
   lane: Lane;
@@ -18,36 +19,41 @@ interface LaneStatusCardProps {
   onPreviewChanges?: (laneId: string) => void; // Callback to open diff preview modal
 }
 
-const STATUS_CONFIG: Record<LaneStatus, { color: string; bgColor: string; borderColor: string; label: string }> = {
+const STATUS_CONFIG: Record<LaneStatus, { color: string; bgColor: string; borderColor: string; label: string; cardClass: string }> = {
   pending: {
-    color: "var(--muted)",
-    bgColor: "transparent",
+    color: "var(--text-ghost)",
+    bgColor: "var(--bg-elevated)",
     borderColor: "var(--border)",
     label: "Pending",
+    cardClass: "lane-card--pending",
   },
   in_progress: {
     color: "var(--accent)",
-    bgColor: "rgba(124, 58, 237, 0.08)",
-    borderColor: "rgba(124, 58, 237, 0.3)",
-    label: "In Progress",
+    bgColor: "var(--accent-subtle)",
+    borderColor: "var(--accent-border)",
+    label: "Running",
+    cardClass: "lane-card--in-progress",
   },
   complete: {
-    color: "var(--status-success)",
-    bgColor: "rgba(34, 197, 94, 0.08)",
-    borderColor: "rgba(34, 197, 94, 0.3)",
+    color: "var(--success)",
+    bgColor: "var(--bg-elevated)",
+    borderColor: "var(--border)",
     label: "Complete",
+    cardClass: "lane-card--complete",
   },
   failed: {
-    color: "var(--status-error)",
-    bgColor: "rgba(239, 68, 68, 0.08)",
+    color: "var(--error)",
+    bgColor: "var(--error-dim)",
     borderColor: "rgba(239, 68, 68, 0.3)",
     label: "Failed",
+    cardClass: "lane-card--failed",
   },
   conflict: {
-    color: "var(--status-warning)",
-    bgColor: "rgba(234, 179, 8, 0.08)",
-    borderColor: "rgba(234, 179, 8, 0.3)",
-    label: "Merge Conflict",
+    color: "var(--warning)",
+    bgColor: "var(--warning-dim)",
+    borderColor: "rgba(245, 158, 11, 0.3)",
+    label: "Conflict",
+    cardClass: "lane-card--conflict",
   },
 };
 
@@ -180,7 +186,7 @@ function RetryExhaustedBanner({
       <div className="flex items-start gap-2">
         <svg
           className="w-4 h-4 shrink-0 mt-0.5"
-          style={{ color: "var(--status-error)" }}
+          style={{ color: "var(--error)" }}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -193,7 +199,7 @@ function RetryExhaustedBanner({
           />
         </svg>
         <div className="min-w-0">
-          <p className="text-sm font-medium" style={{ color: "var(--status-error)" }}>
+          <p className="text-sm font-medium" style={{ color: "var(--error)" }}>
             Max retries ({retryState.maxAttempts}) exhausted
           </p>
           <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
@@ -278,11 +284,11 @@ function UncommittedFilesPopover({
   const getStatusColor = (status: string) => {
     switch (status) {
       case "M":
-        return "var(--status-warning)"; // Orange
+        return "var(--warning)"; // Orange
       case "A":
-        return "var(--status-success)"; // Green
+        return "var(--success)"; // Green
       case "D":
-        return "var(--status-error)"; // Red
+        return "var(--error)"; // Red
       case "??":
         return "var(--text-muted)"; // Gray
       default:
@@ -303,7 +309,7 @@ function UncommittedFilesPopover({
         className="px-3 py-2 border-b"
         style={{ borderColor: "var(--border)" }}
       >
-        <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+        <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
           Uncommitted Files
         </span>
       </div>
@@ -361,6 +367,7 @@ export function LaneStatusCard({
   const [isDismissing, setIsDismissing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
   const uncommittedBadgeRef = useRef<HTMLButtonElement>(null);
 
   const isComplete = status === "complete";
@@ -638,30 +645,71 @@ export function LaneStatusCard({
   // Show reset button for failed or complete lanes
   const canReset = status === "failed" || status === "complete" || status === "conflict";
 
+  // Build overflow menu items
+  const overflowMenuGroups: DropdownMenuGroup[] = [];
+
+  // View group
+  const viewItems = [];
+  if (hasUncommittedFiles && onPreviewChanges) {
+    viewItems.push({
+      id: "preview",
+      label: "Preview Changes",
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        </svg>
+      ),
+      onClick: () => onPreviewChanges(lane.laneId),
+    });
+  }
+  if (viewItems.length > 0) {
+    overflowMenuGroups.push({ items: viewItems });
+  }
+
+  // Actions group
+  const actionItems = [];
+  if (canReset) {
+    actionItems.push({
+      id: "reset",
+      label: "Reset Lane",
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+      ),
+      onClick: () => setShowResetConfirm(true),
+      disabled: isResetting,
+      danger: true,
+    });
+  }
+  if (actionItems.length > 0) {
+    overflowMenuGroups.push({ items: actionItems });
+  }
+
   return (
     <div
-      className="task-card"
+      className={`lane-card lane-card--compact ${config.cardClass}`}
       data-lane-id={lane.laneId}
       tabIndex={-1}
       style={{
-        backgroundColor: config.bgColor,
-        borderColor: config.borderColor,
-        borderLeftWidth: "3px",
-        borderLeftColor: config.color,
-      }}
+        "--lane-color": config.color,
+      } as React.CSSProperties}
     >
-      <div className="flex items-start justify-between w-full">
-        <div className="flex items-start gap-3">
-          {/* Completion Checkbox */}
+      {/* Row 1: Checkbox + Lane ID + Agent + Status */}
+      <div className="flex items-center justify-between gap-3 min-w-0">
+        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+          {/* Completion Checkbox - refined */}
           <button
             onClick={handleToggleComplete}
             disabled={isPending}
-            className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-              isPending ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+            className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all duration-150 flex-shrink-0 ${
+              isPending ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-[var(--accent-border)]"
             }`}
             style={{
-              borderColor: isComplete ? "var(--status-success)" : "var(--border)",
-              backgroundColor: isComplete ? "var(--status-success)" : "transparent",
+              borderColor: isComplete ? "var(--success)" : "var(--border)",
+              backgroundColor: isComplete ? "var(--success)" : "transparent",
+              boxShadow: isComplete ? "0 0 8px rgba(16, 185, 129, 0.4)" : "none",
             }}
             title={isComplete ? "Mark as incomplete" : "Mark as complete"}
           >
@@ -672,295 +720,224 @@ export function LaneStatusCard({
             )}
           </button>
 
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-medium" style={{ color: "var(--text)" }}>
-                {lane.laneId}
-              </span>
-              <span className="badge badge--idle">
-                {lane.agent}
-              </span>
-              {staged && !isComplete && (
-                <span className="badge badge--running">
-                  staged
-                </span>
-              )}
-              {/* Uncommitted files badge */}
-              {hasUncommittedFiles && (
-                <div className="relative">
-                  <button
-                    ref={uncommittedBadgeRef}
-                    onClick={() => setShowUncommittedPopover(!showUncommittedPopover)}
-                    className="badge cursor-pointer hover:opacity-80 transition-opacity"
-                    style={{
-                      backgroundColor: "rgba(249, 115, 22, 0.15)",
-                      color: "#f97316",
-                      borderColor: "rgba(249, 115, 22, 0.4)",
-                    }}
-                    title={`${uncommittedStatus!.uncommittedCount} uncommitted file${uncommittedStatus!.uncommittedCount === 1 ? "" : "s"} - click to view`}
-                  >
-                    {uncommittedStatus!.uncommittedCount} uncommitted file{uncommittedStatus!.uncommittedCount === 1 ? "" : "s"}
-                  </button>
-                  <UncommittedFilesPopover
-                    files={uncommittedStatus!.uncommittedFiles}
-                    isOpen={showUncommittedPopover}
-                    onClose={() => setShowUncommittedPopover(false)}
-                    triggerRef={uncommittedBadgeRef}
-                  />
-                </div>
-              )}
-              {/* New commits since launch badge */}
-              {hasNewCommits && (
-                <button
-                  onClick={handleViewGitLog}
-                  className="badge cursor-pointer hover:opacity-80 transition-opacity"
-                  style={{
-                    backgroundColor: "rgba(34, 197, 94, 0.15)",
-                    color: "#22c55e",
-                    borderColor: "rgba(34, 197, 94, 0.4)",
-                  }}
-                  title={`${uncommittedStatus!.commitsSinceLaunch} commit${uncommittedStatus!.commitsSinceLaunch === 1 ? "" : "s"} since launch - click to view git log`}
-                >
-                  +{uncommittedStatus!.commitsSinceLaunch} commit{uncommittedStatus!.commitsSinceLaunch === 1 ? "" : "s"}
-                </button>
-              )}
-              {/* Push status badge */}
-              {uncommittedStatus?.pushState && <PushStatusBadge pushState={uncommittedStatus.pushState} />}
-              {/* Cost tracking badge */}
-              {uncommittedStatus?.costTracking && <CostBadge costTracking={uncommittedStatus.costTracking} />}
-            </div>
-            <p className="mono small mt-1" style={{ color: "var(--muted)" }}>
-              {lane.branch}
-            </p>
-          </div>
+          {/* Lane ID - primary */}
+          <span className="font-semibold text-sm text-[var(--text)] truncate">
+            {lane.laneId}
+          </span>
+
+          {/* Agent badge - refined */}
+          <span className="badge badge--muted flex-shrink-0">
+            {lane.agent}
+          </span>
+
+          {/* Auto mode indicator - inline */}
+          {autonomy.dangerouslySkipPermissions && (
+            <span className="badge badge--accent flex-shrink-0">
+              <span className="status-dot status-dot--sm" style={{ background: "var(--accent)" }} />
+              Auto
+            </span>
+          )}
+
+          {/* Dependencies - inline, smaller - hidden on overflow */}
+          {lane.dependsOn.length > 0 && (
+            <span className="text-caption text-[var(--text-ghost)] truncate flex-shrink hidden sm:inline" title={`Depends on: ${lane.dependsOn.join(", ")}`}>
+              → {lane.dependsOn.join(", ")}
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleLaunch}
-            disabled={isLaunching || isComplete || isBlocked}
-            className={`btn btn--primary btn--sm ${
-              isLaunching ? "opacity-50 cursor-wait" : ""
-            } ${isComplete || isBlocked ? "opacity-30 cursor-not-allowed" : ""}`}
-            title={
-              isComplete
-                ? "Lane is complete"
-                : isBlocked
-                ? `Blocked by: ${blockedByLanes.join(", ")}`
-                : launchMode === "cursor"
-                ? "Open in Cursor (run /warroom-run to start)"
-                : "Open in Terminal with Claude Code (/warroom-run auto-runs)"
-            }
+        {/* Right: Status + Actions */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Status badge */}
+          <span
+            className="badge"
+            style={{
+              color: config.color,
+              backgroundColor: status === "in_progress" ? "var(--accent-subtle)" : "transparent",
+              borderColor: status === "in_progress" ? "var(--accent-border)" : "transparent",
+            }}
           >
-            {isLaunching ? (
-              <>
-                <svg className="w-3 h-3 spinner" fill="none" viewBox="0 0 24 24">
+            {status === "in_progress" && (
+              <span className="badge__dot animate-status-pulse" style={{ background: config.color }} />
+            )}
+            {config.label}
+          </span>
+
+          {/* Launch button - clean, prominent */}
+          {!isComplete && (
+            <button
+              onClick={handleLaunch}
+              disabled={isLaunching || isBlocked}
+              className={`btn btn--sm transition-all duration-150 ${
+                isBlocked
+                  ? "btn--ghost opacity-40 cursor-not-allowed"
+                  : launchStatus === "opened" || launchStatus === "launched"
+                  ? "btn--success"
+                  : launchStatus === "error"
+                  ? "btn--danger"
+                  : "btn--primary"
+              }`}
+              title={isBlocked ? `Blocked by: ${blockedByLanes.join(", ")}` : launchMode === "cursor" ? "Open in Cursor" : "Open in Terminal"}
+            >
+              {isLaunching ? (
+                <svg className="w-3.5 h-3.5 spinner" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Launching...
-              </>
-            ) : launchStatus === "opened" ? (
-              <>
-                <svg className="w-3 h-3" style={{ color: "var(--status-success)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              ) : launchStatus === "opened" || launchStatus === "launched" ? (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                Opened!
-              </>
-            ) : launchStatus === "launched" ? (
-              <>
-                <svg className="w-3 h-3" style={{ color: "var(--status-success)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Launched!
-              </>
-            ) : launchStatus === "error" ? (
-              <>
-                <svg className="w-3 h-3" style={{ color: "var(--status-error)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              ) : launchStatus === "error" ? (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                Error
-              </>
-            ) : isBlocked ? (
-              <>
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                Blocked
-              </>
-            ) : (
-              <>
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Launch
-              </>
-            )}
-          </button>
-          {/* Commit Button - show when lane is in progress or staged */}
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  </svg>
+                  Launch
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Commit - subtle secondary action */}
           {(status === "in_progress" || staged) && !isComplete && (
             <button
               onClick={handleCommit}
               disabled={isCommitting}
-              className={`btn btn--sm ${
-                commitStatus === "success" ? "btn--success" :
-                commitStatus === "error" ? "btn--danger" :
-                "btn--secondary"
-              } ${isCommitting ? "opacity-50 cursor-wait" : ""}`}
-              title="Commit uncommitted changes in worktree"
+              className={`btn btn--ghost btn--sm transition-all duration-150 ${
+                commitStatus === "success" ? "!text-[var(--success)] !border-[var(--success)]" :
+                commitStatus === "error" ? "!text-[var(--error)] !border-[var(--error)]" : ""
+              }`}
+              title="Commit changes"
             >
               {isCommitting ? (
-                <>
-                  <svg className="w-3 h-3 spinner" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Committing...
-                </>
-              ) : commitStatus === "success" ? (
-                <>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Committed!
-                </>
-              ) : commitStatus === "nochanges" ? (
-                <>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  No Changes
-                </>
-              ) : commitStatus === "error" ? (
-                <>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Error
-                </>
+                <svg className="w-3.5 h-3.5 spinner" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
               ) : (
                 <>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={2} fill="none" />
                   </svg>
                   Commit
                 </>
               )}
             </button>
           )}
-          {/* Preview Changes Button - show when lane has changes */}
-          {hasUncommittedFiles && onPreviewChanges && (
-            <button
-              onClick={() => onPreviewChanges(lane.laneId)}
-              className="btn btn--sm btn--secondary"
-              title="Preview all changes in this lane"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-              Preview
-            </button>
+
+          {/* Overflow menu */}
+          {overflowMenuGroups.length > 0 && (
+            <DropdownMenu
+              trigger={<OverflowMenuTrigger />}
+              groups={overflowMenuGroups}
+            />
           )}
-          {/* Reset Lane Button - show for failed or complete lanes */}
-          {canReset && (
-            <button
-              onClick={() => setShowResetConfirm(true)}
-              disabled={isResetting}
-              className={`btn btn--sm btn--secondary ${isResetting ? "opacity-50 cursor-wait" : ""}`}
-              title="Reset lane to initial state"
-            >
-              {isResetting ? (
-                <>
-                  <svg className="w-3 h-3 spinner" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Resetting...
-                </>
-              ) : (
-                <>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Reset
-                </>
-              )}
-            </button>
-          )}
-          <span
-            className="label"
-            style={{ color: config.color }}
-          >
-            {config.label}
-          </span>
         </div>
       </div>
 
-      {lane.dependsOn.length > 0 && (
-        <div className="mt-2 ml-8 small" style={{ color: "var(--muted)" }}>
-          Depends on: {lane.dependsOn.join(", ")}
+      {/* Row 2: Branch + Badges */}
+      <div className="flex items-center gap-3 mt-1 pl-8 min-w-0 overflow-hidden">
+        {/* Branch path */}
+        <code className="text-caption font-mono text-[var(--text-ghost)] truncate min-w-0 flex-shrink" title={lane.branch}>
+          {lane.branch}
+        </code>
+
+        {/* Badges cluster */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {hasUncommittedFiles && (
+            <div className="relative">
+              <button
+                ref={uncommittedBadgeRef}
+                onClick={() => setShowUncommittedPopover(!showUncommittedPopover)}
+                className="badge badge--warning cursor-pointer hover:opacity-80 transition-opacity"
+                title={`${uncommittedStatus!.uncommittedCount} uncommitted`}
+              >
+                {uncommittedStatus!.uncommittedCount} uncommitted
+              </button>
+              <UncommittedFilesPopover
+                files={uncommittedStatus!.uncommittedFiles}
+                isOpen={showUncommittedPopover}
+                onClose={() => setShowUncommittedPopover(false)}
+                triggerRef={uncommittedBadgeRef}
+              />
+            </div>
+          )}
+          {hasNewCommits && (
+            <button
+              onClick={handleViewGitLog}
+              className="badge badge--success cursor-pointer hover:opacity-80 transition-opacity"
+              title={`${uncommittedStatus!.commitsSinceLaunch} commits since launch`}
+            >
+              +{uncommittedStatus!.commitsSinceLaunch}
+            </button>
+          )}
+          {staged && !isComplete && (
+            <span className="badge badge--accent">
+              staged
+            </span>
+          )}
+          {uncommittedStatus?.pushState && <PushStatusBadge pushState={uncommittedStatus.pushState} />}
+          {uncommittedStatus?.costTracking && <CostBadge costTracking={uncommittedStatus.costTracking} />}
+
+          {/* Settings toggle */}
+          <button
+            onClick={() => setSettingsExpanded(!settingsExpanded)}
+            className={`lane-settings-toggle ${settingsExpanded ? "lane-settings-toggle--expanded" : ""}`}
+            type="button"
+          >
+            <svg
+              className="lane-settings-toggle__icon w-3 h-3"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+            <span>Settings</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Settings Panel - refined */}
+      {settingsExpanded && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mt-3 ml-8 pt-3 border-t border-[var(--border)]">
+          {/* Autonomy Toggle */}
+          <label className="flex items-center gap-2 cursor-pointer flex-shrink-0 group">
+            <button
+              onClick={handleToggleAutonomy}
+              disabled={isPending}
+              className={`toggle ${autonomy.dangerouslySkipPermissions ? "toggle--active" : ""} ${
+                isPending ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              role="switch"
+              aria-checked={autonomy.dangerouslySkipPermissions}
+            />
+            <span className="text-caption text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] transition-colors">
+              Skip permissions
+            </span>
+          </label>
+
+          {/* Launch Mode */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-caption text-[var(--text-muted)]">Launch mode:</span>
+            <select
+              value={launchMode}
+              onChange={(e) => handleLaunchModeChange(e.target.value as LaunchMode)}
+              disabled={isPending || isComplete}
+              className="input input--sm text-caption cursor-pointer disabled:opacity-50"
+              style={{ minWidth: "90px", padding: "4px 8px" }}
+            >
+              <option value="cursor">Cursor</option>
+              <option value="terminal">Terminal</option>
+            </select>
+          </div>
         </div>
       )}
-
-      {/* Autonomy Toggle and Launch Mode */}
-      <div className="mt-3 ml-8 flex items-center gap-4 flex-wrap">
-        {/* Autonomy Toggle */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleToggleAutonomy}
-            disabled={isPending}
-            className={`toggle ${autonomy.dangerouslySkipPermissions ? "active" : ""} ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}
-            role="switch"
-            aria-checked={autonomy.dangerouslySkipPermissions}
-            title={
-              autonomy.dangerouslySkipPermissions
-                ? "Disable skip permissions mode"
-                : "Enable skip permissions mode"
-            }
-            style={{
-              width: "32px",
-              height: "18px",
-            }}
-          />
-          <span className="small" style={{ color: "var(--muted)" }}>
-            Skip permissions
-            {autonomy.dangerouslySkipPermissions && (
-              <span className="ml-1.5 font-medium" style={{ color: "var(--accent)" }}>
-                (enabled)
-              </span>
-            )}
-          </span>
-        </div>
-
-        {/* Launch Mode Selector */}
-        <div className="flex items-center gap-2">
-          <span className="small" style={{ color: "var(--muted)" }}>
-            Launch:
-          </span>
-          <select
-            value={launchMode}
-            onChange={(e) => handleLaunchModeChange(e.target.value as LaunchMode)}
-            disabled={isPending || isComplete}
-            className="text-xs px-2 py-1 rounded border bg-transparent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              borderColor: "var(--border)",
-              color: "var(--text)",
-              minWidth: "140px",
-            }}
-            title={
-              launchMode === "cursor"
-                ? "Open in Cursor IDE, then run /warroom-run"
-                : "Open iTerm2/Terminal with /warroom-run auto-running"
-            }
-          >
-            <option value="cursor">Cursor</option>
-            <option value="terminal">Terminal (Claude Code)</option>
-          </select>
-        </div>
-      </div>
 
       {/* Agent Progress (from LANE_STATUS.json) */}
       {uncommittedStatus?.agentStatus && status === "in_progress" && (
@@ -1019,7 +996,7 @@ export function LaneStatusCard({
             <div className="mt-2 flex items-start gap-2">
               <svg
                 className="w-3 h-3 shrink-0 mt-0.5"
-                style={{ color: "var(--status-warning)" }}
+                style={{ color: "var(--warning)" }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -1032,7 +1009,7 @@ export function LaneStatusCard({
                 />
               </svg>
               <div className="flex-1">
-                <span className="text-xs font-medium" style={{ color: "var(--status-warning)" }}>
+                <span className="text-xs font-medium" style={{ color: "var(--warning)" }}>
                   Blockers:
                 </span>
                 <ul className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
@@ -1086,12 +1063,7 @@ export function LaneStatusCard({
             <button
               onClick={handleMarkComplete}
               disabled={isPending}
-              className="btn btn--sm"
-              style={{
-                backgroundColor: "#22c55e",
-                color: "white",
-                border: "none",
-              }}
+              className="btn btn--sm btn--success"
             >
               {isPending ? "..." : "Mark Complete"}
             </button>
@@ -1129,74 +1101,62 @@ export function LaneStatusCard({
 
       {/* Reset Confirmation Dialog */}
       {showResetConfirm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
-        >
+        <div className="modal-backdrop" onClick={() => setShowResetConfirm(false)}>
           <div
-            className="p-6 rounded-lg shadow-xl max-w-md w-full mx-4"
-            style={{
-              backgroundColor: "var(--panel)",
-              border: "1px solid var(--border)",
-            }}
+            className="modal tech-corners max-w-md"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start gap-3 mb-4">
-              <svg
-                className="w-6 h-6 shrink-0 mt-0.5"
-                style={{ color: "var(--status-warning)" }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-              <div>
-                <h3 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
-                  Reset Lane?
-                </h3>
-                <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-                  This will reset <strong>{lane.laneId}</strong> to its initial state:
-                </p>
-                <ul className="text-sm mt-2 ml-4 list-disc" style={{ color: "var(--text-secondary)" }}>
-                  <li>Discard all uncommitted changes</li>
-                  <li>Remove all untracked files</li>
-                  <li>Clear LANE_STATUS.json</li>
-                  <li>Reset status to &quot;pending&quot;</li>
-                </ul>
-                <p className="text-sm mt-2 font-medium" style={{ color: "var(--status-warning)" }}>
-                  This action cannot be undone.
-                </p>
+            <div className="modal-body">
+              <div className="flex items-start gap-3">
+                <svg
+                  className="w-6 h-6 shrink-0 mt-0.5"
+                  style={{ color: "var(--warning)" }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+                <div>
+                  <h3 className="text-heading" style={{ color: "var(--text)" }}>
+                    Reset Lane?
+                  </h3>
+                  <p className="text-body mt-1" style={{ color: "var(--text-secondary)" }}>
+                    This will reset <strong>{lane.laneId}</strong> to its initial state:
+                  </p>
+                  <ul className="text-body mt-2 ml-4 list-disc" style={{ color: "var(--text-secondary)" }}>
+                    <li>Discard all uncommitted changes</li>
+                    <li>Remove all untracked files</li>
+                    <li>Clear LANE_STATUS.json</li>
+                    <li>Reset status to &quot;pending&quot;</li>
+                  </ul>
+                  <p className="text-body mt-2 font-medium" style={{ color: "var(--warning)" }}>
+                    This action cannot be undone.
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="flex justify-end gap-3 mt-6">
+            <div className="modal-footer">
               <button
                 onClick={() => setShowResetConfirm(false)}
                 disabled={isResetting}
-                className="btn btn--secondary btn--sm"
+                className="btn btn--ghost"
               >
                 Cancel
               </button>
               <button
                 onClick={handleReset}
                 disabled={isResetting}
-                className={`btn btn--sm ${isResetting ? "opacity-50 cursor-wait" : ""}`}
-                style={{
-                  backgroundColor: "var(--status-error)",
-                  color: "white",
-                  border: "none",
-                }}
+                className="btn btn--danger"
               >
                 {isResetting ? (
                   <>
-                    <svg className="w-3 h-3 spinner" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
+                    <span className="spinner" style={{ width: 14, height: 14 }} />
                     Resetting...
                   </>
                 ) : (
