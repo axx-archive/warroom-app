@@ -11,6 +11,37 @@ import { LaneAgentStatus, MergeMethod } from "../plan-schema";
 const exec = promisify(execCallback);
 const execFile = promisify(execFileCallback);
 
+// Patterns for build artifacts and generated files that should be excluded from uncommitted checks
+const BUILD_ARTIFACT_PATTERNS = [
+  /^\.next\//,
+  /\.next\//,
+  /^node_modules\//,
+  /node_modules\//,
+  /\.tsbuildinfo$/,
+  /next-env\.d\.ts$/,
+  /ext-env\.d\.ts$/, // In case first char is stripped by parsing
+  /^\.turbo\//,
+  /^\.swc\//,
+  /^dist\//,
+  /^build\//,
+  /^\.cache\//,
+  /^coverage\//,
+];
+
+function isBuildArtifact(filePath: string): boolean {
+  return BUILD_ARTIFACT_PATTERNS.some(pattern => pattern.test(filePath));
+}
+
+// Parse git status --porcelain output, filtering out build artifacts
+function parseGitStatusOutput(stdout: string): string[] {
+  return stdout
+    .trim()
+    .split("\n")
+    .filter(line => line.length > 0)
+    .map(line => line.substring(3).trimStart()) // Extract file path
+    .filter(filePath => !isBuildArtifact(filePath));
+}
+
 // Result of an auto-commit operation
 export interface AutoCommitResult {
   success: boolean;
@@ -22,12 +53,13 @@ export interface AutoCommitResult {
 }
 
 /**
- * Check if a worktree has uncommitted changes
+ * Check if a worktree has uncommitted changes (excluding build artifacts)
  */
 export async function hasUncommittedChanges(worktreePath: string): Promise<boolean> {
   try {
     const { stdout } = await exec("git status --porcelain", { cwd: worktreePath });
-    return stdout.trim().length > 0;
+    const files = parseGitStatusOutput(stdout);
+    return files.length > 0;
   } catch (error) {
     console.error(`[GitOperations] Error checking git status:`, error);
     return false;
@@ -35,13 +67,13 @@ export async function hasUncommittedChanges(worktreePath: string): Promise<boole
 }
 
 /**
- * Get count of uncommitted files in worktree
+ * Get count of uncommitted files in worktree (excluding build artifacts)
  */
 export async function getUncommittedFileCount(worktreePath: string): Promise<number> {
   try {
     const { stdout } = await exec("git status --porcelain", { cwd: worktreePath });
-    const lines = stdout.trim().split("\n").filter(line => line.length > 0);
-    return lines.length;
+    const files = parseGitStatusOutput(stdout);
+    return files.length;
   } catch (error) {
     console.error(`[GitOperations] Error getting uncommitted file count:`, error);
     return 0;
@@ -751,14 +783,16 @@ export function validateWorktreePath(worktreePath: string): WorktreeSafetyCheckR
   for (const dangerous of DANGEROUS_PATHS) {
     const resolvedDangerous = path.resolve(dangerous);
     if (resolvedPath === resolvedDangerous || resolvedPath.startsWith(resolvedDangerous + path.sep)) {
-      // Only block if the dangerous path is not under worktree root
-      if (!resolvedDangerous.startsWith(resolvedRoot + path.sep)) {
-        return {
-          safe: false,
-          reason: `Path ${resolvedPath} is or is under a protected system directory`,
-          pathOutsideBoundary: true,
-        };
+      // Allow if the worktree root is under this dangerous path (expected case)
+      // e.g., worktree root ~/Desktop/worktrees is under home directory ~
+      if (resolvedRoot.startsWith(resolvedDangerous + path.sep) || resolvedRoot === resolvedDangerous) {
+        continue; // This is expected - worktree root is inside home dir
       }
+      return {
+        safe: false,
+        reason: `Path ${resolvedPath} is or is under a protected system directory`,
+        pathOutsideBoundary: true,
+      };
     }
   }
 
