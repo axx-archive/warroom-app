@@ -26,6 +26,7 @@ import {
   MissionCompleteEvent,
   LaneResetEvent,
   LaneAddedEvent,
+  WorktreeCleanupEvent,
   LaneStatus,
   LaunchMode,
   AgentType,
@@ -556,6 +557,30 @@ export function logLaneAdded(
     details: {
       agent,
       dependencies,
+    },
+  };
+  appendHistoryEvent(runDir, event);
+  return event;
+}
+
+export function logWorktreeCleanup(
+  runDir: string,
+  lanesRemoved: string[],
+  branchesDeleted: string[],
+  dryRun: boolean
+): WorktreeCleanupEvent {
+  const event: WorktreeCleanupEvent = {
+    ...createBaseEvent(
+      "worktree_cleanup",
+      dryRun
+        ? `Dry run: would remove ${lanesRemoved.length} worktrees and ${branchesDeleted.length} branches`
+        : `Cleaned up ${lanesRemoved.length} worktrees and deleted ${branchesDeleted.length} branches`
+    ),
+    type: "worktree_cleanup",
+    details: {
+      lanesRemoved,
+      branchesDeleted,
+      dryRun,
     },
   };
   appendHistoryEvent(runDir, event);

@@ -335,7 +335,8 @@ export type HistoryEventType =
   | "mission_stopped"
   | "mission_complete"
   | "lane_reset"
-  | "lane_added";
+  | "lane_added"
+  | "worktree_cleanup";
 
 // Base history event
 export interface HistoryEventBase {
@@ -522,6 +523,16 @@ export interface LaneAddedEvent extends HistoryEventBase {
   };
 }
 
+// Worktree cleanup event
+export interface WorktreeCleanupEvent extends HistoryEventBase {
+  type: "worktree_cleanup";
+  details: {
+    lanesRemoved: string[];
+    branchesDeleted: string[];
+    dryRun: boolean;
+  };
+}
+
 // Union type of all history events
 export type HistoryEvent =
   | LaneLaunchedEvent
@@ -542,7 +553,8 @@ export type HistoryEvent =
   | MissionStoppedEvent
   | MissionCompleteEvent
   | LaneResetEvent
-  | LaneAddedEvent;
+  | LaneAddedEvent
+  | WorktreeCleanupEvent;
 
 // In-app notification types
 export type NotificationType = "success" | "warning" | "error" | "info";
