@@ -15,6 +15,24 @@ import { getLaneCostTracking, getRunCostTracking } from "@/lib/orchestrator";
 
 const execAsync = promisify(exec);
 
+// Patterns for build artifacts and generated files that should be excluded from uncommitted files display
+const BUILD_ARTIFACT_PATTERNS = [
+  /^\.next\//,
+  /^node_modules\//,
+  /\.tsbuildinfo$/,
+  /^next-env\.d\.ts$/,
+  /^\.turbo\//,
+  /^\.swc\//,
+  /^dist\//,
+  /^build\//,
+  /^\.cache\//,
+  /^coverage\//,
+];
+
+function isBuildArtifact(filePath: string): boolean {
+  return BUILD_ARTIFACT_PATTERNS.some(pattern => pattern.test(filePath));
+}
+
 interface UncommittedFile {
   status: string; // e.g. "M", "A", "D", "??"
   path: string;
@@ -86,7 +104,8 @@ async function getUncommittedFiles(worktreePath: string): Promise<{ files: Uncom
         const status = line.substring(0, 2).trim();
         const filePath = line.substring(3);
         return { status, path: filePath };
-      });
+      })
+      .filter((file) => !isBuildArtifact(file.path));
 
     return { files };
   } catch (error) {

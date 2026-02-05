@@ -11,6 +11,24 @@ import { WarRoomPlan, Lane } from "@/lib/plan-schema";
 
 const execAsync = promisify(exec);
 
+// Patterns for build artifacts and generated files that should be excluded from diff display
+const BUILD_ARTIFACT_PATTERNS = [
+  /^\.next\//,
+  /^node_modules\//,
+  /\.tsbuildinfo$/,
+  /^next-env\.d\.ts$/,
+  /^\.turbo\//,
+  /^\.swc\//,
+  /^dist\//,
+  /^build\//,
+  /^\.cache\//,
+  /^coverage\//,
+];
+
+function isBuildArtifact(filePath: string): boolean {
+  return BUILD_ARTIFACT_PATTERNS.some(pattern => pattern.test(filePath));
+}
+
 export interface DiffFile {
   path: string;
   status: "modified" | "added" | "deleted" | "renamed" | "untracked";
@@ -240,6 +258,14 @@ export async function GET(
       const fileLines = statusOutput.trim().split("\n").filter(Boolean);
 
       for (const line of fileLines) {
+        // Extract file path to check if it's a build artifact
+        let checkPath = line.substring(3);
+        if (checkPath.includes(" -> ")) {
+          checkPath = checkPath.split(" -> ")[1];
+        }
+        if (isBuildArtifact(checkPath)) {
+          continue;
+        }
         const statusCode = line.substring(0, 2);
         let filePath = line.substring(3);
 
