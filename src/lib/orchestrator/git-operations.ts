@@ -1,13 +1,15 @@
 // Git operations for auto-committing lane work and merging
 // Handles automatic commits when lanes signal completion and auto-merge functionality
 
-import { exec as execCallback } from "child_process";
+import { exec as execCallback, execFile as execFileCallback } from "child_process";
 import { promisify } from "util";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, lstatSync } from "fs";
 import path from "path";
+import os from "os";
 import { LaneAgentStatus, MergeMethod } from "../plan-schema";
 
 const exec = promisify(execCallback);
+const execFile = promisify(execFileCallback);
 
 // Result of an auto-commit operation
 export interface AutoCommitResult {
@@ -664,4 +666,264 @@ export async function pushIntegrationBranch(
 export function isProtectedMainBranch(branch: string): boolean {
   const protectedBranches = ["main", "master", "production", "prod", "release"];
   return protectedBranches.includes(branch.toLowerCase());
+}
+
+// ============ Worktree Cleanup Operations ============
+
+// Result of checking if a worktree can be removed
+export interface WorktreeSafetyCheckResult {
+  safe: boolean;
+  reason: string;
+  hasUncommittedChanges?: boolean;
+  isSymlink?: boolean;
+  pathOutsideBoundary?: boolean;
+}
+
+// Result of a worktree removal operation
+export interface RemoveWorktreeResult {
+  success: boolean;
+  worktreePath: string;
+  error?: string;
+}
+
+// Result of a branch deletion operation
+export interface DeleteBranchResult {
+  success: boolean;
+  branch: string;
+  forcedDelete?: boolean;
+  error?: string;
+}
+
+// Dangerous paths that should never be removed
+const DANGEROUS_PATHS = [
+  os.homedir(),
+  "/",
+  "/usr",
+  "/etc",
+  "/var",
+  "/tmp",
+  "/bin",
+  "/sbin",
+  "/Applications",
+];
+
+/**
+ * Get the expected worktree root directory
+ * Defaults to ~/Desktop/worktrees if not configured
+ */
+export function getWorktreeRoot(): string {
+  return path.join(os.homedir(), "Desktop", "worktrees");
+}
+
+/**
+ * Validate that a path is safe for removal
+ * Implements path boundary checks from security review
+ */
+export function validateWorktreePath(worktreePath: string): WorktreeSafetyCheckResult {
+  const resolvedPath = path.resolve(worktreePath);
+  const worktreeRoot = getWorktreeRoot();
+  const resolvedRoot = path.resolve(worktreeRoot);
+
+  // Check if path is a symlink (security: symlink attacks)
+  try {
+    const stats = lstatSync(resolvedPath);
+    if (stats.isSymbolicLink()) {
+      return {
+        safe: false,
+        reason: "Worktree path is a symlink - refusing to remove for security",
+        isSymlink: true,
+      };
+    }
+  } catch {
+    // Path doesn't exist - that's fine for removal
+  }
+
+  // Check if path is under the worktree root
+  if (!resolvedPath.startsWith(resolvedRoot + path.sep) && resolvedPath !== resolvedRoot) {
+    return {
+      safe: false,
+      reason: `Worktree path is outside the expected root (${worktreeRoot})`,
+      pathOutsideBoundary: true,
+    };
+  }
+
+  // Check against dangerous paths
+  for (const dangerous of DANGEROUS_PATHS) {
+    const resolvedDangerous = path.resolve(dangerous);
+    if (resolvedPath === resolvedDangerous || resolvedPath.startsWith(resolvedDangerous + path.sep)) {
+      // Only block if the dangerous path is not under worktree root
+      if (!resolvedDangerous.startsWith(resolvedRoot + path.sep)) {
+        return {
+          safe: false,
+          reason: `Path ${resolvedPath} is or is under a protected system directory`,
+          pathOutsideBoundary: true,
+        };
+      }
+    }
+  }
+
+  return {
+    safe: true,
+    reason: "Path validation passed",
+  };
+}
+
+/**
+ * Check if a branch is merged into the target branch
+ */
+export async function isBranchMerged(
+  repoPath: string,
+  branch: string,
+  targetBranch: string
+): Promise<boolean> {
+  try {
+    // Use git merge-base --is-ancestor to check if branch is merged
+    const result = await gitExec(
+      `git merge-base --is-ancestor ${branch} ${targetBranch}`,
+      repoPath
+    );
+    return result.success;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a worktree is safe to remove
+ * Validates path, checks for uncommitted changes, etc.
+ */
+export async function isWorktreeSafeToRemove(
+  worktreePath: string
+): Promise<WorktreeSafetyCheckResult> {
+  // First validate the path itself
+  const pathValidation = validateWorktreePath(worktreePath);
+  if (!pathValidation.safe) {
+    return pathValidation;
+  }
+
+  // Check if directory exists
+  if (!existsSync(worktreePath)) {
+    return {
+      safe: true,
+      reason: "Worktree directory does not exist (already removed)",
+    };
+  }
+
+  // Re-check for uncommitted changes immediately before removal (TOCTOU mitigation)
+  try {
+    const hasChanges = await hasUncommittedChanges(worktreePath);
+    if (hasChanges) {
+      return {
+        safe: false,
+        reason: "Worktree has uncommitted changes",
+        hasUncommittedChanges: true,
+      };
+    }
+  } catch (error) {
+    // If we can't check git status, the directory might not be a valid git worktree
+    return {
+      safe: false,
+      reason: `Unable to check git status: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  return {
+    safe: true,
+    reason: "Worktree is safe to remove",
+  };
+}
+
+/**
+ * Remove a worktree using execFile for security (avoids shell injection)
+ */
+export async function removeWorktree(
+  repoPath: string,
+  worktreePath: string,
+  force: boolean = true
+): Promise<RemoveWorktreeResult> {
+  console.log(`[GitOperations] Removing worktree at ${worktreePath}`);
+
+  // Validate path before removal
+  const pathValidation = validateWorktreePath(worktreePath);
+  if (!pathValidation.safe) {
+    return {
+      success: false,
+      worktreePath,
+      error: pathValidation.reason,
+    };
+  }
+
+  try {
+    // Use execFile to avoid shell injection (security recommendation)
+    const args = ["worktree", "remove", worktreePath];
+    if (force) {
+      args.push("--force");
+    }
+
+    await execFile("git", args, { cwd: repoPath });
+
+    console.log(`[GitOperations] Successfully removed worktree at ${worktreePath}`);
+    return {
+      success: true,
+      worktreePath,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[GitOperations] Failed to remove worktree:`, error);
+
+    return {
+      success: false,
+      worktreePath,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Delete a lane branch
+ * Uses -d (safe delete) by default, falls back to -D if merged in MergeState
+ */
+export async function deleteLaneBranch(
+  repoPath: string,
+  branch: string,
+  forceDelete: boolean = false
+): Promise<DeleteBranchResult> {
+  console.log(`[GitOperations] Deleting branch ${branch}${forceDelete ? " (force)" : ""}`);
+
+  try {
+    // Use execFile to avoid shell injection
+    const flag = forceDelete ? "-D" : "-d";
+    await execFile("git", ["branch", flag, branch], { cwd: repoPath });
+
+    console.log(`[GitOperations] Successfully deleted branch ${branch}`);
+    return {
+      success: true,
+      branch,
+      forcedDelete: forceDelete,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[GitOperations] Failed to delete branch ${branch}:`, error);
+
+    return {
+      success: false,
+      branch,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Prune stale worktree references
+ */
+export async function pruneWorktrees(repoPath: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await execFile("git", ["worktree", "prune"], { cwd: repoPath });
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
