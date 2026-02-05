@@ -1,0 +1,3 @@
+{"id":"init-001","type":"run_created","timestamp":"2026-02-04T00:00:00Z","message":"War Room plan created: Implement Worktree Cleanup Feature","details":{"mission":"Implement Worktree Cleanup Feature","lanes":["cleanup-backend","cleanup-ui","cleanup-integration"]}}
+{"id":"init-002","type":"lane_staged","timestamp":"2026-02-04T00:00:01Z","laneId":"cleanup-backend","message":"Lane staged: cleanup-backend","details":{"agent":"developer","branch":"feature/worktree-cleanup-backend"}}
+{"id":"init-003","type":"lane_staged","timestamp":"2026-02-04T00:00:02Z","laneId":"cleanup-ui","message":"Lane staged: cleanup-ui","details":{"agent":"developer","branch":"feature/worktree-cleanup-ui"}}

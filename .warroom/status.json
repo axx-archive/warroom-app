@@ -1,0 +1,22 @@
+{
+  "runSlug": "worktree-cleanup",
+  "createdAt": "2026-02-04T00:00:00Z",
+  "lanes": {
+    "cleanup-backend": {
+      "staged": true,
+      "status": "pending"
+    },
+    "cleanup-ui": {
+      "staged": true,
+      "status": "pending"
+    },
+    "cleanup-integration": {
+      "staged": false,
+      "status": "pending"
+    }
+  },
+  "autonomy": {
+    "global": "checkpoint",
+    "humanCheckpointsRequired": true
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "mission": "Implement Worktree Cleanup Feature",
+  "description": "Add the ability to safely clear merged lane worktrees with dry-run preview, confirmation, and audit logging",
+  "repository": "/Users/ajhart/Desktop/warroom-app",
+  "baseBranch": "main",
+  "integrationBranch": "feature/worktree-cleanup",
+  "autonomy": {
+    "level": "checkpoint",
+    "humanCheckpointsRequired": true
+  },
+  "lanes": [
+    {
+      "laneId": "cleanup-backend",
+      "name": "Cleanup Backend API",
+      "agent": "developer",
+      "branch": "feature/worktree-cleanup-backend",
+      "worktreePath": ".warroom/worktrees/cleanup-backend",
+      "packetName": "WARROOM_PACKET.md",
+      "dependsOn": [],
+      "goal": "Create git operations for worktree cleanup and the API endpoint with dry-run support",
+      "deliverables": [
+        "src/lib/orchestrator/worktree-cleanup.ts - Core cleanup logic",
+        "src/app/api/runs/[slug]/cleanup/route.ts - API endpoint",
+        "Updates to src/lib/history.ts for cleanup events"
+      ],
+      "autonomy": {
+        "dangerouslySkipPermissions": false
+      },
+      "verify": {
+        "commands": ["npm run typecheck", "npm run lint"],
+        "required": true
+      }
+    },
+    {
+      "laneId": "cleanup-ui",
+      "name": "Cleanup UI Components",
+      "agent": "developer",
+      "branch": "feature/worktree-cleanup-ui",
+      "worktreePath": ".warroom/worktrees/cleanup-ui",
+      "packetName": "WARROOM_PACKET.md",
+      "dependsOn": [],
+      "goal": "Create the UI for cleanup action with dry-run preview modal and confirmation flow",
+      "deliverables": [
+        "src/components/cleanup/CleanupModal.tsx - Main modal with dry-run preview",
+        "src/components/cleanup/CleanupConfirmation.tsx - Type-to-confirm component",
+        "Integration into RunDetailClient.tsx"
+      ],
+      "autonomy": {
+        "dangerouslySkipPermissions": false
+      },
+      "verify": {
+        "commands": ["npm run typecheck", "npm run lint"],
+        "required": true
+      }
+    },
+    {
+      "laneId": "cleanup-integration",
+      "name": "Integration & Testing",
+      "agent": "developer",
+      "branch": "feature/worktree-cleanup-integration",
+      "worktreePath": ".warroom/worktrees/cleanup-integration",
+      "packetName": "WARROOM_PACKET.md",
+      "dependsOn": ["cleanup-backend", "cleanup-ui"],
+      "goal": "Wire backend and UI together, add WebSocket events, ensure history logging works end-to-end",
+      "deliverables": [
+        "Full integration of cleanup flow",
+        "WebSocket event emissions for cleanup progress",
+        "Manual testing verification"
+      ],
+      "autonomy": {
+        "dangerouslySkipPermissions": false
+      },
+      "verify": {
+        "commands": ["npm run typecheck", "npm run lint", "npm run build"],
+        "required": true
+      }
+    }
+  ],
+  "mergeStrategy": {
+    "order": ["cleanup-backend", "cleanup-ui", "cleanup-integration"],
+    "conflictResolution": "manual",
+    "squashOnMerge": false,
+    "deleteAfterMerge": false
+  },
+  "checkpoints": [
+    {
+      "after": "cleanup-backend",
+      "description": "Review API design and safety guardrails before UI work proceeds"
+    },
+    {
+      "after": "cleanup-ui",
+      "description": "Review UX flow before integration"
+    },
+    {
+      "after": "cleanup-integration",
+      "description": "Full manual test before merge to main"
+    }
+  ]
+}
