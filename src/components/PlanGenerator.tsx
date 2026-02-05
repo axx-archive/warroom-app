@@ -72,7 +72,7 @@ export function PlanGenerator({
     }
   }, []);
 
-  // Handle Initialize Mission - opens Cursor and copies PM prompt
+  // Handle Initialize Mission - spawns terminal with Claude Code running /warroom-plan
   const handleInitialize = useCallback(async () => {
     if (!goal.trim() || !repoPath.trim()) {
       setError("Please provide both a mission objective and repository path");
@@ -101,25 +101,13 @@ export function PlanGenerator({
         throw new Error(data.error || "Failed to initialize mission");
       }
 
-      // Copy prompt to clipboard
-      try {
-        await navigator.clipboard.writeText(data.prompt);
-        setSuccessMessage("Cursor opened! PM prompt copied to clipboard. Paste it into Claude Code.");
-      } catch {
-        // Fallback clipboard method
-        const textarea = document.createElement("textarea");
-        textarea.value = data.prompt;
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-        setSuccessMessage("Cursor opened! PM prompt copied to clipboard. Paste it into Claude Code.");
-      }
+      // Terminal has been spawned with Claude Code
+      const terminalName = data.terminal || "Terminal";
+      const autonomyNote = autonomy ? " Running autonomously with skip-permissions." : "";
+      setSuccessMessage(`${terminalName} opened! Claude Code is running /warroom-plan.${autonomyNote}`);
 
-      // Clear success message after 5 seconds
-      setTimeout(() => setSuccessMessage(null), 5000);
+      // Clear success message after 8 seconds (longer to let user see terminal spawning)
+      setTimeout(() => setSuccessMessage(null), 8000);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : "Mission initialization failed");
@@ -367,7 +355,7 @@ export function PlanGenerator({
           {isGenerating ? (
             <span className="flex items-center justify-center gap-3">
               <span className="spinner" />
-              <span>Generating Mission Plan...</span>
+              <span>Launching Terminal...</span>
             </span>
           ) : (
             <span className="flex items-center justify-center gap-2">

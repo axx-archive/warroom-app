@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { promises as fs } from "fs";
+import path from "path";
+import os from "os";
 
 const execAsync = promisify(exec);
 
@@ -12,10 +14,101 @@ interface InitializeRequest {
   autonomy?: boolean;
 }
 
+// Check if iTerm2 is installed
+async function hasIterm(): Promise<boolean> {
+  try {
+    await fs.access("/Applications/iTerm.app");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Spawn terminal with Claude Code running /warroom-plan
+async function spawnPlanningTerminal(
+  repoPath: string,
+  goal: string,
+  maxLanes: number | undefined,
+  autonomy: boolean
+): Promise<{ success: boolean; terminal: string; error?: string }> {
+  try {
+    // Build the prompt for Claude Code
+    const autonomyLine = autonomy
+      ? "Autonomy: ON (dangerouslySkipPermissions enabled)"
+      : "Autonomy: OFF (human checkpoints required)";
+    const maxLanesLine = maxLanes ? `Max lanes: ${maxLanes}` : "";
+
+    // Create a context file that /warroom-plan can read
+    const contextDir = path.join(os.homedir(), ".openclaw/workspace/warroom");
+    await fs.mkdir(contextDir, { recursive: true });
+
+    const contextFile = path.join(contextDir, "pending-mission.json");
+    await fs.writeFile(contextFile, JSON.stringify({
+      goal,
+      repoPath,
+      maxLanes,
+      autonomy,
+      createdAt: new Date().toISOString(),
+    }, null, 2));
+
+    // Build the Claude command - use /warroom-plan skill
+    const claudeCmd = autonomy
+      ? `claude --dangerously-skip-permissions -p '/warroom-plan
+
+Repository: ${repoPath}
+Goal: ${goal}
+${maxLanesLine}
+${autonomyLine}
+
+Generate the plan, create the run, stage all lanes, and launch them autonomously.'`
+      : `claude -p '/warroom-plan
+
+Repository: ${repoPath}
+Goal: ${goal}
+${maxLanesLine}
+${autonomyLine}
+
+Generate the plan and create the run.'`;
+
+    const useIterm = await hasIterm();
+
+    if (useIterm) {
+      // Use iTerm2 with AppleScript
+      const script = `
+        tell application "iTerm"
+          activate
+          create window with default profile
+          tell current session of current window
+            write text "cd '${repoPath}' && ${claudeCmd.replace(/'/g, "'\\''")}"
+          end tell
+        end tell
+      `;
+      await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
+      return { success: true, terminal: "iTerm2" };
+    } else {
+      // Use Terminal.app with AppleScript
+      const script = `
+        tell application "Terminal"
+          activate
+          do script "cd '${repoPath}' && ${claudeCmd.replace(/'/g, "'\\''")}"
+        end tell
+      `;
+      await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
+      return { success: true, terminal: "Terminal.app" };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      terminal: "unknown",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: InitializeRequest = await request.json();
-    const { goal, repoPath, maxLanes, autonomy } = body;
+    const { goal, repoPath, maxLanes, autonomy = false } = body;
 
     if (!goal?.trim() || !repoPath?.trim()) {
       return NextResponse.json(
@@ -34,34 +127,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build the PM prompt with /warroom-plan skill
-    const autonomyLine = autonomy
-      ? "\nAutonomy: ON (dangerouslySkipPermissions enabled)"
-      : "\nAutonomy: OFF (human checkpoints required)";
+    // Spawn terminal with Claude Code running /warroom-plan
+    const terminalResult = await spawnPlanningTerminal(
+      repoPath,
+      goal.trim(),
+      maxLanes,
+      autonomy
+    );
 
-    const maxLanesLine = maxLanes ? `\nMax lanes: ${maxLanes}` : "";
-
-    const pmPrompt = `@pm /warroom-plan
-
-**Repository:** ${repoPath}
-
-**Goal:** ${goal}
-${maxLanesLine}${autonomyLine}
-
-Please generate a War Room plan for this mission. Create the plan.json with lanes, packets, and merge strategy. Then stage the lanes so I can begin execution.`;
-
-    // Open Cursor to the repo
-    try {
-      await execAsync(`cursor -n "${repoPath}"`);
-    } catch (error) {
-      console.error("Failed to open Cursor:", error);
-      // Non-fatal - continue to return prompt
+    if (!terminalResult.success) {
+      return NextResponse.json(
+        { error: `Failed to spawn terminal: ${terminalResult.error}` },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
       success: true,
       repoPath,
-      prompt: pmPrompt,
+      terminal: terminalResult.terminal,
+      message: `Mission initialized in ${terminalResult.terminal}. Claude Code is running /warroom-plan.`,
     });
   } catch (error) {
     console.error("Initialize mission error:", error);

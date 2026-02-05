@@ -92,7 +92,7 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [confirmMergeToMain, setConfirmMergeToMain] = useState(false);
   const [mergedToMain, setMergedToMain] = useState(false);
-  const [launchMergeStatus, setLaunchMergeStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [launchMergeStatus, setLaunchMergeStatus] = useState<"idle" | "launched" | "error">("idle");
   const [openingCursor, setOpeningCursor] = useState(false);
   const [autoPushOptions, setAutoPushOptions] = useState<AutoPushOptions>({
     fullAutonomyMode: false,
@@ -187,7 +187,7 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
     setMergeError(null);
 
     try {
-      // Launch merge - opens Cursor and returns prompt
+      // Launch merge - spawns terminal with Claude Code running /warroom-merge
       const response = await fetch(`/api/runs/${slug}/launch-merge`, {
         method: "POST",
       });
@@ -200,41 +200,14 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
         throw new Error(data.error || "Failed to launch merge");
       }
 
-      // Copy prompt to clipboard
-      if (data.prompt) {
-        try {
-          await navigator.clipboard.writeText(data.prompt);
-          setLaunchMergeStatus("copied");
-          setCopyState("copied");
-          setTimeout(() => {
-            setLaunchMergeStatus("idle");
-            setCopyState("idle");
-          }, 3000);
-        } catch {
-          // Fallback clipboard method
-          const textarea = document.createElement("textarea");
-          textarea.value = data.prompt;
-          textarea.style.position = "fixed";
-          textarea.style.opacity = "0";
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand("copy");
-          document.body.removeChild(textarea);
-          setLaunchMergeStatus("copied");
-          setCopyState("copied");
-          setTimeout(() => {
-            setLaunchMergeStatus("idle");
-            setCopyState("idle");
-          }, 3000);
-        }
-      } else {
-        console.error("No prompt in response");
-        setLaunchMergeStatus("error");
-        setTimeout(() => setLaunchMergeStatus("idle"), 3000);
-      }
+      // Terminal has been spawned with Claude Code
+      setLaunchMergeStatus("launched");
+      setTimeout(() => {
+        setLaunchMergeStatus("idle");
+      }, 5000);
 
       setMergeLoading(false);
-      return; // Exit early - we're launching to Cursor, not executing server-side
+      return;
     } catch (err) {
       console.error("Launch merge error:", err);
       setMergeError(err instanceof Error ? err.message : String(err));
@@ -813,7 +786,7 @@ interface MergeProposalDisplayProps {
   mergedToMain: boolean;
   onExecuteMerge: () => void;
   onOpenInCursor: (path: string) => void;
-  launchMergeStatus: "idle" | "copied" | "error";
+  launchMergeStatus: "idle" | "launched" | "error";
 }
 
 const METHOD_COLORS: Record<MergeMethod, { color: string; bgColor: string; borderColor: string }> = {
@@ -1259,19 +1232,19 @@ function MergeProposalDisplay({
               (autoPushOptions.mergeToMain && !autoPushOptions.fullAutonomyMode && !confirmMergeToMain) ||
               (mergeResults.length > 0 && mergeResults.every((r) => r.success) && !conflict)
             }
-            className={launchMergeStatus === "copied" ? "btn-success" : launchMergeStatus === "error" ? "btn-danger" : "btn-success"}
+            className={launchMergeStatus === "launched" ? "btn-success" : launchMergeStatus === "error" ? "btn-danger" : "btn-success"}
           >
             {mergeLoading ? (
               <>
                 <span className="spinner" />
                 Launching...
               </>
-            ) : launchMergeStatus === "copied" ? (
+            ) : launchMergeStatus === "launched" ? (
               <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                Copied! Cursor Opening...
+                Terminal Launched!
               </>
             ) : launchMergeStatus === "error" ? (
               <>

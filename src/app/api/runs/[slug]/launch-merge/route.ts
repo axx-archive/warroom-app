@@ -4,8 +4,74 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { WarRoomPlan, StatusJson } from "@/lib/plan-schema";
 
 const execAsync = promisify(exec);
+
+// Check if iTerm2 is installed
+async function hasIterm(): Promise<boolean> {
+  try {
+    await fs.access("/Applications/iTerm.app");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Spawn terminal with Claude Code running /warroom-merge
+async function spawnMergeTerminal(
+  repoPath: string,
+  runSlug: string,
+  integrationBranch: string
+): Promise<{ success: boolean; terminal: string; error?: string }> {
+  try {
+    // Build the Claude command - use /warroom-merge skill with full autonomy
+    const claudeCmd = `claude --dangerously-skip-permissions -p '/warroom-merge
+
+Run slug: ${runSlug}
+Repository: ${repoPath}
+Integration branch: ${integrationBranch}
+
+Execute the merge autonomously:
+1. Merge all complete lanes into the integration branch (in dependency order)
+2. Merge integration branch into main
+3. Push integration branch and main to GitHub
+4. Update status.json and history.jsonl'`;
+
+    const useIterm = await hasIterm();
+
+    if (useIterm) {
+      // Use iTerm2 with AppleScript
+      const script = `
+        tell application "iTerm"
+          activate
+          create window with default profile
+          tell current session of current window
+            write text "cd '${repoPath}' && ${claudeCmd.replace(/'/g, "'\\''")}"
+          end tell
+        end tell
+      `;
+      await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
+      return { success: true, terminal: "iTerm2" };
+    } else {
+      // Use Terminal.app with AppleScript
+      const script = `
+        tell application "Terminal"
+          activate
+          do script "cd '${repoPath}' && ${claudeCmd.replace(/'/g, "'\\''")}"
+        end tell
+      `;
+      await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
+      return { success: true, terminal: "Terminal.app" };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      terminal: "unknown",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -21,7 +87,7 @@ export async function POST(
     );
 
     // Read plan.json to get repo path
-    let plan;
+    let plan: WarRoomPlan;
     try {
       const planContent = await fs.readFile(
         path.join(runDir, "plan.json"),
@@ -35,7 +101,7 @@ export async function POST(
       );
     }
 
-    // Read merge-proposal.json to get the PM prompt
+    // Read merge-proposal.json to verify it exists
     let proposal;
     try {
       const proposalContent = await fs.readFile(
@@ -58,23 +124,29 @@ export async function POST(
       );
     }
 
-    // Open Cursor to the main repo
-    try {
-      await execAsync(`cursor -n "${repoPath}"`);
-    } catch (error) {
-      console.error("Failed to open Cursor:", error);
-      // Non-fatal - continue to return prompt
+    // Spawn terminal with Claude Code running /warroom-merge
+    const terminalResult = await spawnMergeTerminal(
+      repoPath,
+      slug,
+      plan.integrationBranch
+    );
+
+    if (!terminalResult.success) {
+      return NextResponse.json(
+        { error: `Failed to spawn terminal: ${terminalResult.error}` },
+        { status: 500 }
+      );
     }
 
     // Update status to "merging"
     const statusPath = path.join(runDir, "status.json");
     try {
-      let statusJson: Record<string, unknown> = {};
+      let statusJson: StatusJson;
       try {
         const content = await fs.readFile(statusPath, "utf-8");
         statusJson = JSON.parse(content);
       } catch {
-        statusJson = { runId: plan.runId };
+        statusJson = { runId: plan.runId, status: "merging", updatedAt: new Date().toISOString() };
       }
 
       statusJson.status = "merging";
@@ -88,7 +160,9 @@ export async function POST(
     return NextResponse.json({
       success: true,
       repoPath,
-      prompt: proposal.pmPrompt,
+      terminal: terminalResult.terminal,
+      message: `Merge launched in ${terminalResult.terminal}. Claude Code is running /warroom-merge.`,
+      prompt: proposal.pmPrompt, // Still return the prompt for reference
     });
   } catch (error) {
     console.error("Launch merge error:", error);
