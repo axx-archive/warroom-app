@@ -1,0 +1,498 @@
+{
+  "project": "War Room v2.0 - Full Orchestration Platform",
+  "branchName": "ralph/warroom-v2-orchestration",
+  "description": "Transform War Room from a manual mission control interface into a fully autonomous AI agent orchestration platform. Launch, monitor, and merge parallel Claude Code agent work with minimal human intervention. macOS only, auto-retry with exponential backoff, fully autonomous default, in-app notifications only.",
+  "userStories": [
+    {
+      "id": "US-101",
+      "title": "Real-time status polling",
+      "description": "As a user, I want lane statuses to auto-refresh so I don't have to manually reload the page.",
+      "acceptanceCriteria": [
+        "Poll /api/runs/[slug]/status every 5 seconds when run page is open",
+        "Update lane cards, progress counter, and merge readiness without full reload",
+        "Show subtle 'refreshing...' indicator during poll",
+        "Pause polling when browser tab is hidden (visibility API)",
+        "Resume polling when tab becomes visible",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "phase": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-102",
+      "title": "Uncommitted changes detection",
+      "description": "As a user, I want to see which lanes have uncommitted work so I know what needs attention.",
+      "acceptanceCriteria": [
+        "New API endpoint: GET /api/runs/[slug]/lane-status returns uncommitted file counts per lane",
+        "Display orange badge on lane card: '3 uncommitted files'",
+        "Badge updates via polling",
+        "Clicking badge shows list of changed files in tooltip/popover",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "phase": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-103",
+      "title": "New commits detection",
+      "description": "As a user, I want to see when a lane has new commits since launch so I can track progress.",
+      "acceptanceCriteria": [
+        "Track 'commits at launch' in status.json when lane is launched",
+        "API returns commits count since launch per lane",
+        "Display green badge: '+2 commits' when new commits exist",
+        "Badge links to git log for that lane's branch",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "phase": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-104",
+      "title": "Ready to complete? smart suggestions",
+      "description": "As a user, I want the system to suggest when a lane looks complete so I can quickly verify and mark it done.",
+      "acceptanceCriteria": [
+        "Detect lane completion signals: REVIEW.md exists, FINDINGS.md exists, specific commit message patterns",
+        "Show suggestion banner on lane card: 'This lane looks complete. Mark as done?'",
+        "One-click 'Mark Complete' button in suggestion banner",
+        "Suggestion dismissible (don't show again for this lane)",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "phase": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-105",
+      "title": "WebSocket layer for live updates",
+      "description": "As a user, I want instant updates without polling delay so the UI feels responsive.",
+      "acceptanceCriteria": [
+        "Add Socket.io server to Next.js app (custom server or API route with upgrade)",
+        "Emit events: lane-activity, lane-status-change, merge-ready, run-complete",
+        "Client connects on run detail page mount",
+        "Graceful fallback to polling if WebSocket fails",
+        "Connection status indicator in UI footer",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "phase": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-106",
+      "title": "File watcher service",
+      "description": "As a system, I need to watch worktree directories for changes to trigger real-time updates.",
+      "acceptanceCriteria": [
+        "FileWatcher class that watches all lane worktrees for a run",
+        "Debounce file change events (100ms)",
+        "Emit events via WebSocket when files change",
+        "Start watching when run page opens, stop when closes",
+        "Handle worktree not existing gracefully",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "phase": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-201",
+      "title": "Launch All Ready Lanes button",
+      "description": "As a user, I want to launch all unblocked lanes at once so I don't have to click each one.",
+      "acceptanceCriteria": [
+        "Button in Agent Lanes header: 'Launch All Ready'",
+        "Launches all lanes where dependencies are met and status is pending",
+        "Sequential launch with 2-second delay between (avoid overwhelming system)",
+        "Progress indicator: 'Launching 3 of 5...'",
+        "Shows summary when complete: 'Launched 4 lanes, 1 blocked'",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "phase": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-202",
+      "title": "Auto-detect lane completion",
+      "description": "As a system, I want to automatically detect when a lane's work is complete so users don't have to manually check.",
+      "acceptanceCriteria": [
+        "Completion detection rules (configurable): REVIEW.md or FINDINGS.md exists in worktree root, commit message contains 'complete'/'done'/'finished', no file changes for 5+ minutes after commits",
+        "Auto-mark lane as complete when rules match (if autonomy enabled)",
+        "Log completion detection reason in status.json",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "phase": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-203",
+      "title": "Auto-generate merge proposal",
+      "description": "As a system, I want to automatically generate merge proposals when all lanes are complete so the merge process starts immediately.",
+      "acceptanceCriteria": [
+        "Trigger merge proposal generation when last lane marked complete",
+        "Show notification: 'All lanes complete. Merge proposal generated.'",
+        "Auto-scroll to Merge Readiness section",
+        "If conflicts detected, show warning and stop auto-progression",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "phase": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-204",
+      "title": "Diff preview modal",
+      "description": "As a user, I want to preview all changes in a lane before marking it complete so I can verify the work.",
+      "acceptanceCriteria": [
+        "'Preview Changes' button on each lane card",
+        "Modal showing full diff of all changes in worktree",
+        "Syntax highlighting for code files",
+        "File tree navigation in modal sidebar",
+        "'Approve & Mark Complete' button in modal",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "phase": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-205",
+      "title": "Lane activity feed",
+      "description": "As a user, I want to see a live feed of activity across all lanes so I can monitor progress at a glance.",
+      "acceptanceCriteria": [
+        "Collapsible activity feed panel on run detail page",
+        "Events: file created/modified/deleted, commits, lane status changes",
+        "Timestamp and lane ID for each event",
+        "Filter by lane",
+        "Auto-scroll to newest (with pause on hover)",
+        "Maximum 100 events retained (older ones pruned)",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "phase": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-206",
+      "title": "Launch mode selector per lane",
+      "description": "As a user, I want to choose whether a lane opens in Cursor (supervised) or Terminal (autonomous) so I can control my workflow.",
+      "acceptanceCriteria": [
+        "Dropdown on lane card: 'Cursor' | 'Terminal (Claude Code)'",
+        "Default based on run autonomy setting",
+        "Persist choice in status.json per lane",
+        "Terminal mode spawns iTerm2 window with Claude Code command",
+        "Cursor mode works as current implementation",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "phase": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-301",
+      "title": "AgentOrchestrator class",
+      "description": "As a system, I need a singleton orchestrator that manages the lifecycle of all Claude Code processes for a run.",
+      "acceptanceCriteria": [
+        "AgentOrchestrator class in src/lib/orchestrator/agent-orchestrator.ts",
+        "Methods: startRun(), stopRun(), pauseLane(), resumeLane(), getStatus()",
+        "Maintains Map of laneId -> ChildProcess",
+        "Singleton pattern (one orchestrator per app instance)",
+        "Graceful shutdown on app termination (SIGTERM handler)",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "phase": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-302",
+      "title": "Terminal spawning via AppleScript",
+      "description": "As a system, I need to spawn iTerm2 or Terminal.app windows with Claude Code running for each lane.",
+      "acceptanceCriteria": [
+        "spawnTerminal(worktreePath: string, command: string) function",
+        "Prefer iTerm2 if installed, fall back to Terminal.app",
+        "Window title set to lane ID for identification",
+        "Command: cd ${worktreePath} && claude --dangerously-skip-permissions",
+        "Return process handle for monitoring",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "phase": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-303",
+      "title": "Process monitoring with stdout capture",
+      "description": "As a system, I need to capture Claude Code output to track progress and detect completion/errors.",
+      "acceptanceCriteria": [
+        "Capture stdout/stderr from spawned processes",
+        "Parse output for progress indicators (percentage, step names)",
+        "Detect error patterns (API errors, crashes, rate limits)",
+        "Store last 1000 lines of output per lane in memory",
+        "Expose output via API: GET /api/runs/[slug]/lanes/[laneId]/output",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "phase": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-304",
+      "title": "Structured status protocol (LANE_STATUS.json)",
+      "description": "As a system, I need a protocol for Claude Code agents to report their progress so the orchestrator can track them.",
+      "acceptanceCriteria": [
+        "Update packet template to instruct agents to write LANE_STATUS.json",
+        "Schema: { phase: string, completedSteps: string[], currentStep: string, progress: number, blockers: string[] }",
+        "File watcher detects LANE_STATUS.json changes",
+        "Parse and emit status updates via WebSocket",
+        "Display current step and progress bar on lane card",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "phase": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-305",
+      "title": "Auto-retry with exponential backoff",
+      "description": "As a system, I need to automatically retry failed lanes so transient errors don't require human intervention.",
+      "acceptanceCriteria": [
+        "Detect lane failure (process exit code != 0, error in output)",
+        "Retry up to 3 times with backoff: 30s, 2min, 10min",
+        "Log retry attempts in status.json",
+        "Show retry status on lane card: 'Retry 2/3 in 1:45...'",
+        "After max retries, mark lane as failed and alert user",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "phase": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-306",
+      "title": "Auto-commit lane work",
+      "description": "As a system, I need to automatically commit lane work when the agent signals completion so changes are preserved.",
+      "acceptanceCriteria": [
+        "Detect completion signal (LANE_STATUS.json phase = 'complete' or process exits cleanly)",
+        "Run git add -A && git commit -m 'feat(laneId): <summary from status>' in worktree",
+        "Skip if no uncommitted changes",
+        "Update lane status to 'complete' after successful commit",
+        "Emit completion event via WebSocket",
+        "Typecheck passes"
+      ],
+      "priority": 18,
+      "phase": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-307",
+      "title": "Auto-merge with human gates",
+      "description": "As a system, I need to automatically merge completed lanes but stop for conflicts or main branch merges.",
+      "acceptanceCriteria": [
+        "When all lanes complete, automatically start merge process",
+        "Merge each lane to integration branch in dependency order",
+        "If conflict detected: stop, mark lane as 'conflict', alert user",
+        "Conflict resolution requires human (open in Cursor)",
+        "After integration branch complete, prompt for main merge (human gate)",
+        "Typecheck passes"
+      ],
+      "priority": 19,
+      "phase": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-308",
+      "title": "Git push automation",
+      "description": "As a system, I need to push completed work to remote so it's backed up and available.",
+      "acceptanceCriteria": [
+        "Option to auto-push lane branches after commit",
+        "Option to auto-push integration branch after merge",
+        "Main branch push always requires human confirmation",
+        "Handle push failures gracefully (auth errors, protected branches)",
+        "Show push status in UI",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "phase": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-309",
+      "title": "One-click Start Mission",
+      "description": "As a user, I want to start an entire run with one click and have the system handle everything.",
+      "acceptanceCriteria": [
+        "'Start Mission' button on run detail page (replaces individual launch buttons in autonomous mode)",
+        "Spawns all lanes respecting dependency order",
+        "Monitors all processes",
+        "Auto-commits, auto-merges",
+        "Shows overall mission progress: 'Phase 2/4: Merging lanes...'",
+        "Completion notification when done",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "phase": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-401",
+      "title": "Lane reset/restart mechanism",
+      "description": "As a user, I want to reset a failed lane to try again with a clean slate.",
+      "acceptanceCriteria": [
+        "'Reset Lane' button on failed/complete lanes",
+        "Resets worktree to branch base: git checkout . && git clean -fd",
+        "Clears LANE_STATUS.json and output files",
+        "Resets lane status to 'pending'",
+        "Confirmation dialog before reset",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "phase": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-402",
+      "title": "Add lane mid-run",
+      "description": "As a user, I want to add new lanes to an in-progress run without starting over.",
+      "acceptanceCriteria": [
+        "'Add Lane' button in Agent Lanes header",
+        "Modal to configure new lane (agent type, branch name, dependencies)",
+        "Creates worktree and packet for new lane",
+        "Updates plan.json with new lane",
+        "New lane appears in UI immediately",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "phase": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-403",
+      "title": "Cost/token tracking",
+      "description": "As a user, I want to see estimated API costs per lane so I can monitor spending.",
+      "acceptanceCriteria": [
+        "Parse Claude Code output for token usage (if available)",
+        "Estimate cost based on model and token counts",
+        "Display per-lane cost estimate on lane card",
+        "Total run cost in header",
+        "Cost tracking persisted in status.json",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "phase": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-404",
+      "title": "Plan templates",
+      "description": "As a user, I want to save successful plans as templates so I can reuse them for similar projects.",
+      "acceptanceCriteria": [
+        "'Save as Template' button on run detail page",
+        "Template stores: lane configuration, agent types, dependency structure (not repo-specific paths)",
+        "Templates saved to ~/.openclaw/workspace/warroom/templates/",
+        "'New from Template' option on home page",
+        "Template picker modal with preview",
+        "Typecheck passes"
+      ],
+      "priority": 25,
+      "phase": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-405",
+      "title": "History/audit log",
+      "description": "As a user, I want a complete log of all actions so I can debug issues and understand what happened.",
+      "acceptanceCriteria": [
+        "Log all significant events: lane launched, commits, status changes, merges, errors",
+        "Store in history.jsonl (append-only) in run directory",
+        "'History' tab on run detail page",
+        "Filterable by event type and lane",
+        "Exportable as JSON",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "phase": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-406",
+      "title": "Progress timeline view",
+      "description": "As a user, I want a visual timeline showing lane progress and dependencies so I can see the big picture.",
+      "acceptanceCriteria": [
+        "Gantt-chart style visualization",
+        "Lanes as horizontal bars",
+        "Dependency arrows between lanes",
+        "Color coding: pending (gray), in-progress (blue), complete (green), failed (red)",
+        "Time axis showing elapsed time",
+        "Hover shows lane details",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "phase": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-407",
+      "title": "In-app notifications",
+      "description": "As a user, I want to receive notifications for important events so I don't have to watch the screen constantly.",
+      "acceptanceCriteria": [
+        "Browser Notification API integration (request permission on first run)",
+        "Notifications for: lane complete, lane failed, all lanes complete, merge conflict",
+        "Toast notifications in-app (bottom-right corner)",
+        "Notification center panel showing recent notifications",
+        "Notification preferences (which events to notify)",
+        "Typecheck passes"
+      ],
+      "priority": 28,
+      "phase": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-408",
+      "title": "Keyboard shortcuts",
+      "description": "As a user, I want keyboard shortcuts for common actions so I can work faster.",
+      "acceptanceCriteria": [
+        "Cmd+Shift+L - Launch all ready lanes",
+        "Cmd+Shift+M - Generate merge proposal",
+        "Cmd+Shift+R - Refresh status",
+        "Cmd+1-9 - Focus lane N",
+        "? - Show keyboard shortcut help modal",
+        "Shortcuts shown in tooltips",
+        "Typecheck passes"
+      ],
+      "priority": 29,
+      "phase": 4,
+      "passes": true,
+      "notes": ""
+    }
+  ]
+}

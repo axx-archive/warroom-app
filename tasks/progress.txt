@@ -1,0 +1,551 @@
+# Ralph Progress Log
+Started: Wed Feb  4 08:01:43 PST 2026
+---
+
+## Codebase Patterns
+- Use `LaneState` interface from `@/hooks/useRealtimeStatus` for lane state management (replaced useStatusPolling)
+- `LanesManager` is a controlled component - pass `laneStates` prop from parent
+- Polling hooks should pause when tab is hidden using visibility API
+- API routes support both GET (for reading) and POST (for updating)
+- Status data stored in `~/.openclaw/workspace/warroom/runs/{slug}/status.json`
+- Export shared types (like `LaneUncommittedStatus`) from hooks for use in components
+- Use `useRef` for popover triggers to handle click-outside detection properly
+- Use `getFileWatcher(runSlug)` from `@/lib/file-watcher` to get/create watchers - singleton per run
+- Use `detectLaneCompletion()` from `@/lib/completion-detector` for auto-completion detection (checks marker files, commits, inactivity)
+- Use `getOrchestrator()` from `@/lib/orchestrator` for agent process management - singleton per app instance
+
+---
+
+## 2026-02-04 - US-101: Real-time status polling
+- Implemented automatic 5-second polling of lane statuses
+- Files changed:
+  - `src/app/api/runs/[slug]/status/route.ts` - Added GET handler for polling
+  - `src/hooks/useStatusPolling.ts` - New hook for polling with visibility API
+  - `src/components/RunDetailClient.tsx` - Integrated polling hook, added refreshing indicator
+  - `src/components/LanesManager.tsx` - Converted to controlled component
+- **Learnings for future iterations:**
+  - The `LanesManager` component previously managed its own state - converted to controlled pattern to sync with polling
+  - When updating lane states from polling, use the `updateLaneState` callback for optimistic updates
+  - The visibility API (`document.visibilityState`) is used to pause/resume polling when tab visibility changes
+  - MergeView refresh is triggered by tracking lane state changes and incrementing a key prop
+---
+
+## 2026-02-04 - US-102: Uncommitted changes detection
+- Implemented uncommitted file detection and display on lane cards
+- Files changed:
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - New API endpoint returning uncommitted file counts and lists per lane
+  - `src/hooks/useStatusPolling.ts` - Extended polling to fetch both status and uncommitted data in parallel
+  - `src/components/LanesManager.tsx` - Added `laneUncommitted` prop to pass uncommitted data to cards
+  - `src/components/RunDetailClient.tsx` - Pass `laneUncommitted` from polling hook to LanesManager
+  - `src/components/LaneStatusCard.tsx` - Added orange badge and popover for uncommitted files
+- **Learnings for future iterations:**
+  - Fetch multiple API endpoints in parallel using `Promise.all` for better performance in polling hooks
+  - Git status parsing: use `git status --porcelain` for machine-readable output, status codes are first 2 chars
+  - Popover pattern: use `useRef` for trigger element, `useEffect` with click-outside detection, absolute positioning
+  - Type casting in TypeScript: when iterating Object.entries with unknown shapes, cast to specific type
+  - Orange color in the design system: `#f97316` with `rgba(249, 115, 22, 0.15)` for background
+---
+
+## 2026-02-04 - US-103: New commits detection
+- Implemented commit tracking since lane launch with green badge display
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `commitsAtLaunch` field to `LaneStatusEntry` interface
+  - `src/app/api/runs/[slug]/launch/route.ts` - Track commit count at launch time and store in status.json
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Return `commitsSinceLaunch`, `commitsAtLaunch`, `currentCommits`, and `branch` per lane
+  - `src/hooks/useStatusPolling.ts` - Extended `LaneUncommittedStatus` interface with commits fields
+  - `src/components/LaneStatusCard.tsx` - Added green "+X commits" badge with click handler for git log
+  - `src/app/api/runs/[slug]/git-log/route.ts` - New API endpoint to open iTerm2/Terminal with git log
+- **Learnings for future iterations:**
+  - Use `git rev-list --count HEAD` to get commit count in a branch/worktree
+  - Store baseline commit count at launch time in status.json to calculate "commits since launch"
+  - Green color in the design system: `#22c55e` with `rgba(34, 197, 94, 0.15)` for background
+  - AppleScript can be used to open terminal windows with specific commands via `osascript -e`
+  - Check for iTerm2 at `/Applications/iTerm.app` before falling back to Terminal.app
+---
+
+## 2026-02-04 - US-104: Ready to complete? smart suggestions
+- Implemented completion signal detection and suggestion banners on lane cards
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `suggestionDismissed` field to `LaneStatusEntry` interface
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Added completion detection logic (REVIEW.md, FINDINGS.md, commit patterns)
+  - `src/app/api/runs/[slug]/status/route.ts` - Added `suggestionDismissed` field handling in POST
+  - `src/hooks/useStatusPolling.ts` - Added `CompletionSuggestion` interface and included in polling data
+  - `src/components/LaneStatusCard.tsx` - Added suggestion banner with "Mark Complete" and dismiss buttons
+- **Learnings for future iterations:**
+  - Completion patterns to detect: REVIEW.md, FINDINGS.md, commit messages with "complete", "done", "finished", "ready for review"
+  - Only show suggestions for lanes with `status === "in_progress"` to avoid suggesting on already complete/pending lanes
+  - Store dismissal state in status.json per lane to persist across page reloads
+  - Use regex patterns with `/i` flag for case-insensitive matching on commit messages
+  - `git log --oneline -5 --format=%s` returns just the subject lines of recent commits
+---
+
+## 2026-02-04 - US-105: WebSocket layer for live updates
+- Implemented Socket.io WebSocket server with polling fallback for real-time updates
+- Files changed:
+  - `src/lib/websocket/types.ts` - Event type definitions (ServerToClientEvents, ClientToServerEvents)
+  - `src/lib/websocket/server.ts` - Socket.io server on port 3001 with event emission functions
+  - `src/lib/websocket/init.ts` - Server initialization helper (auto-starts when imported)
+  - `src/lib/websocket/index.ts` - Module exports
+  - `src/hooks/useWebSocket.ts` - Client-side hook for WebSocket connection with auto-reconnect
+  - `src/hooks/useRealtimeStatus.ts` - Combines WebSocket + polling with adaptive intervals
+  - `src/components/ConnectionStatusIndicator.tsx` - Fixed footer indicator showing connection state
+  - `src/components/RunDetailClient.tsx` - Switched from useStatusPolling to useRealtimeStatus
+  - `src/app/api/runs/[slug]/status/route.ts` - Initializes WebSocket server, emits lane-status-change events
+  - `package.json` - Added socket.io and socket.io-client dependencies
+- **Learnings for future iterations:**
+  - Socket.io server runs on separate port (3001) from Next.js app (3000) - configure CORS for both localhost variants
+  - Use refs for event handlers in useWebSocket to avoid stale closures in socket event callbacks
+  - WebSocket reconnect: handle manually (reconnection: false) to control backoff timing
+  - Polling interval adapts: 30s when WebSocket connected, 5s when disconnected (fallback)
+  - Initialize WebSocket server via side effect in API route module load (`initializeWebSocketServer()`)
+  - ConnectionStatus type: "connecting" | "connected" | "disconnected" | "error"
+  - Event types: lane-activity, lane-status-change, merge-ready, run-complete, connection-status
+---
+
+## 2026-02-04 - US-106: File watcher service
+- Implemented FileWatcher class for real-time worktree monitoring
+- Files changed:
+  - `src/lib/file-watcher/file-watcher.ts` - FileWatcher class with debouncing and WebSocket integration
+  - `src/lib/file-watcher/index.ts` - Module exports
+  - `src/app/api/runs/[slug]/watcher/route.ts` - API endpoint to start/stop watcher
+- **Learnings for future iterations:**
+  - Node.js `fs.watch` with `recursive: true` monitors entire directory tree on macOS
+  - Debouncing pattern: store pending events in a Map (keyed by path), reset timer on each new event
+  - Ignore patterns for `.git/`, `node_modules/`, `.next/`, temp files to reduce noise
+  - Singleton pattern for watchers: Map<runSlug, FileWatcher> ensures one watcher per run
+  - Watch error recovery: on watcher error, close and restart after 1 second delay
+  - File existence check after `rename` event determines if it was create vs delete
+  - Worktrees stored in `~/.openclaw/workspace/warroom/worktrees/{runSlug}/{laneName}`
+---
+
+## 2026-02-04 - US-201: Launch All Ready Lanes button
+- Implemented "Launch All Ready" button for batch lane launching
+- Files changed:
+  - `src/components/RunDetailClient.tsx` - Added Launch All Ready button, progress indicator, and summary display
+- **Learnings for future iterations:**
+  - Button displays count of ready lanes: "Launch All Ready (3)" for clear feedback
+  - Sequential launching uses 2-second delays via `setTimeout` in async loop
+  - Progress indicator shows "Launching X of Y..." during multi-lane launch
+  - Summary shows launched count, blocked count, and failed count after completion
+  - Ready lanes = pending/in_progress lanes where all dependencies are complete
+  - Use `useRef` for abort flag to allow cancellation of sequential operations
+  - Autonomy settings are respected per-lane by reading from `laneStates[laneId].autonomy`
+---
+
+## 2026-02-04 - US-202: Auto-detect lane completion
+- Implemented automatic completion detection for lanes with autonomy enabled
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `CompletionDetection` interface and `lastActivityAt`, `completionDetection` fields to `LaneStatusEntry`
+  - `src/lib/completion-detector.ts` - New service with completion detection logic (marker files, commit messages, inactivity)
+  - `src/lib/file-watcher/file-watcher.ts` - Added `lastActivityAt` tracking, updates status.json on file changes
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Integrated auto-completion detection, auto-marks lanes when autonomy enabled
+- **Learnings for future iterations:**
+  - Completion detection rules: REVIEW.md/FINDINGS.md marker files, commit message patterns (complete/done/finished/ready for review/final), 5+ minute inactivity
+  - Auto-marking requires: autonomy enabled + completion detected + not already auto-marked (prevents re-marking if user changes status back)
+  - Store `lastActivityAt` in status.json via FileWatcher to track inactivity
+  - Use synchronous fs functions (readFileSync/writeFileSync) in FileWatcher to avoid race conditions
+  - `CompletionDetection` interface stores: detected, reason, signals[], detectedAt, autoMarked
+  - Only check for completion on lanes with status="in_progress" to avoid wasted work
+---
+
+## 2026-02-04 - US-203: Auto-generate merge proposal
+- Implemented automatic merge proposal generation when all lanes are complete
+- Files changed:
+  - `src/components/RunDetailClient.tsx` - Added auto-generation effect, notification banner, loading indicator, and scroll-to-merge
+  - `src/components/MergeView.tsx` - Converted to forwardRef, added MergeViewHandle interface with refreshProposal method
+- **Learnings for future iterations:**
+  - Use `useRef` with booleans (prevAllCompleteRef, hasAutoGeneratedProposalRef) to detect state transitions and prevent duplicate calls
+  - `forwardRef` with `useImperativeHandle` pattern to expose child methods to parent components
+  - Notification types: success (auto-dismiss 10s), warning (persists), error (persists) for different severity levels
+  - Conflict detection: check `proposal.mergeOrder[].conflictRisk` for "high"/"medium" and filter warnings containing "conflict"
+  - Auto-scroll pattern: `scrollIntoView({ behavior: "smooth", block: "start" })` with setTimeout delay for React re-render
+  - In-app notification banner: colored borders/backgrounds using design system variables (--status-success, --status-warning, --status-danger)
+---
+
+## 2026-02-04 - US-204: Diff preview modal
+- Implemented diff preview modal for lane changes
+- Files changed:
+  - `src/app/api/runs/[slug]/lane-diff/route.ts` - New API endpoint for fetching diff data per lane
+  - `src/components/DiffPreviewModal.tsx` - New modal component with file tree sidebar and diff viewer
+  - `src/components/LaneStatusCard.tsx` - Added "Preview Changes" button when uncommitted files exist
+  - `src/components/LanesManager.tsx` - Added `onPreviewChanges` prop to pass through
+  - `src/components/RunDetailClient.tsx` - Added modal state management and handlers
+- **Learnings for future iterations:**
+  - Use `git status --porcelain` for machine-readable file status, then `git diff HEAD` for content
+  - For untracked files, read the file content and format as pseudo-diff with `+` prefix
+  - Diff line highlighting: additions (+) green bg, deletions (-) red bg, headers (@@) purple bg
+  - File tree pattern: build nested tree structure from flat paths, use recursive component rendering
+  - Modal sizing: use max-width/height with flex layout for responsive sizing
+  - Pass callbacks through component hierarchy: LaneStatusCard -> LanesManager -> RunDetailClient
+---
+
+## 2026-02-04 - US-205: Lane activity feed
+- Implemented collapsible activity feed panel for live event monitoring
+- Files changed:
+  - `src/hooks/useActivityFeed.ts` - New hook for managing activity events with max 100 events, filter support
+  - `src/components/ActivityFeed.tsx` - New collapsible panel component with event display, filtering, auto-scroll
+  - `src/hooks/useRealtimeStatus.ts` - Added onLaneActivity and onLaneStatusChange callback props for forwarding events
+  - `src/components/RunDetailClient.tsx` - Integrated ActivityFeed with useActivityFeed hook
+- **Learnings for future iterations:**
+  - WebSocket event callbacks should use refs to avoid stale closures in event handlers
+  - For functions called from hooks before they're defined (circular), use a ref pattern: `fetchStatusRef.current()`
+  - Event pruning pattern: use array slice to keep newest events and limit array size (prepend new, slice to max)
+  - Auto-scroll with pause on hover: track mouse enter/leave, skip scroll when paused
+  - Collapsible panel pattern: header is clickable toggle, stopPropagation for interactive elements inside header
+  - Event type icons use different colors for visual distinction: green (created), orange (modified), red (deleted), cyan (commit), magenta (status)
+---
+
+## 2026-02-04 - US-206: Launch mode selector per lane
+- Implemented launch mode selector for choosing between Cursor (supervised) and Terminal (autonomous) launch
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `LaunchMode` type and `launchMode` field to `LaneStatusEntry`
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Return `launchMode` from status.json in response
+  - `src/app/api/runs/[slug]/status/route.ts` - Added handler to persist `launchMode` changes
+  - `src/app/api/runs/[slug]/launch/route.ts` - Added Terminal mode spawning via AppleScript (iTerm2 preferred, Terminal.app fallback)
+  - `src/hooks/useRealtimeStatus.ts` - Extended `LaneUncommittedStatus` interface with `launchMode`
+  - `src/hooks/useStatusPolling.ts` - Extended `LaneUncommittedStatus` interface with `launchMode`
+  - `src/components/LaneStatusCard.tsx` - Added launch mode dropdown, state, and handlers
+  - `src/components/LanesManager.tsx` - Pass `initialLaunchMode` to LaneStatusCard
+- **Learnings for future iterations:**
+  - Use AppleScript via `osascript` to spawn iTerm2/Terminal.app windows with custom commands
+  - Check for iTerm2 at `/Applications/iTerm.app` before falling back to Terminal.app
+  - Escape single quotes in AppleScript: `replace(/'/g, "'\\''")`
+  - Claude Code command: `claude --dangerously-skip-permissions` for autonomous mode
+  - Default launch mode should reflect autonomy setting: terminal when skip permissions enabled
+  - Add "launched" status to launchStatus state to show feedback for terminal mode launches
+---
+
+## 2026-02-04 - US-301: AgentOrchestrator class
+- Implemented singleton AgentOrchestrator for managing Claude Code agent processes
+- Files changed:
+  - `src/lib/orchestrator/agent-orchestrator.ts` - New singleton orchestrator class with full lifecycle management
+  - `src/lib/orchestrator/index.ts` - Module exports for orchestrator functions and types
+- **Learnings for future iterations:**
+  - Use singleton pattern: private constructor + static getInstance() for process-wide orchestration
+  - LaneProcessState tracks: process handle, status, timing, exit codes, errors
+  - RunOrchestrationState uses Map<laneId, LaneProcessState> for lane tracking
+  - SIGTERM/SIGINT handlers with graceful shutdown (SIGTERM to processes, SIGKILL after 5s timeout)
+  - SIGSTOP/SIGCONT signals for pause/resume functionality on Unix systems
+  - spawn() with stdio: ["pipe", "pipe", "pipe"] for later stdout capture (US-303)
+  - Process env variables (CLAUDE_LANE_ID, CLAUDE_RUN_SLUG) for identification
+  - Dependency-ordered lane starting: check completedLanes set before starting each lane
+  - Auto-start next lanes when a lane completes successfully
+---
+
+## 2026-02-04 - US-302: Terminal spawning via AppleScript
+- Implemented dedicated terminal spawner module for iTerm2/Terminal.app window spawning
+- Files changed:
+  - `src/lib/orchestrator/terminal-spawner.ts` - New module with spawnTerminal function and helper utilities
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Integrated terminal spawning, added terminal mode support with window monitoring
+  - `src/lib/orchestrator/index.ts` - Exported new terminal spawner functions and types
+- **Learnings for future iterations:**
+  - AppleScript via `osascript` can create terminal windows and return window IDs for tracking
+  - Use `escapeForAppleScript()` - replace single quotes with `'\''` pattern for shell escaping
+  - iTerm2 uses `write text` command to send text to session; Terminal.app uses `do script`
+  - Window title set via: iTerm2 `set name to`, Terminal.app `set custom title of front window to`
+  - Terminal windows don't have direct process handles - monitor by polling window existence with `isTerminalWindowOpen()`
+  - For status output, use `const { process: _process, ...rest }` pattern to intentionally omit fields while avoiding lint warnings
+  - Terminal mode lanes can't be paused/resumed with SIGSTOP/SIGCONT - must be stopped by closing window
+  - `closeTerminalWindow()` sends AppleScript `close window id N` command to terminate
+---
+
+## 2026-02-04 - US-303: Process monitoring with stdout capture
+- Implemented stdout/stderr capture and output buffer management for Claude Code processes
+- Files changed:
+  - `src/lib/orchestrator/output-buffer.ts` - New OutputBuffer class with line management, progress parsing, error detection
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Integrated stdout/stderr capture using readline, added output retrieval methods
+  - `src/lib/orchestrator/index.ts` - Exported new output buffer functions and types
+  - `src/lib/websocket/types.ts` - Added "output" type to LaneActivityEvent, added details field
+  - `src/hooks/useActivityFeed.ts` - Extended ActivityEvent type to include output events
+  - `src/app/api/runs/[slug]/lanes/[laneId]/output/route.ts` - New API endpoint for retrieving lane output
+- **Learnings for future iterations:**
+  - Use Node.js `readline` module with `createInterface()` for line-by-line stream processing
+  - OutputBuffer uses singleton pattern with nested Maps: runSlug -> laneId -> buffer
+  - Progress patterns: `75%`, `[3/5]`, `step X of Y`, `processing X of Y`, `completed X of Y`
+  - Error patterns to detect: api errors, rate limits, auth failures, connection errors, timeouts, crashes, signals, OOM, permission denied
+  - Clear output buffer when lane starts to avoid stale data from previous runs
+  - API supports query modes: `full` (all state), `recent` (last N lines), `errors` (only errors)
+  - Emit "output" type lane-activity events with `details: { stream, line }` for real-time updates
+  - Terminal mode processes can't capture stdout - only direct spawn() processes
+---
+
+## 2026-02-04 - US-304: Structured status protocol (LANE_STATUS.json)
+- Implemented LANE_STATUS.json protocol for agents to report progress to orchestrator
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `LaneAgentStatus` interface for LANE_STATUS.json schema
+  - `src/lib/packet-templates.ts` - Updated packet template with LANE_STATUS.json instructions
+  - `src/lib/websocket/types.ts` - Added `LaneProgressEvent` event type for progress updates
+  - `src/lib/websocket/server.ts` - Added `emitLaneProgress()` function for WebSocket events
+  - `src/lib/file-watcher/file-watcher.ts` - Added detection and parsing of LANE_STATUS.json changes
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Added reading of LANE_STATUS.json and `agentStatus` field in response
+  - `src/hooks/useRealtimeStatus.ts` - Extended `LaneUncommittedStatus` with `agentStatus` field
+  - `src/hooks/useStatusPolling.ts` - Extended `LaneUncommittedStatus` with `agentStatus` field
+  - `src/hooks/useWebSocket.ts` - Added `onLaneProgress` handler and `lane-progress` event support
+  - `src/components/LaneStatusCard.tsx` - Added progress bar and current step display for in_progress lanes
+- **Learnings for future iterations:**
+  - LaneAgentStatus schema: phase, completedSteps[], currentStep, progress (0-100), blockers[], updatedAt, summary?
+  - Valid phases: "analyzing", "designing", "implementing", "testing", "reviewing", "completing"
+  - File watcher checks for LANE_STATUS.json in flushEvents(), parses and validates required fields
+  - Progress bar only shows for lanes with status="in_progress" and existing agentStatus
+  - Blockers section shows warning icon and lists each blocker when array is non-empty
+  - WebSocket event flow: FileWatcher -> emitLaneProgress() -> client onLaneProgress callback
+  - API endpoint reads LANE_STATUS.json from worktree root, returns null if not exists or invalid
+---
+
+## 2026-02-04 - US-305: Auto-retry with exponential backoff
+- Implemented automatic retry functionality for failed lanes with exponential backoff
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `RetryState` and `RetryAttempt` interfaces, extended `LaneStatusEntry`
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added retry constants, `handleLaneFailure()`, `markLaneAsFailed()`, `updateStatusJsonRetryState()` methods
+  - `src/lib/websocket/types.ts` - Extended `LaneActivityEvent` with "retry" and "status" types, added retry details fields
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Added `retryState` to response
+  - `src/hooks/useRealtimeStatus.ts` - Extended `LaneUncommittedStatus` with `retryState`
+  - `src/hooks/useStatusPolling.ts` - Extended `LaneUncommittedStatus` with `retryState`
+  - `src/hooks/useActivityFeed.ts` - Extended `ActivityEvent` type with retry event types
+  - `src/components/LaneStatusCard.tsx` - Added `RetryCountdown` and `RetryExhaustedBanner` components
+- **Learnings for future iterations:**
+  - Retry backoff delays: 30s, 2min (120s), 10min (600s) - stored in `RETRY_BACKOFF_SECONDS` array
+  - `RetryState` interface: attempt, maxAttempts, nextRetryAt (ISO-8601), history[], status (waiting/retrying/exhausted)
+  - Use `setTimeout` for retry scheduling, store timer handle in `laneState.retryTimer` for cleanup
+  - Clear retry timers in `stopRun()` to prevent orphaned retries
+  - For countdown timers, calculate initial value synchronously to avoid ESLint "setState in effect" warning
+  - Emit "status" type lane activity events with retry details for real-time WebSocket updates
+  - Orange color (#f97316) for retry status UI, red (--status-error) for exhausted state
+---
+
+## 2026-02-04 - US-306: Auto-commit lane work
+- Implemented automatic commit of lane work when completion is detected
+- Files changed:
+  - `src/lib/orchestrator/git-operations.ts` - New module with auto-commit functionality
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added `handleLaneCompletion()` method that calls auto-commit
+  - `src/lib/orchestrator/index.ts` - Exported git operation utilities
+- **Learnings for future iterations:**
+  - Use `git status --porcelain` for machine-readable uncommitted file detection
+  - Read `LANE_STATUS.json` for commit message summary: prefer `summary` field, fall back to `currentStep`, then last `completedSteps` item
+  - Commit message format: `feat(laneId): <summary>` - truncate summary to 100 chars
+  - Escape single quotes in shell: `'\\''` pattern works for git commit messages
+  - The `handleLaneCompletion()` method handles both direct process and terminal mode completions
+  - Extract commit hash from git commit output using regex: `/\[[\w\-/]+ ([a-f0-9]+)\]/`
+  - If auto-commit fails, still mark lane as complete since the agent's work succeeded
+  - Emit "commit" type lane activity event with commit details via WebSocket
+---
+
+## 2026-02-04 - US-307: Auto-merge with human gates
+- Implemented auto-merge when all lanes complete, with conflict detection and human gates
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added "conflict" to LaneStatus, added MergeState interface and mergeState to StatusJson
+  - `src/lib/orchestrator/git-operations.ts` - Added autoMergeLanes(), mergeLaneBranch(), topologicalSort(), abortAutoMerge() functions
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added startAutoMerge(), updateMergeStateInStatusJson(), updateLaneStatusInStatusJson() methods
+  - `src/lib/orchestrator/index.ts` - Exported new merge functions and types
+  - `src/lib/websocket/types.ts` - Added MergeProgressEvent interface
+  - `src/lib/websocket/server.ts` - Added emitMergeProgress() function
+  - `src/hooks/useWebSocket.ts` - Added onMergeProgress callback and merge-progress event handling
+  - `src/app/api/runs/[slug]/merge-info/route.ts` - Added mergeState and repoPath to response
+  - `src/components/MergeView.tsx` - Added AutoMergeStatusDisplay component for merge status and conflict resolution UI
+  - `src/components/LaneStatusCard.tsx` - Added "conflict" status config
+- **Learnings for future iterations:**
+  - Merge lanes in dependency order using topological sort to respect lane relationships
+  - Use `git diff --name-only --diff-filter=U` to detect conflicting files
+  - MergeState tracks: status (idle/in_progress/complete/conflict/failed), currentLane, mergedLanes[], conflictInfo, error
+  - Conflict status is distinct from failed - indicates manual resolution required
+  - Auto-merge emits events: "started", "merging", "complete", "conflict", "failed"
+  - Human gate for main branch merge is enforced via UI - "Launch Merge" requires confirmation checkbox
+  - Open in Cursor button allows human resolution of conflicts
+  - The orchestrator's onLaneComplete() method triggers auto-merge when all lanes are successfully complete
+---
+
+## 2026-02-04 - US-308: Git push automation
+- Implemented auto-push functionality for lane branches and integration branch
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `PushState` and `AutoPushOptions` interfaces, extended `LaneStatusEntry` with `pushState`, extended `StatusJson` with `autoPushOptions` and `integrationBranchPushState`
+  - `src/lib/orchestrator/git-operations.ts` - Added `pushBranch()`, `pushLaneBranch()`, `pushIntegrationBranch()`, `hasRemoteTrackingBranch()`, `getCurrentBranch()`, `isProtectedMainBranch()` functions
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added `autoPushLaneBranch()`, `autoPushIntegrationBranch()`, `updateLanePushState()`, `updateIntegrationBranchPushState()` methods
+  - `src/lib/orchestrator/index.ts` - Exported new push functions and PushResult type
+  - `src/lib/websocket/types.ts` - Extended `LaneActivityEvent` with push details, extended `MergeProgressEvent` with push statuses
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Added `pushState` to response
+  - `src/app/api/runs/[slug]/merge-info/route.ts` - Added `autoPushOptions` and `integrationBranchPushState` to response
+  - `src/app/api/runs/[slug]/status/route.ts` - Added handler to persist `autoPushOptions` changes
+  - `src/hooks/useStatusPolling.ts` - Extended `LaneUncommittedStatus` with `pushState`
+  - `src/hooks/useRealtimeStatus.ts` - Extended `LaneUncommittedStatus` with `pushState`
+  - `src/components/LaneStatusCard.tsx` - Added `PushStatusBadge` component showing push status on lane cards
+  - `src/components/MergeView.tsx` - Added `AutoPushOptionsPanel` and `IntegrationBranchPushStatus` components with toggle controls
+- **Learnings for future iterations:**
+  - Push error types: "auth" (credentials), "protected" (branch rules), "rejected" (non-fast-forward), "network" (connectivity), "unknown"
+  - Use `git ls-remote --heads origin ${branch}` to check if remote tracking branch exists
+  - Set upstream with `-u` flag on first push: `git push -u origin ${branch}`
+  - `PushState` tracks: status (idle/pushing/success/failed), lastPushedAt, error, pushType (lane/integration/main)
+  - Auto-push is opt-in via `AutoPushOptions` stored in status.json - separate toggles for lane and integration branches
+  - Main branch push requires human confirmation - use `isProtectedMainBranch()` to check protected names
+  - Push status UI: badges on lane cards (pushing spinner, success check, failed X) and status panel in MergeView
+---
+
+## 2026-02-04 - US-309: One-click Start Mission
+- Implemented "Start Mission" button for autonomous orchestration of all lanes
+- Files changed:
+  - `src/app/api/runs/[slug]/start-mission/route.ts` - New API endpoint for mission control (POST/GET/DELETE)
+  - `src/lib/websocket/types.ts` - Added `MissionPhase` type and `MissionProgressEvent` interface
+  - `src/lib/websocket/server.ts` - Added `emitMissionProgress()` function for WebSocket events
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added `emitMissionProgressUpdate()` method, integrated progress emissions throughout lifecycle
+  - `src/hooks/useWebSocket.ts` - Added `onMissionProgress` callback and `mission-progress` event handling
+  - `src/components/RunDetailClient.tsx` - Added Start/Stop Mission buttons, mission progress display, and notifications
+- **Learnings for future iterations:**
+  - Mission phases: launching (0-25%), running (25-75%), committing (75-85%), merging (85-100%), complete, failed, stopped
+  - FileWatcher.start() takes no args - use addLane(laneId, worktreePath) for each lane first
+  - Mission progress bar shows "Phase X/4: Description..." for clear feedback
+  - MissionState interface tracks: isRunning, phase, message, overallProgress, lane counts
+  - Use separate notification system for mission events vs merge notifications to avoid confusion
+  - Check mission status on mount via GET to show correct state if page refreshes during mission
+  - Stop Mission button calls DELETE on the endpoint and resets run status to "staged"
+---
+
+## 2026-02-04 - US-401: Lane reset/restart mechanism
+- Implemented lane reset functionality for failed/complete lanes
+- Files changed:
+  - `src/app/api/runs/[slug]/reset-lane/route.ts` - New API endpoint for resetting lanes
+  - `src/components/LaneStatusCard.tsx` - Added Reset button and confirmation dialog
+- **Learnings for future iterations:**
+  - Use `git checkout .` to discard modifications to tracked files, `git clean -fd` to remove untracked files/dirs
+  - Reset preserves autonomy and launchMode settings while clearing: commitsAtLaunch, suggestionDismissed, lastActivityAt, completionDetection, retryState, pushState
+  - Reset button shows for status === "failed" || "complete" || "conflict"
+  - Confirmation dialog pattern: fixed inset-0 z-50 overlay with centered modal
+  - Emit WebSocket event only when previous status differs from new status
+---
+
+## 2026-02-04 - US-402: Add lane mid-run
+- Implemented ability to add new lanes to an in-progress run
+- Files changed:
+  - `src/app/api/runs/[slug]/add-lane/route.ts` - New API endpoint for adding lanes
+  - `src/components/AddLaneModal.tsx` - New modal component for lane configuration
+  - `src/components/RunDetailClient.tsx` - Added Add Lane button and modal integration, local lanes state
+- **Learnings for future iterations:**
+  - Use local state (`currentLanes`) to track lanes in client component for immediate UI updates without page reload
+  - Modal form pattern: validate inputs before enabling submit, show inline validation errors
+  - AGENT_TYPES array provides agent type options with labels and descriptions for dropdown
+  - Dependency selection uses checkbox list of existing lanes
+  - Generated branch name pattern: `warroom/${slug}/${laneId}`
+  - Worktree path pattern: `~/.openclaw/workspace/warroom/worktrees/${slug}/${laneId}`
+  - Lane ID validation: alphanumeric, dashes, underscores only (`/^[a-zA-Z0-9_-]+$/`)
+  - Move state declarations before their usage to avoid "used before declaration" TypeScript errors
+---
+
+## 2026-02-04 - US-403: Cost/token tracking
+- Implemented token usage and cost tracking for lanes
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `TokenUsage` and `CostTracking` interfaces, extended `LaneStatusEntry` with `costTracking`
+  - `src/lib/orchestrator/output-buffer.ts` - Added token parsing logic with model pricing, cost calculation methods
+  - `src/lib/orchestrator/index.ts` - Exported new cost tracking functions
+  - `src/app/api/runs/[slug]/lane-status/route.ts` - Added cost tracking to lane status response, total run cost calculation
+  - `src/app/api/runs/[slug]/lanes/[laneId]/output/route.ts` - Updated empty output state to include token/cost fields
+  - `src/hooks/useStatusPolling.ts` - Extended state with `totalCostUsd` and `costTracking` fields
+  - `src/hooks/useRealtimeStatus.ts` - Extended state with `totalCostUsd` and `costTracking` fields
+  - `src/components/LaneStatusCard.tsx` - Added `CostBadge` component showing per-lane estimated costs
+  - `src/components/RunDetailClient.tsx` - Added total run cost display in header next to progress counter
+- **Learnings for future iterations:**
+  - Model pricing stored in `MODEL_PRICING` constant with per-million-token rates for input, output, cache read, cache write
+  - Token parsing patterns detect various Claude Code output formats: "tokens: N", "input: N output: N", "(N tokens)"
+  - Cost calculation: (tokens / 1_000_000) * pricing_per_million_tokens
+  - TokenUsage interface: inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens, updatedAt
+  - CostTracking interface: model?, tokenUsage, estimatedCostUsd, isEstimate
+  - Purple color (#a855f7) for cost UI with `rgba(168, 85, 247, 0.15)` background
+  - Format cost display: <$0.001 for very small amounts, $0.00X for cents, $X.XX for dollars
+  - Format token counts: 1.2K for thousands, 1.5M for millions
+---
+
+## 2026-02-04 - US-404: Plan templates
+- Implemented template save/load functionality for reusing plan configurations
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added `PlanTemplate` and `TemplateLane` interfaces
+  - `src/app/api/templates/route.ts` - New API endpoint for listing and creating templates
+  - `src/app/api/templates/[id]/route.ts` - New API endpoint for getting and deleting templates
+  - `src/components/SaveAsTemplateModal.tsx` - New modal for saving a plan as template
+  - `src/components/TemplatePickerModal.tsx` - New modal with template list and preview pane
+  - `src/components/RunSidebarActions.tsx` - New sidebar component with "Save as Template" button
+  - `src/app/runs/[slug]/page.tsx` - Added RunSidebarActions to run detail sidebar
+  - `src/app/page.tsx` - Added "New from Template" button in header and quick actions
+  - `src/components/PlanGenerator.tsx` - Updated to accept and display selected template
+- **Learnings for future iterations:**
+  - Templates stored in `~/.openclaw/workspace/warroom/templates/` as JSON files
+  - `TemplateLane` strips repo-specific paths (worktreePath, branch) - only keeps laneId, agent, dependsOn, autonomy, verify
+  - Template selection pre-fills PlanGenerator with description, maxLanes, and autonomy settings
+  - Use UUID for template IDs, store with `.json` extension
+  - Template picker shows split view: list on left, preview on right
+  - Modal pattern: flex layout with overflow-hidden parent, overflow-y-auto children for scrollable panes
+---
+
+## 2026-02-04 - US-405
+- What was implemented:
+  - History/audit log system with append-only logging to history.jsonl
+  - 19 event types: lane_launched, lane_status_change, commit, merge_*, push_*, error, retry_*, mission_*, lane_reset, lane_added
+  - History utilities in src/lib/history.ts with typed event creation helpers
+  - GET /api/runs/[slug]/history API endpoint with filtering and pagination
+  - HistoryTab component with event type filter chips, lane filter, and export functionality
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added HistoryEventType, HistoryEvent and all specific event interfaces
+  - `src/lib/history.ts` - New file with append/read utilities and typed event creation helpers
+  - `src/app/api/runs/[slug]/history/route.ts` - New API endpoint for history queries
+  - `src/components/HistoryTab.tsx` - New component for viewing/filtering history
+  - `src/components/RunDetailClient.tsx` - Added HistoryTab import and usage
+  - `src/lib/orchestrator/agent-orchestrator.ts` - Added history logging for commits, merges, pushes, retries, errors, status changes, mission complete
+  - `src/app/api/runs/[slug]/launch/route.ts` - Added lane_launched and status change logging
+  - `src/app/api/runs/[slug]/reset-lane/route.ts` - Added lane_reset logging
+  - `src/app/api/runs/[slug]/add-lane/route.ts` - Added lane_added logging
+  - `src/app/api/runs/[slug]/start-mission/route.ts` - Added mission_started and mission_stopped logging
+- **Learnings for future iterations:**
+  - History stored as JSONL (JSON Lines) format - append-only, one event per line
+  - Each event has: id (UUID), type, timestamp, optional laneId, message, and type-specific details
+  - Helper functions like logCommit(), logMergeComplete() encapsulate event creation and appending
+  - Filter chips use toggle pattern - clicking adds/removes from selected list
+  - For large objects in API routes, use type-specific event interfaces to ensure proper typing
+  - getRunDir() helper method in orchestrator simplifies passing runDir to history functions
+---
+
+## 2026-02-04 - US-406: Progress timeline view
+- Implemented Gantt-chart style visualization showing lane progress and dependencies
+- Files changed:
+  - `src/components/TimelineView.tsx` - New component with SVG-based timeline visualization
+  - `src/components/RunDetailClient.tsx` - Integrated TimelineView component
+- **Learnings for future iterations:**
+  - Use history events (lane_launched, lane_status_change) to derive lane timing data
+  - SVG bezier curves for dependency arrows: calculate control points based on Y distance
+  - Time axis intervals should scale dynamically: 10s for <1min, 30s for <5min, 5min for <30min, etc.
+  - Status colors pattern: { bar: "var(--color)", bg: "rgba(r,g,b,0.15)", border: "rgba(r,g,b,0.4)" }
+  - Fixed tooltips with mouse position tracking via onMouseMove/onMouseLeave handlers
+  - Collapsible panels: use button with full-width click area, toggle internal state
+  - For in_progress lanes, add animate-pulse class to progress indicator
+---
+
+## 2026-02-04 - US-407: In-app notifications
+- Implemented comprehensive notification system with toasts and notification center
+- Files changed:
+  - `src/lib/plan-schema.ts` - Added notification types and interfaces
+  - `src/hooks/useNotifications.ts` - New hook for notification state management
+  - `src/components/ToastNotifications.tsx` - New component for toast display (bottom-right)
+  - `src/components/NotificationCenter.tsx` - New component for notification panel with preferences
+  - `src/components/RunDetailClient.tsx` - Integrated notification system
+- **Learnings for future iterations:**
+  - Use lazy state initialization for localStorage/browser API reads to avoid SSR issues and lint errors
+  - Browser Notification API: check permission with `Notification.permission`, request with `Notification.requestPermission()`
+  - Toast pattern: fixed bottom-right position, auto-dismiss with `setTimeout`, store timers in ref for cleanup
+  - Notification preferences stored in localStorage with `PREFERENCES_KEY` constant
+  - Copy timer ref to local variable in cleanup to avoid stale ref warning
+  - LaneStatusChangeEvent from websocket/types.ts includes runSlug and timestamp fields
+  - Use notification helper methods (notifyLaneComplete, etc.) for consistent notification creation
+---
+
+## 2026-02-04 - US-408: Keyboard shortcuts
+- Implemented keyboard shortcuts for common actions with help modal
+- Files changed:
+  - `src/hooks/useKeyboardShortcuts.ts` - New hook for registering and handling keyboard shortcuts
+  - `src/components/KeyboardShortcutsModal.tsx` - New modal showing all available shortcuts
+  - `src/components/RunDetailClient.tsx` - Integrated keyboard shortcuts, added help button
+  - `src/components/LaneStatusCard.tsx` - Added data-lane-id and tabIndex for focus functionality
+  - `src/app/globals.css` - Added keyboard-focus-highlight animation
+- **Learnings for future iterations:**
+  - Use `useRef` with `useEffect` for keeping shortcut actions up-to-date, not direct ref assignment during render (causes lint error)
+  - Keyboard shortcuts should be disabled when modals are open to prevent conflicts
+  - Use `data-lane-id` attribute on lane cards for keyboard-driven focus navigation
+  - Check for input/textarea focus before triggering shortcuts to avoid intercepting typing
+  - Format shortcuts for display: ⌘ for Cmd, ⇧ for Shift, ⌥ for Alt
+  - Modal disabling: pass `enabled` prop to keyboard shortcuts hook, set to `false` when any modal is open
+  - Focus highlighting: use CSS animation with box-shadow for visual feedback, auto-remove class after animation
+---
