@@ -241,25 +241,51 @@ ${config.defaultStopConditions.map((s) => `- ${s}`).join("\n")}
 **Phase values:** "analyzing", "designing", "implementing", "testing", "reviewing", "completing"
 
 ## Completion Checklist
-**IMPORTANT:** When your work is complete, you MUST:
+**IMPORTANT:** When your work is complete, you MUST follow these steps IN ORDER:
 
-1. **Update LANE_STATUS.json** with phase: "complete" and progress: 100
-2. **Run verification commands** (see Verification section above)
-3. **Stage and commit your changes:**
+1. **Run verification commands** (see Verification section above)
+2. **Stage and commit your changes:**
    \`\`\`bash
    git add -A
    git status  # Verify only your files are staged
    git commit -m "feat(${lane.laneId}): <brief description of work done>"
    \`\`\`
-4. **Create an output summary** (if applicable):
+3. **Create an output summary** (if applicable):
    - For reviews: Create \`REVIEW.md\` with findings
    - For implementations: Document key changes made
    - For QA: Create \`FINDINGS.md\` with test results
+4. **Update LANE_STATUS.json** with phase: "complete" and progress: 100
+5. **CREATE THE COMPLETION TRIGGER FILE:**
+   \`\`\`bash
+   cat > LANE_COMPLETE.md << 'EOF'
+   # Lane Complete
+
+   ## Summary
+   <Brief summary of what was accomplished>
+
+   ## Changes Made
+   - <List of key changes>
+
+   ## Verification
+   - All verification commands passed: Yes/No
+   - Tests passing: Yes/No/N/A
+
+   ## Notes
+   <Any notes for downstream lanes or reviewers>
+   EOF
+   git add LANE_COMPLETE.md && git commit -m "chore(${lane.laneId}): mark lane complete"
+   \`\`\`
+
+**CRITICAL:** The \`LANE_COMPLETE.md\` file triggers automatic lane completion. The War Room will:
+- Mark this lane as complete
+- Auto-release any blocked lanes that depend on this one
+- Start the next lanes in the dependency chain
 
 **DO NOT:**
 - Leave uncommitted changes
 - Commit to main or integration branch
 - Commit node_modules, .next, or generated files
+- Forget to create LANE_COMPLETE.md when you're done
 
 ## Notes
 - Run ID: ${plan.runId}

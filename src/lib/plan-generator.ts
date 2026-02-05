@@ -285,7 +285,7 @@ export function generatePlan(
       request.repoPath,
       config.worktreesPath,
       dependsOn,
-      request.autonomy ?? false,
+      request.autonomy ?? true, // Default to true for fully automated flow
       isFoundationLane,
       allowedPaths
     );

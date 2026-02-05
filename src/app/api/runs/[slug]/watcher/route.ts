@@ -12,6 +12,7 @@ import {
   removeFileWatcher,
 } from "@/lib/file-watcher";
 import { initializeWebSocketServer } from "@/lib/websocket";
+import { handleLaneCompletionTrigger } from "@/lib/orchestrator";
 
 // Initialize WebSocket server on module load
 initializeWebSocketServer();
@@ -89,6 +90,9 @@ export async function POST(
 
       // Get or create watcher
       const watcher = getFileWatcher(slug);
+
+      // Set the completion callback to handle LANE_COMPLETE.md triggers
+      watcher.setCompletionCallback(handleLaneCompletionTrigger);
 
       // Add all lanes from the plan
       for (const lane of plan.lanes) {

@@ -17,3 +17,4 @@ workspace/
 
 # Misc
 .DS_Store
+node_modules

@@ -37,6 +37,12 @@ const IGNORE_PATTERNS = [
   /~$/,
 ];
 
+// Completion trigger file name - when Claude creates this file, the lane is marked complete
+const LANE_COMPLETE_TRIGGER = "LANE_COMPLETE.md";
+
+// Callback type for lane completion triggers
+type LaneCompletionCallback = (runSlug: string, laneId: string, triggerFile: string) => Promise<void>;
+
 function shouldIgnore(filePath: string): boolean {
   return IGNORE_PATTERNS.some((pattern) => pattern.test(filePath));
 }
@@ -45,9 +51,17 @@ export class FileWatcher {
   private runSlug: string;
   private lanes: Map<string, WatchedLane> = new Map();
   private isRunning: boolean = false;
+  private onLaneComplete: LaneCompletionCallback | null = null;
 
   constructor(runSlug: string) {
     this.runSlug = runSlug;
+  }
+
+  /**
+   * Set the callback to be invoked when a lane completion trigger is detected
+   */
+  setCompletionCallback(callback: LaneCompletionCallback): void {
+    this.onLaneComplete = callback;
   }
 
   /**
@@ -269,6 +283,14 @@ export class FileWatcher {
       this.handleLaneStatusChange(lane, timestamp);
     }
 
+    // Check for LANE_COMPLETE.md trigger file - this signals the lane is done
+    const completeTriggerEvent = events.find(
+      (e) => e.path === LANE_COMPLETE_TRIGGER && e.type !== "file-deleted"
+    );
+    if (completeTriggerEvent) {
+      this.handleLaneCompleteTrigger(lane, timestamp);
+    }
+
     // Emit each event via WebSocket
     for (const event of events) {
       const activityEvent: LaneActivityEvent = {
@@ -282,6 +304,48 @@ export class FileWatcher {
       emitLaneActivity(activityEvent);
       console.log(
         `[FileWatcher] Emitted ${event.type} for ${event.path} in lane ${event.laneId}`
+      );
+    }
+  }
+
+  /**
+   * Handle LANE_COMPLETE.md trigger file - auto-complete the lane
+   */
+  private handleLaneCompleteTrigger(lane: WatchedLane, timestamp: string): void {
+    const completePath = path.join(lane.worktreePath, LANE_COMPLETE_TRIGGER);
+
+    try {
+      if (!existsSync(completePath)) {
+        return;
+      }
+
+      console.log(
+        `[FileWatcher] Detected LANE_COMPLETE.md trigger for lane ${lane.laneId}`
+      );
+
+      // Invoke the completion callback if set
+      if (this.onLaneComplete) {
+        this.onLaneComplete(this.runSlug, lane.laneId, LANE_COMPLETE_TRIGGER)
+          .then(() => {
+            console.log(
+              `[FileWatcher] Lane ${lane.laneId} completion triggered successfully`
+            );
+          })
+          .catch((error) => {
+            console.error(
+              `[FileWatcher] Error triggering lane completion for ${lane.laneId}:`,
+              error
+            );
+          });
+      } else {
+        console.warn(
+          `[FileWatcher] No completion callback set - LANE_COMPLETE.md detected but cannot trigger completion for lane ${lane.laneId}`
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[FileWatcher] Error handling LANE_COMPLETE.md for lane ${lane.laneId}:`,
+        error
       );
     }
   }

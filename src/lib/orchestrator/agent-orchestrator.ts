@@ -315,11 +315,11 @@ class AgentOrchestrator {
 
     try {
       // Get autonomy and launch mode settings
+      // DEFAULTS: terminal mode + permissionless for fully automated flow
       const laneStatusEntry = statusJson.lanes?.[lane.laneId];
       const skipPermissions = laneStatusEntry?.autonomy?.dangerouslySkipPermissions ??
-                             lane.autonomy?.dangerouslySkipPermissions ?? false;
-      const launchMode: LaunchMode = laneStatusEntry?.launchMode ??
-                                     (skipPermissions ? "terminal" : "cursor");
+                             lane.autonomy?.dangerouslySkipPermissions ?? true; // Default to true for automation
+      const launchMode: LaunchMode = laneStatusEntry?.launchMode ?? "terminal"; // Default to terminal for automation
 
       laneState.launchMode = launchMode;
 
@@ -1673,4 +1673,225 @@ export function getOrchestratorLaneErrors(runSlug: string, laneId: string): Dete
 
 export function hasOrchestratorLaneErrors(runSlug: string, laneId: string): boolean {
   return getOrchestrator().hasLaneErrors(runSlug, laneId);
+}
+
+/**
+ * Handle lane completion triggered by LANE_COMPLETE.md file detection
+ * This is called by the file watcher when it detects the trigger file
+ */
+export async function handleLaneCompletionTrigger(
+  runSlug: string,
+  laneId: string,
+  triggerFile: string
+): Promise<void> {
+  const orchestrator = getOrchestrator();
+  const runState = orchestrator.getRunStatus(runSlug);
+
+  if (!runState) {
+    console.log(`[LaneCompletionTrigger] Run ${runSlug} not found in orchestrator - loading plan for completion`);
+    // Run might not be actively managed by orchestrator (e.g., single lane launch)
+    // Still need to update status.json and potentially start dependent lanes
+    await handleStandaloneLaneCompletion(runSlug, laneId, triggerFile);
+    return;
+  }
+
+  const laneState = runState.lanes.get(laneId);
+  if (!laneState) {
+    console.warn(`[LaneCompletionTrigger] Lane ${laneId} not found in run ${runSlug}`);
+    return;
+  }
+
+  // Only trigger completion if lane is currently running
+  if (laneState.status !== "running" && laneState.status !== "starting") {
+    console.log(`[LaneCompletionTrigger] Lane ${laneId} is not running (status: ${laneState.status}), skipping completion`);
+    return;
+  }
+
+  console.log(`[LaneCompletionTrigger] Triggering completion for lane ${laneId} via ${triggerFile}`);
+
+  // Load plan to get lane details
+  const runDir = path.join(os.homedir(), ".openclaw/workspace/warroom/runs", runSlug);
+  const planPath = path.join(runDir, "plan.json");
+
+  try {
+    const planContent = await fs.readFile(planPath, "utf-8");
+    const plan: WarRoomPlan = JSON.parse(planContent);
+    const lane = plan.lanes.find((l) => l.laneId === laneId);
+
+    if (!lane) {
+      console.error(`[LaneCompletionTrigger] Lane ${laneId} not found in plan`);
+      return;
+    }
+
+    // Mark lane state as complete
+    laneState.stoppedAt = new Date().toISOString();
+    laneState.exitCode = 0;
+
+    // Use the orchestrator's existing completion handler which handles:
+    // - Auto-commit
+    // - Status updates
+    // - Emitting events
+    // - Starting dependent lanes
+    // We need to access the private method, so we'll duplicate the core logic here
+
+    // Update status.json
+    const statusPath = path.join(runDir, "status.json");
+    const statusContent = await fs.readFile(statusPath, "utf-8");
+    const statusJson: StatusJson = JSON.parse(statusContent);
+
+    if (!statusJson.lanes) statusJson.lanes = {};
+    if (!statusJson.lanes[laneId]) statusJson.lanes[laneId] = { staged: true, status: "pending" };
+
+    const previousStatus = statusJson.lanes[laneId].status;
+    statusJson.lanes[laneId].status = "complete";
+    statusJson.lanes[laneId].completionDetection = {
+      detected: true,
+      reason: `Trigger file ${triggerFile} created`,
+      signals: [`${triggerFile} exists`],
+      detectedAt: new Date().toISOString(),
+      autoMarked: true,
+    };
+
+    if (!statusJson.lanesCompleted) statusJson.lanesCompleted = [];
+    if (!statusJson.lanesCompleted.includes(laneId)) {
+      statusJson.lanesCompleted.push(laneId);
+    }
+
+    statusJson.updatedAt = new Date().toISOString();
+    await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
+
+    // Update orchestrator state
+    laneState.status = "complete";
+
+    // Log status change
+    logLaneStatusChange(runDir, laneId, previousStatus, "complete", `Trigger file ${triggerFile} detected`);
+
+    // Emit WebSocket event
+    emitLaneStatusChange({
+      runSlug,
+      laneId,
+      previousStatus: previousStatus as LaneStatus,
+      newStatus: "complete" as LaneStatus,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log(`[LaneCompletionTrigger] Lane ${laneId} marked complete, checking for lanes to start`);
+
+    // Try to start more lanes (this handles dependency resolution)
+    await orchestrator.startRun(runSlug); // This will continue with ready lanes
+
+  } catch (error) {
+    console.error(`[LaneCompletionTrigger] Error handling completion for lane ${laneId}:`, error);
+  }
+}
+
+/**
+ * Handle completion for a lane that wasn't launched through the orchestrator
+ * (e.g., manually launched or single lane scenarios)
+ */
+async function handleStandaloneLaneCompletion(
+  runSlug: string,
+  laneId: string,
+  triggerFile: string
+): Promise<void> {
+  const runDir = path.join(os.homedir(), ".openclaw/workspace/warroom/runs", runSlug);
+
+  try {
+    // Update status.json
+    const statusPath = path.join(runDir, "status.json");
+    let statusJson: StatusJson;
+
+    try {
+      const statusContent = await fs.readFile(statusPath, "utf-8");
+      statusJson = JSON.parse(statusContent);
+    } catch {
+      // Create minimal status.json if it doesn't exist
+      const planPath = path.join(runDir, "plan.json");
+      const planContent = await fs.readFile(planPath, "utf-8");
+      const plan: WarRoomPlan = JSON.parse(planContent);
+
+      statusJson = {
+        runId: plan.runId,
+        status: "in_progress",
+        lanesCompleted: [],
+        lanes: {},
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    if (!statusJson.lanes) statusJson.lanes = {};
+    if (!statusJson.lanes[laneId]) statusJson.lanes[laneId] = { staged: true, status: "pending" };
+
+    const previousStatus = statusJson.lanes[laneId].status;
+
+    // Skip if already complete
+    if (previousStatus === "complete") {
+      console.log(`[StandaloneLaneCompletion] Lane ${laneId} already complete, skipping`);
+      return;
+    }
+
+    statusJson.lanes[laneId].status = "complete";
+    statusJson.lanes[laneId].completionDetection = {
+      detected: true,
+      reason: `Trigger file ${triggerFile} created`,
+      signals: [`${triggerFile} exists`],
+      detectedAt: new Date().toISOString(),
+      autoMarked: true,
+    };
+
+    if (!statusJson.lanesCompleted) statusJson.lanesCompleted = [];
+    if (!statusJson.lanesCompleted.includes(laneId)) {
+      statusJson.lanesCompleted.push(laneId);
+    }
+
+    statusJson.updatedAt = new Date().toISOString();
+    await fs.writeFile(statusPath, JSON.stringify(statusJson, null, 2));
+
+    // Log status change
+    logLaneStatusChange(runDir, laneId, previousStatus, "complete", `Trigger file ${triggerFile} detected`);
+
+    // Emit WebSocket event
+    emitLaneStatusChange({
+      runSlug,
+      laneId,
+      previousStatus: previousStatus as LaneStatus,
+      newStatus: "complete" as LaneStatus,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log(`[StandaloneLaneCompletion] Lane ${laneId} marked complete via ${triggerFile}`);
+
+    // Check if we should auto-start any dependent lanes
+    // Load plan to check dependencies
+    const planPath = path.join(runDir, "plan.json");
+    const planContent = await fs.readFile(planPath, "utf-8");
+    const plan: WarRoomPlan = JSON.parse(planContent);
+
+    // Find lanes that depend on this one and are now unblocked
+    const completedLanes = new Set(statusJson.lanesCompleted || []);
+    const unblockedLanes = plan.lanes.filter((lane) => {
+      if (completedLanes.has(lane.laneId)) return false; // Already complete
+      if (statusJson.lanes?.[lane.laneId]?.status === "in_progress") return false; // Already running
+      // Check if all dependencies are met
+      return lane.dependsOn.every((dep) => completedLanes.has(dep));
+    });
+
+    if (unblockedLanes.length > 0) {
+      const unblockedIds = unblockedLanes.map((l) => l.laneId);
+      console.log(
+        `[StandaloneLaneCompletion] Lanes now unblocked: ${unblockedIds.join(", ")}`
+      );
+      // Emit an event so the UI can show these lanes are ready
+      emitLaneActivity({
+        runSlug,
+        laneId,
+        type: "status",
+        message: `Lanes now ready to start: ${unblockedIds.join(", ")}`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+  } catch (error) {
+    console.error(`[StandaloneLaneCompletion] Error:`, error);
+  }
 }

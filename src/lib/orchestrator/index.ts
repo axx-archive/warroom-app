@@ -11,6 +11,7 @@ export {
   getOrchestratorRecentOutput,
   getOrchestratorLaneErrors,
   hasOrchestratorLaneErrors,
+  handleLaneCompletionTrigger,
 } from "./agent-orchestrator";
 
 export type {
