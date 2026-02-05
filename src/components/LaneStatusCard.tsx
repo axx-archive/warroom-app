@@ -354,7 +354,7 @@ export function LaneStatusCard({
   const [launchMode, setLaunchMode] = useState<LaunchMode>(initialLaunchMode ?? defaultLaunchMode);
   const [isPending, startTransition] = useTransition();
   const [isLaunching, setIsLaunching] = useState(false);
-  const [launchStatus, setLaunchStatus] = useState<"idle" | "copied" | "error" | "launched">("idle");
+  const [launchStatus, setLaunchStatus] = useState<"idle" | "opened" | "error" | "launched">("idle");
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitStatus, setCommitStatus] = useState<"idle" | "success" | "nochanges" | "error">("idle");
   const [showUncommittedPopover, setShowUncommittedPopover] = useState(false);
@@ -436,36 +436,13 @@ export function LaneStatusCard({
 
       // Handle based on launch mode
       if (launchMode === "terminal") {
-        // Terminal mode: Claude Code was spawned in iTerm2/Terminal
+        // Terminal mode: Claude Code was spawned with /warroom-run
         setLaunchStatus("launched");
         setTimeout(() => setLaunchStatus("idle"), 3000);
       } else {
-        // Cursor mode: copy packet to clipboard
-        if (data.packetContent) {
-          try {
-            await navigator.clipboard.writeText(data.packetContent);
-            setLaunchStatus("copied");
-            console.log("Copied to clipboard successfully");
-          } catch (clipboardError) {
-            console.error("Clipboard error:", clipboardError);
-            // Fallback: use execCommand
-            const textarea = document.createElement("textarea");
-            textarea.value = data.packetContent;
-            textarea.style.position = "fixed";
-            textarea.style.opacity = "0";
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand("copy");
-            document.body.removeChild(textarea);
-            setLaunchStatus("copied");
-            console.log("Copied using fallback method");
-          }
-          setTimeout(() => setLaunchStatus("idle"), 3000);
-        } else {
-          console.warn("No packet content in response");
-          setLaunchStatus("error");
-          setTimeout(() => setLaunchStatus("idle"), 3000);
-        }
+        // Cursor mode: Cursor was opened, user runs /warroom-run manually
+        setLaunchStatus("opened");
+        setTimeout(() => setLaunchStatus("idle"), 3000);
       }
     } catch (error) {
       console.error("Launch error:", error);
@@ -771,8 +748,8 @@ export function LaneStatusCard({
                 : isBlocked
                 ? `Blocked by: ${blockedByLanes.join(", ")}`
                 : launchMode === "cursor"
-                ? "Open in Cursor & copy packet"
-                : "Open in Terminal with Claude Code"
+                ? "Open in Cursor (run /warroom-run to start)"
+                : "Open in Terminal with Claude Code (/warroom-run auto-runs)"
             }
           >
             {isLaunching ? (
@@ -783,12 +760,12 @@ export function LaneStatusCard({
                 </svg>
                 Launching...
               </>
-            ) : launchStatus === "copied" ? (
+            ) : launchStatus === "opened" ? (
               <>
                 <svg className="w-3 h-3" style={{ color: "var(--status-success)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                Copied!
+                Opened!
               </>
             ) : launchStatus === "launched" ? (
               <>
@@ -975,8 +952,8 @@ export function LaneStatusCard({
             }}
             title={
               launchMode === "cursor"
-                ? "Open in Cursor IDE and copy packet to clipboard"
-                : "Open iTerm2/Terminal with Claude Code (autonomous)"
+                ? "Open in Cursor IDE, then run /warroom-run"
+                : "Open iTerm2/Terminal with /warroom-run auto-running"
             }
           >
             <option value="cursor">Cursor</option>

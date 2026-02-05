@@ -82,7 +82,7 @@ async function hasIterm(): Promise<boolean> {
   }
 }
 
-// Spawn iTerm2 or Terminal.app with Claude Code
+// Spawn iTerm2 or Terminal.app with Claude Code running /warroom-run
 async function spawnTerminal(
   worktreePath: string,
   laneId: string,
@@ -90,9 +90,10 @@ async function spawnTerminal(
   skipPermissions: boolean
 ): Promise<{ success: boolean; terminal: string; error?: string }> {
   try {
+    // Use -p to auto-run the /warroom-run skill which reads WARROOM_PACKET.md
     const claudeCmd = skipPermissions
-      ? "claude --dangerously-skip-permissions"
-      : "claude";
+      ? "claude --dangerously-skip-permissions -p '/warroom-run'"
+      : "claude -p '/warroom-run'";
 
     const useIterm = await hasIterm();
 
