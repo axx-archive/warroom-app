@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle, useRef } from "react";
 import { LaneStatus, MergeMethod, MergeProposal, MergeState, AutoPushOptions, PushState } from "@/lib/plan-schema";
 
 // Imperative handle for parent to trigger refresh
@@ -293,6 +293,27 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
     fetchMergeInfo();
     fetchExistingProposal();
   }, [fetchMergeInfo, fetchExistingProposal]);
+
+  // Poll for merge status updates when merge is in progress or recently launched
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const isMergeActive = mergeInfo?.mergeState?.status === "in_progress" ||
+                        launchMergeStatus === "launched";
+
+  useEffect(() => {
+    // Start polling when merge is active
+    if (isMergeActive) {
+      pollingRef.current = setInterval(() => {
+        fetchMergeInfo();
+      }, 5000); // Poll every 5 seconds
+    }
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [isMergeActive, fetchMergeInfo]);
 
   // Auto-generate proposal when full autonomy is enabled and lanes are ready
   useEffect(() => {

@@ -67,7 +67,7 @@ For each complete lane, in the order specified by `merge.proposedOrder`:
 ```bash
 cd <repo-path>
 git checkout <integration-branch>
-git merge --no-ff <lane-branch> -m "Merge <lane-id>: <agent> implementation"
+git merge --no-ff <lane-branch> -m "Merge <lane-id>: <role> work"
 ```
 
 If a merge conflict occurs:
@@ -142,6 +142,7 @@ On success, report:
 War Room Merge Complete!
 
 Lanes merged: lane-1 (developer), lane-2 (qa-tester), lane-3 (doc-updater)
+Roles: developer (self-executed), qa-tester (agent-backed), doc-updater (self-executed)
 Integration branch: warroom/integration/my-feature
 Main branch updated: Yes
 Pushed to GitHub: Yes
