@@ -25,29 +25,24 @@ async function spawnMergeTerminal(
   integrationBranch: string
 ): Promise<{ success: boolean; terminal: string; error?: string }> {
   try {
-    // Build the Claude command - use /warroom-merge skill with full autonomy
-    const claudeCmd = `claude --dangerously-skip-permissions -p '/warroom-merge
+    // Build a simple single-line prompt to avoid AppleScript escaping issues
+    const prompt = `/warroom-merge ${runSlug} - Repository: ${repoPath}, Integration branch: ${integrationBranch}. Execute merge autonomously: merge lanes to integration, then to main, push to GitHub.`;
 
-Run slug: ${runSlug}
-Repository: ${repoPath}
-Integration branch: ${integrationBranch}
-
-Execute the merge autonomously:
-1. Merge all complete lanes into the integration branch (in dependency order)
-2. Merge integration branch into main
-3. Push integration branch and main to GitHub
-4. Update status.json and history.jsonl'`;
+    // Escape double quotes for the shell command
+    const escapedPrompt = prompt.replace(/"/g, '\\"');
+    const claudeCmd = `claude --dangerously-skip-permissions -p "${escapedPrompt}"`;
 
     const useIterm = await hasIterm();
 
     if (useIterm) {
-      // Use iTerm2 with AppleScript
+      // Use iTerm2 with AppleScript - use double quotes in AppleScript
+      const shellCmd = `cd "${repoPath}" && ${claudeCmd}`;
       const script = `
         tell application "iTerm"
           activate
           create window with default profile
           tell current session of current window
-            write text "cd '${repoPath}' && ${claudeCmd.replace(/'/g, "'\\''")}"
+            write text "${shellCmd.replace(/"/g, '\\"')}"
           end tell
         end tell
       `;
@@ -55,10 +50,11 @@ Execute the merge autonomously:
       return { success: true, terminal: "iTerm2" };
     } else {
       // Use Terminal.app with AppleScript
+      const shellCmd = `cd "${repoPath}" && ${claudeCmd}`;
       const script = `
         tell application "Terminal"
           activate
-          do script "cd '${repoPath}' && ${claudeCmd.replace(/'/g, "'\\''")}"
+          do script "${shellCmd.replace(/"/g, '\\"')}"
         end tell
       `;
       await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);

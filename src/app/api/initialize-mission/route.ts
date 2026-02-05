@@ -32,12 +32,6 @@ async function spawnPlanningTerminal(
   autonomy: boolean
 ): Promise<{ success: boolean; terminal: string; error?: string }> {
   try {
-    // Build the prompt for Claude Code
-    const autonomyLine = autonomy
-      ? "Autonomy: ON (dangerouslySkipPermissions enabled)"
-      : "Autonomy: OFF (human checkpoints required)";
-    const maxLanesLine = maxLanes ? `Max lanes: ${maxLanes}` : "";
-
     // Create a context file that /warroom-plan can read
     const contextDir = path.join(os.homedir(), ".openclaw/workspace/warroom");
     await fs.mkdir(contextDir, { recursive: true });
@@ -51,35 +45,30 @@ async function spawnPlanningTerminal(
       createdAt: new Date().toISOString(),
     }, null, 2));
 
-    // Build the Claude command - use /warroom-plan skill
+    // Build a simple single-line prompt to avoid AppleScript escaping issues
+    // Replace newlines and quotes in the goal to make it safe
+    const safeGoal = goal.replace(/[\n\r]+/g, ' ').replace(/"/g, "'");
+    const maxLanesStr = maxLanes ? `, Max lanes: ${maxLanes}` : "";
+    const autonomyStr = autonomy ? " Execute autonomously: generate plan, create run, stage and launch all lanes." : "";
+
+    const prompt = `/warroom-plan - Repository: ${repoPath}, Goal: ${safeGoal}${maxLanesStr}.${autonomyStr}`;
+    const escapedPrompt = prompt.replace(/"/g, '\\"');
+
     const claudeCmd = autonomy
-      ? `claude --dangerously-skip-permissions -p '/warroom-plan
-
-Repository: ${repoPath}
-Goal: ${goal}
-${maxLanesLine}
-${autonomyLine}
-
-Generate the plan, create the run, stage all lanes, and launch them autonomously.'`
-      : `claude -p '/warroom-plan
-
-Repository: ${repoPath}
-Goal: ${goal}
-${maxLanesLine}
-${autonomyLine}
-
-Generate the plan and create the run.'`;
+      ? `claude --dangerously-skip-permissions -p "${escapedPrompt}"`
+      : `claude -p "${escapedPrompt}"`;
 
     const useIterm = await hasIterm();
 
     if (useIterm) {
-      // Use iTerm2 with AppleScript
+      // Use iTerm2 with AppleScript - use double quotes in AppleScript
+      const shellCmd = `cd "${repoPath}" && ${claudeCmd}`;
       const script = `
         tell application "iTerm"
           activate
           create window with default profile
           tell current session of current window
-            write text "cd '${repoPath}' && ${claudeCmd.replace(/'/g, "'\\''")}"
+            write text "${shellCmd.replace(/"/g, '\\"')}"
           end tell
         end tell
       `;
@@ -87,10 +76,11 @@ Generate the plan and create the run.'`;
       return { success: true, terminal: "iTerm2" };
     } else {
       // Use Terminal.app with AppleScript
+      const shellCmd = `cd "${repoPath}" && ${claudeCmd}`;
       const script = `
         tell application "Terminal"
           activate
-          do script "cd '${repoPath}' && ${claudeCmd.replace(/'/g, "'\\''")}"
+          do script "${shellCmd.replace(/"/g, '\\"')}"
         end tell
       `;
       await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
