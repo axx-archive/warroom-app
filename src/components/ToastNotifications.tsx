@@ -2,9 +2,17 @@
 
 import { AppNotification, NotificationType } from "@/lib/plan-schema";
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+  primary?: boolean;
+}
+
 interface ToastNotificationsProps {
   toasts: AppNotification[];
   onDismiss: (id: string) => void;
+  // Optional: global action handler for cross-tab navigation
+  onAction?: (actionId: string, toastId: string) => void;
 }
 
 // Get icon for notification type
@@ -13,7 +21,7 @@ function getIcon(type: NotificationType) {
     case "success":
       return (
         <svg
-          className="w-5 h-5 text-[var(--status-success)]"
+          className="w-5 h-5 text-[var(--success)]"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -29,7 +37,7 @@ function getIcon(type: NotificationType) {
     case "warning":
       return (
         <svg
-          className="w-5 h-5 text-[var(--status-warning)]"
+          className="w-5 h-5 text-[var(--warning)]"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -45,7 +53,7 @@ function getIcon(type: NotificationType) {
     case "error":
       return (
         <svg
-          className="w-5 h-5 text-[var(--status-danger)]"
+          className="w-5 h-5 text-[var(--error)]"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -62,7 +70,7 @@ function getIcon(type: NotificationType) {
     default:
       return (
         <svg
-          className="w-5 h-5 text-[var(--cyan)]"
+          className="w-5 h-5 text-[var(--info)]"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -78,33 +86,37 @@ function getIcon(type: NotificationType) {
   }
 }
 
-// Get border/background colors for notification type
+// Get colors for notification type - Bold Mission Control
 function getColors(type: NotificationType) {
   switch (type) {
     case "success":
       return {
-        border: "border-[rgba(34,197,94,0.4)]",
-        bg: "bg-[rgba(34,197,94,0.1)]",
-        title: "text-[var(--status-success)]",
+        border: "rgba(16, 185, 129, 0.4)",
+        accent: "var(--success)",
+        shadow: "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 30px rgba(16, 185, 129, 0.15)",
+        iconBg: "rgba(16, 185, 129, 0.1)",
       };
     case "warning":
       return {
-        border: "border-[rgba(234,179,8,0.4)]",
-        bg: "bg-[rgba(234,179,8,0.1)]",
-        title: "text-[var(--status-warning)]",
+        border: "rgba(245, 158, 11, 0.4)",
+        accent: "var(--warning)",
+        shadow: "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 30px rgba(245, 158, 11, 0.15)",
+        iconBg: "rgba(245, 158, 11, 0.1)",
       };
     case "error":
       return {
-        border: "border-[rgba(239,68,68,0.4)]",
-        bg: "bg-[rgba(239,68,68,0.1)]",
-        title: "text-[var(--status-danger)]",
+        border: "rgba(239, 68, 68, 0.4)",
+        accent: "var(--error)",
+        shadow: "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 30px rgba(239, 68, 68, 0.15)",
+        iconBg: "rgba(239, 68, 68, 0.1)",
       };
     case "info":
     default:
       return {
-        border: "border-[rgba(6,182,212,0.4)]",
-        bg: "bg-[rgba(6,182,212,0.1)]",
-        title: "text-[var(--cyan)]",
+        border: "rgba(6, 182, 212, 0.4)",
+        accent: "var(--info)",
+        shadow: "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 30px rgba(6, 182, 212, 0.15)",
+        iconBg: "rgba(6, 182, 212, 0.1)",
       };
   }
 }
@@ -112,80 +124,90 @@ function getColors(type: NotificationType) {
 export function ToastNotifications({
   toasts,
   onDismiss,
+  onAction,
 }: ToastNotificationsProps) {
   if (toasts.length === 0) {
     return null;
   }
 
+  const handleAction = (actionId: string, toastId: string) => {
+    onAction?.(actionId, toastId);
+    onDismiss(toastId);
+  };
+
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none">
+    <div className="toast-container">
       {toasts.map((toast) => {
         const colors = getColors(toast.type);
+        // Check if toast has actions (stored in metadata)
+        const actions = (toast as AppNotification & { actions?: ToastAction[] }).actions;
+
         return (
           <div
             key={toast.id}
-            className={`pointer-events-auto animate-slide-in-right rounded-lg border ${colors.border} ${colors.bg} backdrop-blur-sm p-4 shadow-lg transition-all duration-300`}
+            className={`toast toast--${toast.type} toast--dramatic backdrop-blur-xl`}
             style={{
-              backgroundColor: "var(--surface-elevated)",
+              borderColor: colors.border,
+              boxShadow: colors.shadow,
             }}
           >
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 mt-0.5">{getIcon(toast.type)}</div>
-              <div className="flex-1 min-w-0">
-                <div className={`font-medium ${colors.title}`}>
-                  {toast.title}
-                </div>
-                {toast.message && (
-                  <div className="text-sm text-[var(--text-secondary)] mt-1 break-words">
-                    {toast.message}
-                  </div>
-                )}
-                {toast.laneId && (
-                  <div className="text-xs text-[var(--text-ghost)] mt-1 font-mono">
-                    Lane: {toast.laneId}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={() => onDismiss(toast.id)}
-                className="flex-shrink-0 p-1 text-[var(--text-ghost)] hover:text-[var(--text-secondary)] transition-colors"
-                title="Dismiss"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
+            <div
+              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: colors.iconBg, border: `1px solid ${colors.border}` }}
+            >
+              {getIcon(toast.type)}
             </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-sm uppercase tracking-wide text-white">
+                {toast.title}
+              </div>
+              {toast.message && (
+                <div className="text-small text-[var(--text-secondary)] mt-1 break-words">
+                  {toast.message}
+                </div>
+              )}
+              {toast.laneId && (
+                <div className="text-caption font-mono mt-1">
+                  Lane: {toast.laneId}
+                </div>
+              )}
+              {/* Action buttons */}
+              {actions && actions.length > 0 && (
+                <div className="toast-actions">
+                  {actions.map((action, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleAction(action.label, toast.id)}
+                      className={`toast-action ${action.primary ? "toast-action--primary" : ""}`}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => onDismiss(toast.id)}
+              className="btn--icon flex-shrink-0 text-[var(--text-ghost)] hover:text-[var(--text-secondary)]"
+              title="Dismiss"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
           </div>
         );
       })}
-
-      {/* CSS for slide-in animation */}
-      <style jsx>{`
-        @keyframes slide-in-right {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-        .animate-slide-in-right {
-          animation: slide-in-right 0.3s ease-out;
-        }
-      `}</style>
     </div>
   );
 }
