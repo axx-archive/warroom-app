@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { WarRoomPlan, PlanTemplate } from "@/lib/plan-schema";
-import { PlanGenerator } from "@/components/PlanGenerator";
 import { PlanViewer } from "@/components/PlanViewer";
 import { ImportPlanModal } from "@/components/ImportPlanModal";
 import { ImportRunFolderModal } from "@/components/ImportRunFolderModal";
@@ -21,9 +20,14 @@ export default function Home() {
   const [showTemplatePickerModal, setShowTemplatePickerModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<PlanTemplate | null>(null);
 
-  const handlePlanGenerated = (plan: WarRoomPlan, runDir: string) => {
-    setGeneratedPlan({ plan, runDir });
-  };
+  // Form state - simplified
+  const [repoPath, setRepoPath] = useState("");
+  const [goal, setGoal] = useState("");
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [isPickingFolder, setIsPickingFolder] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handlePlanImported = (plan: WarRoomPlan, runDir: string) => {
     setGeneratedPlan({ plan, runDir });
@@ -38,269 +42,384 @@ export default function Home() {
 
   const handleTemplateSelected = (template: PlanTemplate) => {
     setSelectedTemplate(template);
+    setGoal(template.description);
     setShowTemplatePickerModal(false);
+    setShowAdvanced(true);
   };
 
   const handleReset = () => {
     setGeneratedPlan(null);
     setSelectedTemplate(null);
+    setGoal("");
   };
 
+  // Handle folder picker
+  const handlePickFolder = useCallback(async () => {
+    setIsPickingFolder(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/folder-picker", {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (data.error === "cancelled") {
+        return;
+      }
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to select folder");
+      }
+
+      setRepoPath(data.path);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to open folder picker");
+    } finally {
+      setIsPickingFolder(false);
+    }
+  }, []);
+
+  // Handle execute plan
+  const handleExecute = useCallback(async () => {
+    if (!repoPath.trim()) {
+      setError("Please provide a repository path");
+      return;
+    }
+
+    setIsExecuting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const response = await fetch("/api/initialize-mission", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          goal: goal.trim() || "Initialize tactical operation",
+          repoPath: repoPath.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to execute plan");
+      }
+
+      const terminalName = data.terminal || "Terminal";
+      setSuccessMessage(`${terminalName} opened! Claude Code is running /warroom-plan.`);
+      setTimeout(() => setSuccessMessage(null), 8000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Execution failed");
+    } finally {
+      setIsExecuting(false);
+    }
+  }, [goal, repoPath]);
+
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="panel-header sticky top-0 z-50 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="logo-mark logo-mark--bold">WR</div>
+    <div className="min-h-screen flex flex-col bg-[var(--bg)]">
+      {/* Corner decorations */}
+      <div className="corner-decoration corner-decoration--top-left">
+        SESSION_ID: AF-0992-XC
+      </div>
+      <div className="corner-decoration corner-decoration--bottom-right">
+        ENCRYPTION: AES-256-GCM
+      </div>
+
+      {/* Header - Bold Mission Control */}
+      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--bg-deep)]">
+        <div className="max-w-[1400px] mx-auto px-8 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-5">
+            <div className="logo-mark logo-mark--bold text-xl">WR</div>
             <div className="flex flex-col">
-              <h1 className="text-xl font-black tracking-tighter uppercase leading-none text-white">WAR ROOM</h1>
+              <h1 className="text-xl font-black tracking-tight uppercase leading-none text-white">
+                WAR ROOM
+              </h1>
               <div className="flex items-center gap-2 mt-1">
                 <span className="h-[1px] w-4 bg-[var(--accent)]/60" />
-                <span className="text-[9px] font-mono text-[var(--text-ghost)] tracking-[0.25em] uppercase">
-                  Command Control v1.0
+                <span className="text-[9px] font-mono text-[var(--text-ghost)] tracking-[0.2em] uppercase">
+                  Command Control v1.0_PRO
                 </span>
               </div>
             </div>
           </div>
 
-          <nav className="flex items-center gap-2">
-            <Link
-              href="/runs"
-              className="btn-ghost"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          <div className="flex items-center gap-4">
+            {/* Systems Active badge */}
+            <div className="flex items-center gap-2 px-4 py-2 rounded border border-[var(--accent-border)] bg-transparent">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--accent)] opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--accent)]" />
+              </span>
+              <span className="text-xs font-mono font-bold text-[var(--accent)] tracking-widest uppercase">
+                Systems: Active
+              </span>
+            </div>
+
+            {/* Settings icon */}
+            <button className="btn--icon text-[var(--text-ghost)] hover:text-[var(--text)]">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              View Runs
-            </Link>
-            {!generatedPlan && (
-              <>
-                <button
-                  onClick={() => setShowTemplatePickerModal(true)}
-                  className="btn-ghost"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                  </svg>
-                  New from Template
-                </button>
-                <button
-                  onClick={() => setShowImportFolderModal(true)}
-                  className="btn-ghost"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                  </svg>
-                  Open Folder
-                </button>
-                <button
-                  onClick={() => setShowImportModal(true)}
-                  className="btn-secondary"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                  </svg>
-                  Import Plan
-                </button>
-              </>
-            )}
-            {generatedPlan && (
-              <button
-                onClick={handleReset}
-                className="btn-secondary"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
-                </svg>
-                New Mission
-              </button>
-            )}
-          </nav>
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-4">
+      <main className="flex-1 max-w-[1400px] mx-auto w-full px-8 py-16">
         {generatedPlan ? (
-          <PlanViewer plan={generatedPlan.plan} runDir={generatedPlan.runDir} />
+          <div>
+            <button
+              onClick={handleReset}
+              className="btn btn--ghost mb-6"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              New Mission
+            </button>
+            <PlanViewer plan={generatedPlan.plan} runDir={generatedPlan.runDir} />
+          </div>
         ) : (
-          <div className="max-w-2xl mx-auto">
-            {/* Hero Section - Bold Command Center */}
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center gap-3 px-4 py-2 rounded-md bg-[var(--accent-subtle)] border border-[var(--accent-border)] shadow-[0_0_20px_var(--accent-glow)] mb-6">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--accent)] opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--accent)]" />
+          <div className="max-w-4xl">
+            {/* Hero Section - Bold, Left-aligned */}
+            <div className="mb-16">
+              {/* Status badges */}
+              <div className="flex items-center gap-4 mb-6">
+                <span className="badge badge--accent px-3 py-1.5 text-xs font-mono font-bold tracking-widest">
+                  PRIORITY MISSION
                 </span>
-                <span className="text-xs font-mono font-bold text-[var(--accent)] tracking-[0.15em] uppercase">
-                  Systems: Active
-                </span>
-              </div>
-              <div className="flex items-center gap-4 mb-4 justify-center">
-                <span className="text-[10px] font-mono text-[var(--accent)] font-bold uppercase tracking-[0.3em] bg-[var(--accent-subtle)] px-3 py-1 rounded">
-                  Priority Mission
-                </span>
-                <span className="text-[10px] font-mono text-[var(--text-ghost)] uppercase tracking-[0.2em]">
-                  Pending Initialization...
+                <span className="text-xs font-mono text-[var(--text-ghost)] tracking-widest uppercase">
+                  Pending Initialization ...
                 </span>
               </div>
-              <h2 className="text-4xl font-black text-white mb-3 tracking-tight leading-[1.1]">
+
+              {/* Giant headline */}
+              <h2 className="text-6xl md:text-7xl font-black text-white mb-4 tracking-tight leading-[0.95]">
                 Engage Tactical<br />
-                <span className="text-[var(--accent)] drop-shadow-[0_0_10px_var(--accent-glow)]">Operation Session</span>
+                <span className="text-[var(--accent)]">Operation Session</span>
               </h2>
-              <p className="text-sm text-[var(--text-secondary)] max-w-md mx-auto leading-relaxed">
-                Generate a mission plan with coordinated agent lanes for parallel development.
-              </p>
             </div>
 
-            <PlanGenerator
-              onPlanGenerated={handlePlanGenerated}
-              defaultRepoPath={
-                process.env.HOME
-                  ? `${process.env.HOME}/.openclaw/workspace`
-                  : ""
-              }
-              selectedTemplate={selectedTemplate}
-              onClearTemplate={() => setSelectedTemplate(null)}
-            />
+            {/* Inline Form - Simplified */}
+            <div className="mb-6">
+              {/* Template banner if selected */}
+              {selectedTemplate && (
+                <div className="flex items-center gap-3 mb-4 p-3 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10">
+                  <svg className="w-5 h-5 text-[var(--warning)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
+                  <span className="text-sm text-[var(--warning)] font-medium">
+                    Template: {selectedTemplate.name}
+                  </span>
+                  <button
+                    onClick={() => { setSelectedTemplate(null); setGoal(""); }}
+                    className="ml-auto text-[var(--text-ghost)] hover:text-[var(--warning)]"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
 
-            {/* Quick Actions Rail - Bold Command Center */}
-            <div className="quick-actions-rail mt-12">
-              <div className="flex items-center gap-4 mb-6">
+              {/* Repo path label */}
+              <label className="telemetry-label block mb-3 text-[var(--accent)]">
+                Target Repository Path
+              </label>
+
+              {/* Inline input + button */}
+              <div className="flex items-stretch gap-3">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={repoPath}
+                    onChange={(e) => setRepoPath(e.target.value)}
+                    placeholder="root://deployment/central-intelligence"
+                    className="w-full h-14 px-5 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg text-[var(--text)] font-mono text-sm placeholder:text-[var(--text-ghost)] focus:border-[var(--accent-border)] focus:outline-none transition-colors"
+                  />
+                  <button
+                    onClick={handlePickFolder}
+                    disabled={isPickingFolder}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-[var(--text-ghost)] hover:text-[var(--text)] transition-colors"
+                    title="Browse folders"
+                  >
+                    {isPickingFolder ? (
+                      <svg className="w-5 h-5 spinner" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+
+                {/* Execute button */}
+                <button
+                  onClick={handleExecute}
+                  disabled={isExecuting || !repoPath.trim()}
+                  className="h-14 px-8 bg-[var(--accent)] hover:bg-[var(--accent-bright)] text-white font-bold text-sm tracking-widest uppercase rounded-lg flex items-center gap-3 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isExecuting ? (
+                    <>
+                      <svg className="w-5 h-5 spinner" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Executing...
+                    </>
+                  ) : (
+                    <>
+                      Execute Plan
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Advanced toggle */}
+              <button
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="mt-4 flex items-center gap-2 text-[var(--text-ghost)] hover:text-[var(--text-secondary)] transition-colors"
+              >
+                <svg
+                  className={`w-3 h-3 transition-transform ${showAdvanced ? "rotate-90" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <span className="text-xs font-mono uppercase tracking-widest">Advanced Parameters</span>
+              </button>
+
+              {/* Advanced options */}
+              {showAdvanced && (
+                <div className="mt-4 p-5 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg animate-slide-up">
+                  <label className="telemetry-label block mb-2 text-[var(--accent)]">
+                    Mission Objective
+                  </label>
+                  <textarea
+                    value={goal}
+                    onChange={(e) => setGoal(e.target.value)}
+                    placeholder="Describe the mission parameters and objectives..."
+                    rows={3}
+                    className="w-full px-4 py-3 bg-[var(--bg-deep)] border border-[var(--border)] rounded-lg text-[var(--text)] text-sm placeholder:text-[var(--text-ghost)] focus:border-[var(--accent-border)] focus:outline-none resize-none"
+                  />
+                </div>
+              )}
+
+              {/* Success message */}
+              {successMessage && (
+                <div className="mt-4 p-4 rounded-lg border border-[var(--success)]/30 bg-[var(--success)]/10 flex items-center gap-3 animate-slide-up">
+                  <svg className="w-5 h-5 text-[var(--success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-sm text-[var(--success)]">{successMessage}</span>
+                </div>
+              )}
+
+              {/* Error message */}
+              {error && (
+                <div className="mt-4 p-4 rounded-lg border border-[var(--error)]/30 bg-[var(--error)]/10 flex items-center gap-3 animate-slide-up">
+                  <svg className="w-5 h-5 text-[var(--error)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span className="text-sm text-[var(--error)]">{error}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Actions Section */}
+            <div className="mt-20">
+              <div className="flex items-center gap-4 mb-8">
                 <h3 className="text-xs font-mono font-bold uppercase text-[var(--text-ghost)] tracking-[0.3em]">
                   Operational Quick Actions
                 </h3>
                 <div className="flex-grow h-px bg-[var(--border)]" />
               </div>
-              <div className="grid md:grid-cols-2 gap-3">
-                {/* Recommended tile - View Runs - Bold Command Center */}
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Mission Logs - Recommended */}
                 <Link
                   href="/runs"
-                  className="quick-action-tile quick-action-tile-recommended group tech-corners card-hover-glow relative p-6 rounded-xl"
+                  className="group relative p-6 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg hover:border-[var(--accent-border)] transition-all tech-corners"
                 >
-                  <div className="flex flex-col h-full justify-between">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="w-12 h-12 rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] flex items-center justify-center transition-all group-hover:bg-[var(--accent-subtle)] group-hover:border-[var(--accent-border)] group-hover:shadow-[0_0_20px_var(--accent-glow)]">
-                        <svg className="w-6 h-6 text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      </div>
-                      <span className="badge--recommended text-[9px] font-bold uppercase tracking-tight px-2 py-0.5 rounded bg-[var(--accent)] text-white animate-pulse">
-                        Recommended
-                      </span>
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-lg mb-2 text-white">Mission Logs</h4>
-                      <p className="text-[var(--text-ghost)] text-sm leading-snug">
-                        Review and optimize deployment command sequences.
-                      </p>
-                    </div>
+                  <span className="absolute top-3 right-3 badge badge--accent text-[9px] px-2 py-0.5">
+                    RECOMMENDED
+                  </span>
+                  <div className="w-12 h-12 rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] flex items-center justify-center mb-4 group-hover:bg-[var(--accent-subtle)] group-hover:border-[var(--accent-border)] transition-all">
+                    <svg className="w-6 h-6 text-[var(--text-ghost)] group-hover:text-[var(--accent)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
                   </div>
+                  <h4 className="font-bold text-white mb-1">Mission Logs</h4>
+                  <p className="text-xs text-[var(--text-ghost)] leading-relaxed">
+                    Review deployment sequences.
+                  </p>
                 </Link>
 
-                {/* New from Template tile - Bold */}
+                {/* Architecture / Templates */}
                 <button
                   onClick={() => setShowTemplatePickerModal(true)}
-                  className="quick-action-tile group text-left tech-corners card-hover-glow relative p-6 rounded-xl"
+                  className="group relative p-6 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg hover:border-[var(--accent-border)] transition-all tech-corners text-left"
                 >
-                  <div className="flex flex-col h-full justify-between">
-                    <div className="w-12 h-12 rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] flex items-center justify-center mb-4 transition-all group-hover:bg-[var(--accent-subtle)] group-hover:border-[var(--accent-border)]">
-                      <svg className="w-6 h-6 text-[var(--text-muted)] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-lg mb-2 text-white">Architecture</h4>
-                      <p className="text-[var(--text-ghost)] text-sm leading-snug">
-                        Deploy pre-configured tactical environment patterns.
-                      </p>
-                    </div>
+                  <div className="w-12 h-12 rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] flex items-center justify-center mb-4 group-hover:bg-[var(--accent-subtle)] group-hover:border-[var(--accent-border)] transition-all">
+                    <svg className="w-6 h-6 text-[var(--text-ghost)] group-hover:text-[var(--accent)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                    </svg>
                   </div>
+                  <h4 className="font-bold text-white mb-1">Architecture</h4>
+                  <p className="text-xs text-[var(--text-ghost)] leading-relaxed">
+                    Pre-configured patterns.
+                  </p>
                 </button>
 
-                {/* Import Plan tile - Bold */}
+                {/* Import */}
                 <button
                   onClick={() => setShowImportModal(true)}
-                  className="quick-action-tile group text-left tech-corners card-hover-glow relative p-6 rounded-xl"
+                  className="group relative p-6 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg hover:border-[var(--accent-border)] transition-all tech-corners text-left"
                 >
-                  <div className="flex flex-col h-full justify-between">
-                    <div className="w-12 h-12 rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] flex items-center justify-center mb-4 transition-all group-hover:bg-[var(--accent-subtle)] group-hover:border-[var(--accent-border)]">
-                      <svg className="w-6 h-6 text-[var(--text-muted)] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-lg mb-2 text-white">Import Ops</h4>
-                      <p className="text-[var(--text-ghost)] text-sm leading-snug">
-                        Ingest external YAML/JSON operational datasets.
-                      </p>
-                    </div>
+                  <div className="w-12 h-12 rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] flex items-center justify-center mb-4 group-hover:bg-[var(--accent-subtle)] group-hover:border-[var(--accent-border)] transition-all">
+                    <svg className="w-6 h-6 text-[var(--text-ghost)] group-hover:text-[var(--accent)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
                   </div>
+                  <h4 className="font-bold text-white mb-1">Import Ops</h4>
+                  <p className="text-xs text-[var(--text-ghost)] leading-relaxed">
+                    Ingest external datasets.
+                  </p>
                 </button>
 
-                {/* Open Folder tile - Bold */}
+                {/* Recovery */}
                 <button
                   onClick={() => setShowImportFolderModal(true)}
-                  className="quick-action-tile group text-left tech-corners card-hover-glow relative p-6 rounded-xl"
+                  className="group relative p-6 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg hover:border-[var(--accent-border)] transition-all tech-corners text-left"
                 >
-                  <div className="flex flex-col h-full justify-between">
-                    <div className="w-12 h-12 rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] flex items-center justify-center mb-4 transition-all group-hover:bg-[var(--accent-subtle)] group-hover:border-[var(--accent-border)]">
-                      <svg className="w-6 h-6 text-[var(--text-muted)] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-lg mb-2 text-white">Recovery</h4>
-                      <p className="text-[var(--text-ghost)] text-sm leading-snug">
-                        Re-establish link with previous session state.
-                      </p>
-                    </div>
+                  <div className="w-12 h-12 rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] flex items-center justify-center mb-4 group-hover:bg-[var(--accent-subtle)] group-hover:border-[var(--accent-border)] transition-all">
+                    <svg className="w-6 h-6 text-[var(--text-ghost)] group-hover:text-[var(--accent)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
                   </div>
+                  <h4 className="font-bold text-white mb-1">Recovery</h4>
+                  <p className="text-xs text-[var(--text-ghost)] leading-relaxed">
+                    Resume previous session.
+                  </p>
                 </button>
               </div>
             </div>
           </div>
         )}
       </main>
-
-      {/* Footer - Bold Command Center */}
-      <footer className="border-t border-[var(--border)] mt-auto bg-[var(--bg-deep)]/80 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div className="p-1.5 rounded bg-[var(--accent-subtle)] border border-[var(--accent-border)]">
-                <svg className="w-3 h-3 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <span className="text-[10px] font-mono uppercase text-[var(--accent)] font-bold tracking-[0.15em]">
-                Encrypted Uplink Established
-              </span>
-            </div>
-            <div className="h-4 w-px bg-[var(--border)]" />
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--success)] shadow-[0_0_8px_var(--success)]" />
-              <span className="text-[10px] font-mono uppercase text-[var(--text-ghost)] tracking-[0.15em]">
-                Hardware Nominal
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-8 text-[10px] font-mono text-[var(--text-ghost)] uppercase tracking-[0.15em]">
-            <a href="#" className="hover:text-[var(--accent)] transition-colors flex items-center gap-1.5">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-              Protocol Docs
-            </a>
-            <span className="hover:text-[var(--accent)] transition-colors cursor-pointer">Node Map</span>
-            <div className="flex items-center gap-2 text-[var(--accent)] font-bold">
-              <span className="animate-pulse">●</span>
-              <span className="tabular-nums">{new Date().toLocaleTimeString('en-US', { hour12: false })}</span>
-            </div>
-          </div>
-        </div>
-      </footer>
 
       {/* Modals */}
       {showImportModal && (
