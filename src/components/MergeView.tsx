@@ -18,6 +18,10 @@ interface LaneMergeInfo {
   filesChanged: string[];
   conflictRisk: "none" | "low" | "medium" | "high";
   overlappingLanes: string[];
+  // Lanes whose changes are included in this lane (via merge/ancestry) - overlap is safe
+  includedLanes?: string[];
+  // Lanes with true conflict risk (independent changes to same files)
+  conflictingLanes?: string[];
   error?: string;
 }
 
@@ -86,14 +90,16 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
   const [mergeError, setMergeError] = useState<string | null>(null);
   const [mergeResults, setMergeResults] = useState<MergeLaneResult[]>([]);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
-  const [mergeToMain, setMergeToMain] = useState(false);
   const [confirmMergeToMain, setConfirmMergeToMain] = useState(false);
   const [mergedToMain, setMergedToMain] = useState(false);
   const [launchMergeStatus, setLaunchMergeStatus] = useState<"idle" | "copied" | "error">("idle");
   const [openingCursor, setOpeningCursor] = useState(false);
   const [autoPushOptions, setAutoPushOptions] = useState<AutoPushOptions>({
+    fullAutonomyMode: false,
     pushLaneBranches: false,
     pushIntegrationBranch: false,
+    mergeToMain: false,
+    pushMainBranch: false,
   });
 
   // Expose refresh function to parent via ref
@@ -243,6 +249,9 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
   const executeServerMerge = useCallback(async () => {
     if (!proposal) return;
 
+    const shouldMergeToMain = autoPushOptions.mergeToMain &&
+      (autoPushOptions.fullAutonomyMode || confirmMergeToMain);
+
     setMergeLoading(true);
     setMergeError(null);
     setConflict(null);
@@ -254,8 +263,9 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mergeToMain,
-          confirmMergeToMain: mergeToMain && confirmMergeToMain,
+          mergeToMain: shouldMergeToMain,
+          confirmMergeToMain: shouldMergeToMain,
+          pushMainBranch: shouldMergeToMain && autoPushOptions.pushMainBranch,
         }),
       });
       const data: MergeResponse = await response.json();
@@ -276,7 +286,7 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
     } finally {
       setMergeLoading(false);
     }
-  }, [slug, proposal, mergeToMain, confirmMergeToMain, fetchMergeInfo]);
+  }, [slug, proposal, autoPushOptions, confirmMergeToMain, fetchMergeInfo]);
 
   const openInCursor = useCallback(async (worktreePath: string) => {
     setOpeningCursor(true);
@@ -343,7 +353,10 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
 
   const mergeCandidates = mergeInfo.lanes.filter((l) => l.isMergeCandidate);
   const pendingLanes = mergeInfo.lanes.filter((l) => !l.isMergeCandidate);
-  const hasConflictRisk = mergeInfo.lanes.some((l) => l.conflictRisk !== "none");
+  // True conflicts are lanes with conflictingLanes (not just inherited overlaps)
+  const hasConflictRisk = mergeInfo.lanes.some((l) => l.conflictingLanes && l.conflictingLanes.length > 0);
+  // Lanes with inherited changes (safe overlaps)
+  const hasInheritedChanges = mergeInfo.lanes.some((l) => l.includedLanes && l.includedLanes.length > 0);
 
   return (
     <div className="panel-bracketed p-6">
@@ -390,6 +403,14 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
               {pendingLanes.length} pending
             </span>
           </div>
+          {hasInheritedChanges && !hasConflictRisk && (
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[var(--cyan)]" />
+              <span className="text-sm text-[var(--text-secondary)]">
+                Sequential merges
+              </span>
+            </div>
+          )}
           {hasConflictRisk && (
             <div className="flex items-center gap-2">
               <span className="indicator-dot indicator-dot-amber" />
@@ -414,21 +435,68 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
 
       {/* Lane List */}
       <div className="space-y-3 mb-5">
-        {mergeInfo.lanes.map((lane) => (
-          <LaneMergeCard key={lane.laneId} lane={lane} />
-        ))}
+        {(() => {
+          // Group lanes with identical errors together
+          const errorGroups: Record<string, LaneMergeInfo[]> = {};
+          const normalLanes: LaneMergeInfo[] = [];
+
+          mergeInfo.lanes.forEach((lane) => {
+            if (lane.error) {
+              const key = lane.error;
+              if (!errorGroups[key]) {
+                errorGroups[key] = [];
+              }
+              errorGroups[key].push(lane);
+            } else {
+              normalLanes.push(lane);
+            }
+          });
+
+          return (
+            <>
+              {/* Show normal lanes individually */}
+              {normalLanes.map((lane) => (
+                <LaneMergeCard key={lane.laneId} lane={lane} />
+              ))}
+
+              {/* Show grouped error lanes as collapsed summaries */}
+              {Object.entries(errorGroups).map(([errorMsg, lanes]) => (
+                lanes.length > 1 ? (
+                  <ErrorSummaryCard key={errorMsg} error={errorMsg} lanes={lanes} />
+                ) : (
+                  <LaneMergeCard key={lanes[0].laneId} lane={lanes[0]} />
+                )
+              ))}
+            </>
+          );
+        })()}
       </div>
 
-      {/* Overlap Warning */}
-      {Object.keys(mergeInfo.overlapMatrix).length > 0 && (
+      {/* True Conflict Warning - only for independent overlapping changes */}
+      {hasConflictRisk && (
         <div className="mb-5 p-4 rounded border border-[rgba(234,179,8,0.3)] bg-[rgba(234,179,8,0.08)]">
           <div className="flex items-start gap-3">
             <svg className="w-5 h-5 text-[var(--status-warning)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <div className="text-sm text-[var(--status-warning)]">
-              <span className="font-medium">File overlap detected:</span>{" "}
-              Some lanes modify the same files. Review carefully before merging.
+              <span className="font-medium">Potential conflicts detected:</span>{" "}
+              Some lanes independently modified the same files. Review carefully before merging.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sequential Merge Info - safe overlaps from dependency chain */}
+      {hasInheritedChanges && !hasConflictRisk && (
+        <div className="mb-5 p-4 rounded border border-[rgba(6,182,212,0.3)] bg-[rgba(6,182,212,0.08)]">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-[var(--cyan)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="text-sm text-[var(--cyan)]">
+              <span className="font-medium">Sequential dependency chain:</span>{" "}
+              Some lanes include changes from upstream lanes. This is expected and will merge cleanly.
             </div>
           </div>
         </div>
@@ -484,8 +552,7 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
             mergeError={mergeError}
             mergeResults={mergeResults}
             conflict={conflict}
-            mergeToMain={mergeToMain}
-            setMergeToMain={setMergeToMain}
+            autoPushOptions={autoPushOptions}
             confirmMergeToMain={confirmMergeToMain}
             setConfirmMergeToMain={setConfirmMergeToMain}
             mergedToMain={mergedToMain}
@@ -498,6 +565,76 @@ export const MergeView = forwardRef<MergeViewHandle, MergeViewProps>(function Me
     </div>
   );
 });
+
+// Collapsed error summary for multiple lanes with the same error
+function ErrorSummaryCard({ error, lanes }: { error: string; lanes: LaneMergeInfo[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="error-summary p-4 rounded border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.08)]">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-5 h-5 rounded-full flex items-center justify-center"
+            style={{
+              backgroundColor: "var(--status-error)",
+              color: "var(--void)",
+            }}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01" />
+            </svg>
+          </div>
+
+          <div>
+            <div className="badge-cluster">
+              <span className="font-medium text-sm text-[var(--status-error)]">
+                {lanes.length} lanes affected
+              </span>
+              <span className="badge badge-danger">error</span>
+            </div>
+            <div className="text-xs text-[var(--status-error)] mt-1 opacity-80">
+              {error}
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="btn-ghost p-1.5"
+          title={expanded ? "Hide lanes" : "Show lanes"}
+        >
+          <svg
+            className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-[rgba(239,68,68,0.2)]">
+          <div className="text-[10px] text-[var(--text-ghost)] uppercase tracking-wider mb-2">
+            Affected lanes ({lanes.length})
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {lanes.map((lane) => (
+              <span
+                key={lane.laneId}
+                className="text-xs font-mono px-2 py-1 rounded bg-[rgba(239,68,68,0.1)] text-[var(--status-error)] border border-[rgba(239,68,68,0.2)]"
+              >
+                {lane.laneId}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function LaneMergeCard({ lane }: { lane: LaneMergeInfo }) {
   const [expanded, setExpanded] = useState(false);
@@ -530,16 +667,16 @@ function LaneMergeCard({ lane }: { lane: LaneMergeInfo }) {
           </div>
 
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="badge-cluster">
               <span className="font-medium text-sm text-[var(--text-primary)]">
                 {lane.laneId}
               </span>
               {lane.isMergeCandidate && (
-                <span className="badge badge-success text-[10px]">merge candidate</span>
+                <span className="badge badge-success">merge candidate</span>
               )}
               {lane.conflictRisk !== "none" && (
                 <span
-                  className="badge text-[10px]"
+                  className="badge"
                   style={{
                     color: riskConfig.color,
                     backgroundColor: `${riskConfig.color}20`,
@@ -585,9 +722,17 @@ function LaneMergeCard({ lane }: { lane: LaneMergeInfo }) {
         </div>
       </div>
 
-      {lane.overlappingLanes.length > 0 && (
+      {/* Show conflicting lanes (true conflict risk) */}
+      {lane.conflictingLanes && lane.conflictingLanes.length > 0 && (
         <div className="mt-2 ml-8 text-xs text-[var(--status-warning)]">
-          Overlaps with: {lane.overlappingLanes.join(", ")}
+          <span className="font-medium">Conflicts with:</span> {lane.conflictingLanes.join(", ")}
+        </div>
+      )}
+
+      {/* Show included lanes (safe - in same dependency chain) */}
+      {lane.includedLanes && lane.includedLanes.length > 0 && (
+        <div className="mt-2 ml-8 text-xs text-[var(--text-tertiary)]">
+          <span className="text-[var(--cyan)]">In dependency chain with:</span> {lane.includedLanes.join(", ")}
         </div>
       )}
 
@@ -623,8 +768,7 @@ interface MergeProposalDisplayProps {
   mergeError: string | null;
   mergeResults: MergeLaneResult[];
   conflict: ConflictInfo | null;
-  mergeToMain: boolean;
-  setMergeToMain: (v: boolean) => void;
+  autoPushOptions: AutoPushOptions;
   confirmMergeToMain: boolean;
   setConfirmMergeToMain: (v: boolean) => void;
   mergedToMain: boolean;
@@ -772,7 +916,7 @@ function AutoMergeStatusDisplay({
               </span>
               <div className="flex flex-wrap gap-2 mt-1">
                 {mergeState.mergedLanes.map((laneId) => (
-                  <span key={laneId} className="badge badge-success text-[10px]">
+                  <span key={laneId} className="badge badge-success">
                     {laneId}
                   </span>
                 ))}
@@ -863,8 +1007,7 @@ function MergeProposalDisplay({
   mergeError,
   mergeResults,
   conflict,
-  mergeToMain,
-  setMergeToMain,
+  autoPushOptions,
   confirmMergeToMain,
   setConfirmMergeToMain,
   mergedToMain,
@@ -923,36 +1066,37 @@ function MergeProposalDisplay({
                   }`,
                 }}
               >
+                {/* Order indicator - subdued styling to not compete with method badge */}
                 <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono font-medium"
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono"
                   style={{
                     backgroundColor: result?.success
                       ? "var(--status-success)"
                       : isConflict
-                      ? "var(--status-danger)"
-                      : "var(--panel-elevated)",
-                    color: result?.success || isConflict ? "var(--void)" : "var(--text-secondary)",
+                      ? "var(--status-error)"
+                      : "var(--border)",
+                    color: result?.success || isConflict ? "var(--bg)" : "var(--text-ghost)",
                   }}
                 >
                   {result?.success ? (
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   ) : isConflict ? (
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   ) : (
                     lane.order
                   )}
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <div className="badge-cluster">
                     <span className="font-medium text-sm text-[var(--text-primary)]">
                       {lane.laneId}
                     </span>
                     <span
-                      className="badge text-[10px]"
+                      className="badge"
                       style={{
                         color: methodConfig.color,
                         backgroundColor: methodConfig.bgColor,
@@ -965,7 +1109,7 @@ function MergeProposalDisplay({
                       {lane.commitsAhead} {lane.commitsAhead === 1 ? "commit" : "commits"}
                     </span>
                     {result?.success && (
-                      <span className="badge badge-success text-[10px]">merged</span>
+                      <span className="badge badge-success">merged</span>
                     )}
                   </div>
                   {lane.notes && (
@@ -1044,45 +1188,27 @@ function MergeProposalDisplay({
       <div className="pt-5 border-t border-[var(--border-subtle)] space-y-4">
         <span className="label-caps block">Launch Merge</span>
 
-        {/* Merge to Main Option */}
-        <div className="space-y-3">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <button
-              type="button"
-              onClick={() => {
-                setMergeToMain(!mergeToMain);
-                if (mergeToMain) setConfirmMergeToMain(false);
-              }}
-              className={`toggle ${mergeToMain ? "active" : ""}`}
-              role="switch"
-              aria-checked={mergeToMain}
-            />
-            <span className="text-sm text-[var(--text-secondary)]">
-              Also merge integration branch to main after lanes merge
-            </span>
-          </label>
-
-          {mergeToMain && (
-            <div className="ml-10 p-4 rounded border border-[rgba(234,179,8,0.3)] bg-[rgba(234,179,8,0.08)]">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={confirmMergeToMain}
-                  onChange={(e) => setConfirmMergeToMain(e.target.checked)}
-                  className="w-4 h-4 mt-0.5 rounded border-[var(--status-warning)] accent-[var(--status-warning)]"
-                />
-                <div>
-                  <span className="text-sm font-medium text-[var(--status-warning)]">
-                    I confirm I want to merge to main
-                  </span>
-                  <div className="text-xs text-[var(--text-tertiary)] mt-1">
-                    This will merge the integration branch into main/master. This action modifies your production branch.
-                  </div>
+        {/* Merge to main confirmation - only shown when merge to main is enabled but not in full autonomy */}
+        {autoPushOptions.mergeToMain && !autoPushOptions.fullAutonomyMode && (
+          <div className="p-4 rounded border border-[rgba(234,179,8,0.3)] bg-[rgba(234,179,8,0.08)]">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={confirmMergeToMain}
+                onChange={(e) => setConfirmMergeToMain(e.target.checked)}
+                className="w-4 h-4 mt-0.5 rounded border-[var(--status-warning)] accent-[var(--status-warning)]"
+              />
+              <div>
+                <span className="text-sm font-medium text-[var(--status-warning)]">
+                  I confirm I want to merge to main
+                </span>
+                <div className="text-xs text-[var(--text-tertiary)] mt-1">
+                  This will merge the integration branch into main/master. This action modifies your production branch.
                 </div>
-              </label>
-            </div>
-          )}
-        </div>
+              </div>
+            </label>
+          </div>
+        )}
 
         {/* Execute Button with Copy as secondary action */}
         <div className="flex items-center gap-3">
@@ -1091,7 +1217,7 @@ function MergeProposalDisplay({
             disabled={
               mergeLoading ||
               !hasLanesToMerge ||
-              (mergeToMain && !confirmMergeToMain) ||
+              (autoPushOptions.mergeToMain && !autoPushOptions.fullAutonomyMode && !confirmMergeToMain) ||
               (mergeResults.length > 0 && mergeResults.every((r) => r.success) && !conflict)
             }
             className={launchMergeStatus === "copied" ? "btn-success" : launchMergeStatus === "error" ? "btn-danger" : "btn-success"}
@@ -1143,7 +1269,7 @@ function MergeProposalDisplay({
             )}
           </button>
 
-          {mergeToMain && !confirmMergeToMain && (
+          {autoPushOptions.mergeToMain && !autoPushOptions.fullAutonomyMode && !confirmMergeToMain && (
             <span className="text-xs text-[var(--status-warning)]">
               Check the confirmation box to enable merge to main
             </span>
@@ -1159,7 +1285,7 @@ function MergeProposalDisplay({
   );
 }
 
-// Auto-push options panel
+// Autonomy options panel - consolidated controls for autonomous operation
 interface AutoPushOptionsPanelProps {
   options: AutoPushOptions;
   onChange: (options: AutoPushOptions) => void;
@@ -1167,56 +1293,150 @@ interface AutoPushOptionsPanelProps {
 }
 
 function AutoPushOptionsPanel({ options, onChange, integrationBranchPushState }: AutoPushOptionsPanelProps) {
+  const isFullAutonomy = options.fullAutonomyMode ?? false;
+
+  const toggleFullAutonomy = () => {
+    if (isFullAutonomy) {
+      // Turning off - reset to individual defaults (all off)
+      onChange({
+        fullAutonomyMode: false,
+        pushLaneBranches: false,
+        pushIntegrationBranch: false,
+        mergeToMain: false,
+        pushMainBranch: false,
+      });
+    } else {
+      // Turning on - enable everything
+      onChange({
+        fullAutonomyMode: true,
+        pushLaneBranches: true,
+        pushIntegrationBranch: true,
+        mergeToMain: true,
+        pushMainBranch: true,
+      });
+    }
+  };
+
   return (
     <div className="mb-5 pb-5 border-b border-[var(--border-subtle)]">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="w-6 h-6 rounded bg-[rgba(6,182,212,0.15)] border border-[rgba(6,182,212,0.3)] flex items-center justify-center">
-          <svg className="w-3.5 h-3.5 text-[var(--cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-6 h-6 rounded bg-[rgba(168,85,247,0.15)] border border-[rgba(168,85,247,0.3)] flex items-center justify-center">
+          <svg className="w-3.5 h-3.5 text-[#a855f7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </div>
-        <span className="text-sm font-medium text-[var(--text-primary)]">Auto-Push Options</span>
+        <span className="text-sm font-medium text-[var(--text-primary)]">Autonomy Options</span>
       </div>
 
-      <div className="space-y-3 ml-9">
-        {/* Push lane branches */}
+      {/* Full Autonomy Mode Toggle */}
+      <div className="ml-9 mb-4">
         <label className="flex items-center gap-3 cursor-pointer">
           <button
             type="button"
-            onClick={() => onChange({ ...options, pushLaneBranches: !options.pushLaneBranches })}
-            className={`toggle ${options.pushLaneBranches ? "active" : ""}`}
+            onClick={toggleFullAutonomy}
+            className={`toggle ${isFullAutonomy ? "active" : ""}`}
             role="switch"
-            aria-checked={options.pushLaneBranches}
+            aria-checked={isFullAutonomy}
           />
           <div>
-            <span className="text-sm text-[var(--text-secondary)]">
+            <span className={`text-sm font-medium ${isFullAutonomy ? "text-[#a855f7]" : "text-[var(--text-secondary)]"}`}>
+              Full Autonomy Mode
+            </span>
+            <div className="text-xs text-[var(--text-ghost)]">
+              Push all branches and merge to main automatically
+            </div>
+          </div>
+        </label>
+      </div>
+
+      {/* Individual options - shown when not in full autonomy mode */}
+      {!isFullAutonomy && (
+        <div className="space-y-3 ml-9 pl-4 border-l-2 border-[var(--border-subtle)]">
+          {/* Push lane branches */}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <button
+              type="button"
+              onClick={() => onChange({ ...options, pushLaneBranches: !options.pushLaneBranches })}
+              className={`toggle toggle--sm ${options.pushLaneBranches ? "active" : ""}`}
+              role="switch"
+              aria-checked={options.pushLaneBranches}
+            />
+            <span className="text-xs text-[var(--text-tertiary)]">
               Auto-push lane branches after commit
             </span>
-            <div className="text-xs text-[var(--text-ghost)]">
-              Automatically push lane branches to origin after auto-commit
-            </div>
-          </div>
-        </label>
+          </label>
 
-        {/* Push integration branch */}
-        <label className="flex items-center gap-3 cursor-pointer">
-          <button
-            type="button"
-            onClick={() => onChange({ ...options, pushIntegrationBranch: !options.pushIntegrationBranch })}
-            className={`toggle ${options.pushIntegrationBranch ? "active" : ""}`}
-            role="switch"
-            aria-checked={options.pushIntegrationBranch}
-          />
-          <div>
-            <span className="text-sm text-[var(--text-secondary)]">
+          {/* Push integration branch */}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <button
+              type="button"
+              onClick={() => onChange({ ...options, pushIntegrationBranch: !options.pushIntegrationBranch })}
+              className={`toggle toggle--sm ${options.pushIntegrationBranch ? "active" : ""}`}
+              role="switch"
+              aria-checked={options.pushIntegrationBranch}
+            />
+            <span className="text-xs text-[var(--text-tertiary)]">
               Auto-push integration branch after merge
             </span>
-            <div className="text-xs text-[var(--text-ghost)]">
-              Automatically push integration branch to origin after lanes are merged
+          </label>
+
+          {/* Merge to main */}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <button
+              type="button"
+              onClick={() => onChange({ ...options, mergeToMain: !options.mergeToMain, pushMainBranch: !options.mergeToMain ? options.pushMainBranch : false })}
+              className={`toggle toggle--sm ${options.mergeToMain ? "active" : ""}`}
+              role="switch"
+              aria-checked={options.mergeToMain ?? false}
+            />
+            <span className="text-xs text-[var(--text-tertiary)]">
+              Merge integration branch to main
+            </span>
+          </label>
+
+          {/* Push main branch - only shown if merge to main is enabled */}
+          {options.mergeToMain && (
+            <label className="flex items-center gap-3 cursor-pointer ml-4">
+              <button
+                type="button"
+                onClick={() => onChange({ ...options, pushMainBranch: !options.pushMainBranch })}
+                className={`toggle toggle--sm ${options.pushMainBranch ? "active" : ""}`}
+                role="switch"
+                aria-checked={options.pushMainBranch ?? false}
+              />
+              <span className="text-xs text-[var(--text-tertiary)]">
+                Auto-push main after merge
+              </span>
+            </label>
+          )}
+        </div>
+      )}
+
+      {/* Full autonomy summary */}
+      {isFullAutonomy && (
+        <div className="ml-9 p-3 rounded bg-[rgba(168,85,247,0.08)] border border-[rgba(168,85,247,0.2)]">
+          <div className="text-xs text-[var(--text-tertiary)] space-y-1">
+            <div className="flex items-center gap-2">
+              <svg className="w-3 h-3 text-[#a855f7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Push lane branches after commit
+            </div>
+            <div className="flex items-center gap-2">
+              <svg className="w-3 h-3 text-[#a855f7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Push integration branch after merge
+            </div>
+            <div className="flex items-center gap-2">
+              <svg className="w-3 h-3 text-[#a855f7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Merge to main and push
             </div>
           </div>
-        </label>
-      </div>
+        </div>
+      )}
 
       {/* Integration branch push status */}
       {integrationBranchPushState && integrationBranchPushState.status !== "idle" && (

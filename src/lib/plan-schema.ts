@@ -117,11 +117,16 @@ export interface PushState {
 
 // Auto-push options
 export interface AutoPushOptions {
+  // Full autonomy mode - enables all auto operations with single toggle
+  fullAutonomyMode?: boolean;
   // Auto-push lane branches after commit
   pushLaneBranches: boolean;
   // Auto-push integration branch after merge
   pushIntegrationBranch: boolean;
-  // Note: Main branch push always requires human confirmation
+  // Merge integration branch to main after lanes merge
+  mergeToMain?: boolean;
+  // Auto-push main branch after merge to main
+  pushMainBranch?: boolean;
 }
 
 // Launch mode determines how the lane is opened

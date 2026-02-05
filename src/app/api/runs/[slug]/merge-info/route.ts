@@ -18,6 +18,10 @@ interface LaneMergeInfo {
   filesChanged: string[];
   conflictRisk: "none" | "low" | "medium" | "high";
   overlappingLanes: string[];
+  // Lanes whose changes are included in this lane (via merge/ancestry) - overlap is safe
+  includedLanes: string[];
+  // Lanes with true conflict risk (independent changes to same files)
+  conflictingLanes: string[];
   error?: string;
 }
 
@@ -152,31 +156,134 @@ async function getFilesChanged(
   }
 }
 
-// Calculate conflict risk based on file overlap
+// Warroom-specific artifact files that should be excluded from conflict detection
+// These are lane-specific files that each lane creates independently
+const WARROOM_ARTIFACT_PATTERNS = [
+  /^LANE_STATUS\.json$/,
+  /^LANE_COMPLETE\.md$/,
+  /^REVIEW\.md$/,
+  /^FINDINGS\.md$/,
+  /^TEST_RESULTS\.md$/,
+  /^WARROOM_PACKET\.md$/,
+];
+
+function isWarroomArtifact(file: string): boolean {
+  return WARROOM_ARTIFACT_PATTERNS.some((pattern) => pattern.test(file));
+}
+
+// Filter out warroom artifacts for conflict detection purposes
+function filterForConflictDetection(files: string[]): string[] {
+  return files.filter((f) => !isWarroomArtifact(f));
+}
+
+// Check if branchA contains branchB (branchB is an ancestor of branchA)
+// This means branchA has merged or includes all commits from branchB
+async function branchContains(
+  repoPath: string,
+  branchA: string,
+  branchB: string
+): Promise<boolean> {
+  try {
+    // git merge-base --is-ancestor returns 0 if branchB is ancestor of branchA
+    await execAsync(
+      `git merge-base --is-ancestor ${branchB} ${branchA}`,
+      { cwd: repoPath }
+    );
+    return true;
+  } catch {
+    // Non-zero exit means branchB is NOT an ancestor of branchA
+    return false;
+  }
+}
+
+// Build ancestry map: for each lane, which other lanes' commits does it contain?
+async function buildAncestryMap(
+  repoPath: string,
+  lanes: Array<{ laneId: string; branch: string }>
+): Promise<Map<string, Set<string>>> {
+  const ancestryMap = new Map<string, Set<string>>();
+
+  // Initialize empty sets for each lane
+  for (const lane of lanes) {
+    ancestryMap.set(lane.laneId, new Set());
+  }
+
+  // Check each pair of lanes
+  const checks: Promise<void>[] = [];
+
+  for (const laneA of lanes) {
+    for (const laneB of lanes) {
+      if (laneA.laneId === laneB.laneId) continue;
+
+      checks.push(
+        branchContains(repoPath, laneA.branch, laneB.branch).then((contains) => {
+          if (contains) {
+            // laneA contains laneB's commits
+            ancestryMap.get(laneA.laneId)!.add(laneB.laneId);
+          }
+        })
+      );
+    }
+  }
+
+  await Promise.all(checks);
+  return ancestryMap;
+}
+
+// Calculate conflict risk based on file overlap, accounting for ancestry
+// Excludes warroom artifacts from conflict detection
+// Ancestry is bidirectional: if A includes B OR B includes A, they're in the same dependency chain
 function calculateConflictRisk(
   filesChanged: string[],
   allLaneFiles: Map<string, string[]>,
-  currentLaneId: string
-): { risk: "none" | "low" | "medium" | "high"; overlappingLanes: string[] } {
+  currentLaneId: string,
+  includedLanes: Set<string>,
+  ancestryMap: Map<string, Set<string>>
+): {
+  risk: "none" | "low" | "medium" | "high";
+  overlappingLanes: string[];
+  includedLanes: string[];
+  conflictingLanes: string[];
+} {
   const overlappingLanes: string[] = [];
+  const includedLanesList: string[] = [];
+  const conflictingLanes: string[] = [];
+
+  // Filter out warroom artifacts for conflict detection
+  const sourceFiles = filterForConflictDetection(filesChanged);
 
   for (const [otherLaneId, otherFiles] of allLaneFiles.entries()) {
     if (otherLaneId === currentLaneId) continue;
 
-    const overlap = filesChanged.filter((f) => otherFiles.includes(f));
+    // Filter other lane's files too
+    const otherSourceFiles = filterForConflictDetection(otherFiles);
+    const overlap = sourceFiles.filter((f) => otherSourceFiles.includes(f));
     if (overlap.length > 0) {
       overlappingLanes.push(otherLaneId);
+
+      // Check if this overlap is safe:
+      // 1. Current lane includes the other lane (we merged their changes)
+      // 2. Other lane includes current lane (they merged our changes - downstream dependency)
+      const currentIncludesOther = includedLanes.has(otherLaneId);
+      const otherIncludesCurrent = ancestryMap.get(otherLaneId)?.has(currentLaneId) ?? false;
+
+      if (currentIncludesOther || otherIncludesCurrent) {
+        includedLanesList.push(otherLaneId);
+      } else {
+        conflictingLanes.push(otherLaneId);
+      }
     }
   }
 
-  if (overlappingLanes.length === 0) {
-    return { risk: "none", overlappingLanes };
-  } else if (overlappingLanes.length === 1) {
-    return { risk: "low", overlappingLanes };
-  } else if (overlappingLanes.length <= 3) {
-    return { risk: "medium", overlappingLanes };
+  // Risk is based only on TRUE conflicts, not inherited overlaps
+  if (conflictingLanes.length === 0) {
+    return { risk: "none", overlappingLanes, includedLanes: includedLanesList, conflictingLanes };
+  } else if (conflictingLanes.length === 1) {
+    return { risk: "low", overlappingLanes, includedLanes: includedLanesList, conflictingLanes };
+  } else if (conflictingLanes.length <= 3) {
+    return { risk: "medium", overlappingLanes, includedLanes: includedLanesList, conflictingLanes };
   } else {
-    return { risk: "high", overlappingLanes };
+    return { risk: "high", overlappingLanes, includedLanes: includedLanesList, conflictingLanes };
   }
 }
 
@@ -255,6 +362,12 @@ export async function GET(
 
   await Promise.all(laneInfoPromises);
 
+  // Build ancestry map to detect which lanes include other lanes' commits
+  const ancestryMap = await buildAncestryMap(
+    repoPath,
+    plan.lanes.map((l) => ({ laneId: l.laneId, branch: l.branch }))
+  );
+
   // Second pass: build lane merge info with conflict detection
   const lanesInfo: LaneMergeInfo[] = await Promise.all(
     plan.lanes.map(async (lane) => {
@@ -269,10 +382,13 @@ export async function GET(
       );
 
       const filesChanged = laneFilesMap.get(lane.laneId) || [];
-      const { risk, overlappingLanes } = calculateConflictRisk(
+      const includedLanes = ancestryMap.get(lane.laneId) || new Set();
+      const { risk, overlappingLanes, includedLanes: includedLanesList, conflictingLanes } = calculateConflictRisk(
         filesChanged,
         laneFilesMap,
-        lane.laneId
+        lane.laneId,
+        includedLanes,
+        ancestryMap
       );
 
       return {
@@ -285,6 +401,8 @@ export async function GET(
         filesChanged,
         conflictRisk: risk,
         overlappingLanes,
+        includedLanes: includedLanesList,
+        conflictingLanes,
         error: commitError,
       };
     })
